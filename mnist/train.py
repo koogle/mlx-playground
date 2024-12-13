@@ -13,22 +13,17 @@ def accuracy(model, inputs, targets):
     return mx.mean(pred == targets)
 
 
-def loss_fn(model, inputs, targets):
-    logits = model(inputs)
-    loss = nn.losses.cross_entropy(logits, targets)
-    # print(f"Loss: {loss.item():.4f}")
-    return loss
-
-
 def eval_step(model, inputs, targets):
     return accuracy(model, inputs, targets)
 
 
-def train_step(model, inputs, targets, optimizer):
-    def loss_and_grad(model):
-        return loss_fn(model, inputs, targets)
+def loss_fn(model, inputs, targets):
+    logits = model(inputs)
+    return mx.mean(nn.losses.cross_entropy(logits, targets))
 
-    loss, grads = mx.value_and_grad(loss_and_grad)(model)
+
+def train_step(model, inputs, targets, optimizer):
+    loss, grads = mx.value_and_grad(loss_fn)(model, inputs, targets)
     print(f"Loss: {loss.item():.4f}")
     optimizer.update(model, grads)
     return loss

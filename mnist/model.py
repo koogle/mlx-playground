@@ -7,13 +7,14 @@ class MLP(nn.Module):
         super().__init__()
         self.format_to_input = lambda x: x.reshape(-1, input_dimensions)
         self.linear1 = nn.Linear(input_dimensions, hidden_dimensions)
+        self.bn = nn.BatchNorm(hidden_dimensions)
         self.linear2 = nn.Linear(hidden_dimensions, hidden_dimensions)
         self.linear3 = nn.Linear(hidden_dimensions, num_classes)
         self.relu = nn.ReLU()
 
     def __call__(self, x):
         x = self.format_to_input(x)
-        x = self.relu(self.linear1(x))
+        x = self.bn(self.linear1(x))
         x = self.relu(self.linear2(x))
         x = self.linear3(x)
         return x

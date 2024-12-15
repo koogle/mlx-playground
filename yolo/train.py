@@ -63,6 +63,7 @@ def train(
 ):
     """Train YOLO model"""
     # Create model and optimizer
+    print("Creating model...")
     model = YOLO()
     optimizer = optim.Adam(
         learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
@@ -75,10 +76,12 @@ def train(
         print(f"Resumed from epoch {start_epoch}")
 
     # Create dataset and data loader
+    print("Loading dataset...")
     dataset = VOCDataset(data_dir, year="2012", image_set="train")
     val_dataset = VOCDataset(data_dir, year="2012", image_set="val")
 
     # Training loop
+    print("Starting training...")
     for epoch in range(start_epoch, num_epochs):
         model.train(True)  # Set to training mode
         epoch_loss = 0.0
@@ -92,12 +95,12 @@ def train(
         # Train for one epoch
         for batch_idx, (images, targets) in enumerate(zip(train_images, train_targets)):
 
-            def loss_fn(model):
+            def loss_fn():
                 predictions = model(images)
                 return yolo_loss(predictions, targets)
 
             # Compute loss and gradients
-            loss, grads = mx.value_and_grad(loss_fn)(model)
+            loss, grads = mx.value_and_grad(loss_fn)()
             optimizer.update(model, grads)
             epoch_loss += loss.item()
 

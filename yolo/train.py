@@ -56,14 +56,17 @@ def train(
     num_epochs: int = 135,
     batch_size: int = 64,
     learning_rate: float = 0.001,
-    weight_decay: float = 0.0005,
-    momentum: float = 0.9,
-    resume_epoch: int = None,
+    beta1: float = 0.9,
+    beta2: float = 0.999,
+    epsilon: float = 1e-8,
+    resume_epoch: int | None = None,
 ):
     """Train YOLO model"""
     # Create model and optimizer
     model = YOLO()
-    optimizer = optim.Adam(learning_rate=learning_rate, weight_decay=weight_decay)
+    optimizer = optim.Adam(
+        learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
+    )
 
     # Resume from checkpoint if specified
     start_epoch = 0
@@ -77,7 +80,7 @@ def train(
 
     # Training loop
     for epoch in range(start_epoch, num_epochs):
-        model.train = True  # Set to training mode
+        model.train(True)  # Set to training mode
         epoch_loss = 0.0
         start_time = time.time()
 
@@ -130,8 +133,9 @@ if __name__ == "__main__":
         "num_epochs": 135,  # Total epochs to train
         "batch_size": 64,  # Batch size
         "learning_rate": 0.001,  # Initial learning rate
-        "weight_decay": 0.0005,  # Weight decay for regularization
-        "momentum": 0.9,  # SGD momentum
+        "beta1": 0.9,  # Adam beta1 parameter
+        "beta2": 0.999,  # Adam beta2 parameter
+        "epsilon": 1e-8,  # Adam epsilon parameter
         "resume_epoch": None,  # Set to epoch number to resume training
     }
 

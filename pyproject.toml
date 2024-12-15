@@ -8,5 +8,6 @@ dependencies = [
     "dataclasses>=0.8",
     "mlx>=0.21.1",
     "numpy>=2.2.0",
+    "pillow>=11.0.0",
     "ruff>=0.8.2",
 ]

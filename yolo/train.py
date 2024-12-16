@@ -54,7 +54,7 @@ def train(
     data_dir: str,
     save_dir: str,
     num_epochs: int = 135,
-    batch_size: int = 64,
+    batch_size: int = 16,
     learning_rate: float = 0.001,
     beta1: float = 0.9,
     beta2: float = 0.999,
@@ -134,15 +134,14 @@ def train(
 if __name__ == "__main__":
     # Training configuration
     config = {
-        "data_dir": "./VOCdevkit/VOC2012",  # Path to VOC dataset
-        "save_dir": "./checkpoints",  # Where to save model checkpoints
-        "num_epochs": 135,  # Total epochs to train
-        "batch_size": 64,  # Batch size
-        "learning_rate": 0.001,  # Initial learning rate
-        "beta1": 0.9,  # Adam beta1 parameter
-        "beta2": 0.999,  # Adam beta2 parameter
-        "epsilon": 1e-8,  # Adam epsilon parameter
-        "resume_epoch": None,  # Set to epoch number to resume training
+        "data_dir": "path/to/voc",
+        "save_dir": "checkpoints",
+        "num_epochs": 135,
+        "batch_size": 16,
+        "learning_rate": 0.001,
+        "beta1": 0.9,
+        "beta2": 0.999,
+        "epsilon": 1e-8,
     }
 
     train(**config)

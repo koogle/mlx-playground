@@ -199,22 +199,44 @@ def create_data_loader(
     if shuffle:
         np.random.shuffle(indices)
 
-    # Create batches
+    # Create batches with minimal memory overhead
     images = []
     targets = []
+    batch_indices = []
 
-    for i in range(0, len(indices), batch_size):
-        batch_indices = indices[i : i + batch_size]
+    for idx in indices:
+        batch_indices.append(idx)
+
+        if len(batch_indices) == batch_size:
+            # Process batch
+            batch_images = []
+            batch_targets = []
+
+            for bidx in batch_indices:
+                image, target = dataset[bidx]
+                batch_images.append(image)
+                batch_targets.append(target)
+
+            # Stack and convert to MLX arrays
+            images.append(mx.stack(batch_images))
+            targets.append(mx.stack(batch_targets))
+
+            # Clear batch indices
+            batch_indices = []
+            mx.eval(images[-1])  # Force evaluation to free memory
+            mx.eval(targets[-1])
+
+    # Handle remaining samples
+    if batch_indices:
         batch_images = []
         batch_targets = []
-
-        for idx in batch_indices:
-            image, target = dataset[idx]
+        for bidx in batch_indices:
+            image, target = dataset[bidx]
             batch_images.append(image)
             batch_targets.append(target)
-
-        # Stack batches
         images.append(mx.stack(batch_images))
         targets.append(mx.stack(batch_targets))
+        mx.eval(images[-1])
+        mx.eval(targets[-1])
 
     return images, targets

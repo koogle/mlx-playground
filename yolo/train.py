@@ -7,7 +7,7 @@ from model import YOLO
 from loss import yolo_loss
 from data.voc import VOCDataset, create_data_loader
 import json
-from mlx.utils import tree_flatten
+from mlx.utils import tree_flatten, tree_map
 
 
 def save_checkpoint(model, optimizer, epoch, loss, save_dir):
@@ -69,7 +69,8 @@ def train(
     data_dir: str,
     save_dir: str,
     num_epochs: int = 135,
-    batch_size: int = 16,
+    batch_size: int = 8,
+    accumulation_steps: int = 2,
     learning_rate: float = 0.001,
     beta1: float = 0.9,
     beta2: float = 0.999,
@@ -107,6 +108,7 @@ def train(
             dataset, batch_size, shuffle=True
         )
 
+        accumulated_grads = None
         # Train for one epoch
         for batch_idx, (images, targets) in enumerate(zip(train_images, train_targets)):
 
@@ -117,7 +119,24 @@ def train(
 
             # Compute loss and gradients
             loss, grads = mx.value_and_grad(loss_fn)(model.parameters())
-            optimizer.update(model, grads)
+
+            # Scale gradients for accumulation
+            grads = tree_map(lambda x: x / accumulation_steps, grads)
+
+            # Accumulate gradients
+            if accumulated_grads is None:
+                accumulated_grads = grads
+            else:
+                accumulated_grads = tree_map(
+                    lambda x, y: x + y, accumulated_grads, grads
+                )
+
+            # Update weights after accumulation steps
+            if (batch_idx + 1) % accumulation_steps == 0:
+                optimizer.update(model, accumulated_grads)
+                accumulated_grads = None
+                mx.eval(model.parameters())  # Force evaluation to free memory
+
             epoch_loss += loss.item()
 
             # Print progress
@@ -127,6 +146,15 @@ def train(
                     f"Batch [{batch_idx+1}/{len(train_images)}], "
                     f"Loss: {loss.item():.4f}"
                 )
+
+            # Force memory cleanup
+            if (batch_idx + 1) % 5 == 0:
+                mx.eval(model.parameters())
+
+        # Update with any remaining accumulated gradients
+        if accumulated_grads is not None:
+            optimizer.update(model, accumulated_grads)
+            mx.eval(model.parameters())
 
         # Compute epoch statistics
         avg_loss = epoch_loss / len(train_images)
@@ -138,9 +166,8 @@ def train(
             f"Time: {epoch_time:.2f}s"
         )
 
-        # Save checkpoint every 5 epochs
+        # Save checkpoint every 2 epochs
         if epoch % 2 == 0 or epoch == num_epochs - 1:
-            # if (epoch + 1) % 5 == 0:
             save_checkpoint(model, optimizer, epoch + 1, avg_loss, save_dir)
             print(f"Checkpoint saved at epoch {epoch+1}")
 
@@ -151,12 +178,13 @@ if __name__ == "__main__":
         "data_dir": "./VOCdevkit/VOC2012",
         "save_dir": "./checkpoints",
         "num_epochs": 135,
-        "batch_size": 16,
+        "batch_size": 8,
+        "accumulation_steps": 2,
         "learning_rate": 0.001,
         "beta1": 0.9,
         "beta2": 0.999,
         "epsilon": 1e-8,
-        "resume_epoch": None,
+        "resume_epoch": 1,
     }
 
     train(**config)

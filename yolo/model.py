@@ -53,6 +53,8 @@ class DarkNet(nn.Module):
         self.relu = nn.ReLU()
 
     def __call__(self, x):
+        print(f"First shape I got is {x.shape}")
+
         # Initial convolutions
         x = self.relu(self.bn1(self.conv1(x)))
         x = self.pool1(x)

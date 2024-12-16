@@ -71,9 +71,9 @@ def train(
 
     # Resume from checkpoint if specified
     start_epoch = 0
-    if resume_epoch is not None:
-        start_epoch, _ = load_checkpoint(model, optimizer, save_dir, resume_epoch)
-        print(f"Resumed from epoch {start_epoch}")
+    # if resume_epoch is not None:
+    #    start_epoch, _ = load_checkpoint(model, optimizer, save_dir, resume_epoch)
+    #    print(f"Resumed from epoch {start_epoch}")
 
     # Create dataset and data loader
     print("Loading dataset...")
@@ -94,8 +94,8 @@ def train(
 
         # Train for one epoch
         for batch_idx, (images, targets) in enumerate(zip(train_images, train_targets)):
-            print(f"Input shape: {images.shape}")
-            print(f"Target shape: {targets.shape}")
+            print(f"Train Input shape: {images.shape}")
+            print(f"Train Target shape: {targets.shape}")
 
             def loss_fn(params):
                 model.update(params)

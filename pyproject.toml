@@ -8,6 +8,7 @@ dependencies = [
     "dataclasses>=0.8",
     "mlx>=0.21.1",
     "numpy>=2.2.0",
+    "opencv-python>=4.10.0.84",
     "pillow>=11.0.0",
     "ruff>=0.8.2",
 ]

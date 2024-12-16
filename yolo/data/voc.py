@@ -142,13 +142,10 @@ class VOCDataset:
     def _convert_to_grid(self, boxes: np.ndarray, classes: np.ndarray) -> np.ndarray:
         """Convert boxes and classes to YOLO grid format"""
         grid_size = self.grid_size
-        num_boxes = self.num_boxes
         num_classes = len(VOC_CLASSES)
 
-        # Initialize target grid
-        target = np.zeros(
-            (grid_size, grid_size, num_boxes * 5 + num_classes), dtype=np.float32
-        )
+        # Initialize target grid - shape: [S, S, 5 + C] where 5 is [x, y, w, h, confidence]
+        target = np.zeros((grid_size, grid_size, 5 + num_classes), dtype=np.float32)
 
         for box, cls in zip(boxes, classes):
             # Get grid cell location
@@ -166,16 +163,12 @@ class VOCDataset:
             w = box[2]
             h = box[3]
 
-            # Find best box in cell (currently just using first box)
-            box_idx = 0
-            box_offset = box_idx * 5
-
             # Set box coordinates and confidence
-            target[grid_y, grid_x, box_offset : box_offset + 4] = [x, y, w, h]
-            target[grid_y, grid_x, box_offset + 4] = 1
+            target[grid_y, grid_x, :4] = [x, y, w, h]
+            target[grid_y, grid_x, 4] = 1  # Object confidence
 
             # Set class probability
-            target[grid_y, grid_x, num_boxes * 5 + cls] = 1
+            target[grid_y, grid_x, 5 + cls] = 1
 
         return target
 

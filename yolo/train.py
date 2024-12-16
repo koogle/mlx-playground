@@ -178,7 +178,7 @@ if __name__ == "__main__":
         "data_dir": "./VOCdevkit/VOC2012",
         "save_dir": "./checkpoints",
         "num_epochs": 135,
-        "batch_size": 8,
+        "batch_size": 65,
         "accumulation_steps": 2,
         "learning_rate": 0.001,
         "beta1": 0.9,

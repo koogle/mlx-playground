@@ -71,9 +71,9 @@ def train(
 
     # Resume from checkpoint if specified
     start_epoch = 0
-    # if resume_epoch is not None:
-    #    start_epoch, _ = load_checkpoint(model, optimizer, save_dir, resume_epoch)
-    #    print(f"Resumed from epoch {start_epoch}")
+    if resume_epoch is not None:
+        start_epoch, _ = load_checkpoint(model, optimizer, save_dir, resume_epoch)
+        print(f"Resumed from epoch {start_epoch}")
 
     # Create dataset and data loader
     print("Loading dataset...")
@@ -124,7 +124,8 @@ def train(
         )
 
         # Save checkpoint every 5 epochs
-        if (epoch + 1) % 5 == 0:
+        if epoch % 2 == 0 or epoch == num_epochs - 1:
+            # if (epoch + 1) % 5 == 0:
             save_checkpoint(model, optimizer, epoch + 1, avg_loss, save_dir)
             print(f"Checkpoint saved at epoch {epoch+1}")
 

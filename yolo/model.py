@@ -13,13 +13,17 @@ class DarkNet(nn.Module):
     def __init__(self):
         super().__init__()
         # Initial convolution layers
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(
+            in_channels=3, out_channels=64, kernel_size=7, stride=2, padding=3
+        )
         self.bn1 = nn.BatchNorm(64)
 
         self.pool1 = pool.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
 
         # Conv layers with 1x1 reduction
-        self.conv2_1 = nn.Conv2d(64, 192, kernel_size=3, padding=1)
+        self.conv2_1 = nn.Conv2d(
+            in_channels=64, out_channels=192, kernel_size=3, padding=1
+        )
         self.bn2_1 = nn.BatchNorm(192)
         self.pool2 = pool.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
 

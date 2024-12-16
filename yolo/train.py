@@ -94,13 +94,16 @@ def train(
 
         # Train for one epoch
         for batch_idx, (images, targets) in enumerate(zip(train_images, train_targets)):
+            print(f"Input shape: {images.shape}")
+            print(f"Target shape: {targets.shape}")
 
-            def loss_fn():
+            def loss_fn(params):
+                model.update(params)
                 predictions = model(images)
                 return yolo_loss(predictions, targets)
 
             # Compute loss and gradients
-            loss, grads = mx.value_and_grad(loss_fn)()
+            loss, grads = mx.value_and_grad(loss_fn)(model.parameters())
             optimizer.update(model, grads)
             epoch_loss += loss.item()
 

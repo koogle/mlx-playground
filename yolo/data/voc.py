@@ -191,8 +191,8 @@ class VOCDataset:
         # Convert to grid format
         target = self._convert_to_grid(anno["boxes"], anno["classes"])
 
-        # Convert to MLX arrays
-        image = mx.array(image.transpose(2, 0, 1))  # Convert to CHW format
+        # Convert to MLX arrays - keep channels last (NHWC format)
+        image = mx.array(image)
         target = mx.array(target)
 
         return image, target

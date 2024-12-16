@@ -54,6 +54,8 @@ class DarkNet(nn.Module):
 
     def __call__(self, x):
         print(f"First shape I got is {x.shape}")
+        # Input is in NHWC format (batch, height, width, channels)
+        # MLX Conv2d expects NHWC format, so we're good!
 
         # Initial convolutions
         x = self.relu(self.bn1(self.conv1(x)))

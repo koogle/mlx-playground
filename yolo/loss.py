@@ -40,9 +40,11 @@ def yolo_loss(predictions, targets, lambda_coord=5.0, lambda_noobj=0.5):
     pred_boxes = mx.reshape(predictions[..., : B * 5], (-1, S, S, B, 5))
     pred_classes = predictions[..., B * 5 :]
 
-    # Get target components
-    target_boxes = mx.expand_dims(targets[..., :4], axis=3)  # [batch, S, S, 1, 4]
-    target_obj = mx.expand_dims(targets[..., 4], axis=3)  # [batch, S, S, 1]
+    # Get target components and expand dimensions for broadcasting
+    target_boxes = targets[..., :4]  # [batch, S, S, 4]
+    target_boxes = mx.expand_dims(target_boxes, axis=3)  # [batch, S, S, 1, 4]
+    target_obj = targets[..., 4]  # [batch, S, S]
+    target_obj = mx.expand_dims(target_obj, axis=3)  # [batch, S, S, 1]
     target_classes = targets[..., 5:]  # [batch, S, S, C]
 
     # Compute IOUs for all predicted boxes with target
@@ -55,30 +57,29 @@ def yolo_loss(predictions, targets, lambda_coord=5.0, lambda_noobj=0.5):
     )  # [batch, S, S, B]
 
     # Find best box for each target
-    best_box_ious = mx.max(ious, axis=-1, keepdims=True)
+    best_box_ious = mx.max(ious, axis=-1, keepdims=True)  # [batch, S, S, 1]
     best_box_mask = ious >= best_box_ious  # [batch, S, S, B]
 
     # Coordinate loss (only for cells with objects)
-    coord_mask = mx.repeat(target_obj, B, axis=-1) * best_box_mask  # [batch, S, S, B]
-    coord_loss = (
-        lambda_coord
-        * coord_mask
-        * (
-            mx.sum(
-                (pred_boxes[..., :2] - mx.expand_dims(target_boxes[..., :2], axis=3))
-                ** 2,
-                axis=-1,
-            )
-            + mx.sum(
-                (
-                    mx.sqrt(pred_boxes[..., 2:4])
-                    - mx.sqrt(mx.expand_dims(target_boxes[..., 2:4], axis=3))
-                )
-                ** 2,
-                axis=-1,
-            )
+    coord_mask = mx.repeat(target_obj, B, axis=-1)  # [batch, S, S, B]
+    coord_mask = coord_mask * best_box_mask  # [batch, S, S, B]
+
+    # Compute coordinate losses separately
+    xy_loss = mx.sum(
+        (pred_boxes[..., :2] - target_boxes[..., :2]) ** 2,
+        axis=-1,
+    )  # [batch, S, S, B]
+
+    wh_loss = mx.sum(
+        (
+            mx.sqrt(mx.maximum(pred_boxes[..., 2:4], 1e-6))
+            - mx.sqrt(mx.maximum(target_boxes[..., 2:4], 1e-6))
         )
-    )
+        ** 2,
+        axis=-1,
+    )  # [batch, S, S, B]
+
+    coord_loss = lambda_coord * coord_mask * (xy_loss + wh_loss)
 
     # Confidence loss
     conf_mask = mx.repeat(target_obj, B, axis=-1)  # [batch, S, S, B]

@@ -156,7 +156,7 @@ if __name__ == "__main__":
         "beta1": 0.9,
         "beta2": 0.999,
         "epsilon": 1e-8,
-        "resume_epoch": 1,
+        "resume_epoch": None,
     }
 
     train(**config)

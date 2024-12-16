@@ -134,8 +134,8 @@ def train(
 if __name__ == "__main__":
     # Training configuration
     config = {
-        "data_dir": "path/to/voc",
-        "save_dir": "checkpoints",
+        "data_dir": "./VOCdevkit/VOC2012",
+        "save_dir": "./checkpoints",
         "num_epochs": 135,
         "batch_size": 16,
         "learning_rate": 0.001,

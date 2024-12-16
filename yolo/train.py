@@ -94,8 +94,6 @@ def train(
 
         # Train for one epoch
         for batch_idx, (images, targets) in enumerate(zip(train_images, train_targets)):
-            print(f"Train Input shape: {images.shape}")
-            print(f"Train Target shape: {targets.shape}")
 
             def loss_fn(params):
                 model.update(params)

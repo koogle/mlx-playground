@@ -7,6 +7,7 @@ from model import YOLO
 from loss import yolo_loss
 from data.voc import VOCDataset, create_data_loader
 import json
+from mlx.utils import tree_flatten
 
 
 def save_checkpoint(model, optimizer, epoch, loss, save_dir):
@@ -14,20 +15,34 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     os.makedirs(save_dir, exist_ok=True)
 
     # Save model weights
-    model_state = model.parameters()
-    mx.savez(os.path.join(save_dir, f"yolo_epoch_{epoch}.npz"), **model_state)
+    try:
+        save_path = os.path.join(save_dir, f"yolo_epoch_{epoch}.npz")
+        flat_params = tree_flatten(model.parameters())
+        mx.savez(save_path, **dict(flat_params))
+        print(f"Successfully saved model to {save_path}")
+    except Exception as e:
+        print(f"Error saving model state: {str(e)}")
+        raise
 
     # Save optimizer state
-    optimizer_state = optimizer.state
-    mx.savez(os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz"), **optimizer_state)
+    try:
+        save_path = os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz")
+        flat_opt_state = tree_flatten(optimizer.state)
+        mx.savez(save_path, **dict(flat_opt_state))
+        print(f"Successfully saved optimizer state to {save_path}")
+    except Exception as e:
+        print(f"Error saving optimizer state: {str(e)}")
+        raise
 
     # Save training info
     info = {
         "epoch": epoch,
-        "loss": float(loss.item()),
+        "loss": loss,
     }
-    with open(os.path.join(save_dir, f"info_epoch_{epoch}.json"), "w") as f:
+    info_path = os.path.join(save_dir, f"info_epoch_{epoch}.json")
+    with open(info_path, "w") as f:
         json.dump(info, f)
+    print(f"Successfully saved training info to {info_path}")
 
 
 def load_checkpoint(model, optimizer, checkpoint_dir, epoch):

@@ -34,7 +34,6 @@ def yolo_loss(predictions, targets, lambda_coord=5.0, lambda_noobj=0.5):
     """
     S = predictions.shape[1]  # Grid size
     B = 2  # Number of boxes per cell
-    C = predictions.shape[-1] - B * 5  # Number of classes
 
     # Reshape predictions to [batch, S, S, B, 5] for boxes and [batch, S, S, C] for classes
     pred_boxes = mx.reshape(predictions[..., : B * 5], (-1, S, S, B, 5))

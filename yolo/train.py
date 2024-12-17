@@ -10,6 +10,39 @@ import json
 from mlx.utils import tree_flatten, tree_map
 
 
+"""
+
+                                                                                                                                                         
+Model parameters after saving:                                                                                                                            
+backbone.conv1.weight: (64, 7, 7, 3), mean: -0.0048                                                                                                       
+backbone.conv1.bias: (64,), mean: 0.0015                                                                                                                  
+backbone.bn1.weight: (64,), mean: 0.9992                                                                                                                  
+backbone.bn1.bias: (64,), mean: -0.0015                                                                                                                   
+backbone.bn1.running_mean: (64,), mean: -0.2808                                                                                                           
+backbone.bn1.running_var: (64,), mean: 0.5928                                                                                                             
+backbone.conv2_1.weight: (192, 3, 3, 64), mean: -0.0009                                                                                                   
+backbone.conv2_1.bias: (192,), mean: -0.0020                                                                                                              
+backbone.bn2_1.weight: (192,), mean: 0.9977                                                                                                               
+backbone.bn2_1.bias: (192,), mean: 0.0014                                                                                                                 
+backbone.bn2_1.running_mean: (192,), mean: -0.2106                                                                                                        
+backbone.bn2_1.running_var: (192,), mean: 3.4604                                                                                                          
+backbone.conv3_1.weight: (128, 1, 1, 192), mean: -0.0031                                                                                                  
+backbone.conv3_1.bias: (128,), mean: 0.0047                                                                                                               
+backbone.conv3_2.weight: (256, 3, 3, 128), mean: -0.0022                                                                                                  
+backbone.conv3_2.bias: (256,), mean: 0.0001                                                                                                               
+backbone.conv3_3.weight: (256, 1, 1, 256), mean: -0.0035                                                                                                  
+backbone.conv3_3.bias: (256,), mean: 0.0033                                                                                                               
+backbone.conv3_4.weight: (512, 3, 3, 256), mean: -0.0011                                                                                                  
+backbone.conv3_4.bias: (512,), mean: 0.0020                                                                                                               
+backbone.bn3.weight: (512,), mean: 1.0028                                                                                                                 
+backbone.bn3.bias: (512,), mean: -0.0035                                                                                                                  
+backbone.bn3.running_mean: (512,), mean: 58.8528                                                                                                          
+backbone.bn3.running_var: (512,), mean: 78466.4688                                                                                                        
+backbone.conv4_1.weight: (256, 1, 1, 512), mean: 0.0057                                                                                                   
+backbone.conv4_1.bias: (256,), mean: 0.0026                
+"""
+
+
 def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     """Save model checkpoint"""
     os.makedirs(save_dir, exist_ok=True)
@@ -86,22 +119,6 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
 
         params = {k: model_state[k] for k in param_names}
         model.update(params)
-
-        # Force evaluation of parameters
-        _ = tree_map(
-            lambda x: x.item() if isinstance(x, mx.array) else x, model.parameters()
-        )
-
-        # Print parameter stats after loading
-        print("\nModel parameters after loading:")
-        backbone_conv1_w = model.backbone.conv1.weight
-        backbone_conv1_b = model.backbone.conv1.bias
-        print(
-            f"Conv1 weight shape: {backbone_conv1_w.shape}, mean: {mx.mean(backbone_conv1_w):.4f}"
-        )
-        print(
-            f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}"
-        )
 
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")

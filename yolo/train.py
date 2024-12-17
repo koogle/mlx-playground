@@ -29,7 +29,13 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
             f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}"
         )
 
+        # Save flattened parameters
         flat_params = tree_flatten(model.parameters())
+
+        print("\nModel parameters after saving: ")
+        for k, v in flat_params:
+            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
+
         mx.savez(save_path, **dict(flat_params))
         print(f"Successfully saved model to {save_path}")
     except Exception as e:

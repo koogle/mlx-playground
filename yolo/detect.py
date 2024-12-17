@@ -12,8 +12,7 @@ import time
 def load_model(checkpoint_path):
     """Load trained model from checkpoint"""
     model = YOLO()
-    state_dict = mx.load(checkpoint_path)
-    model.update(state_dict)
+    model.load_weights(checkpoint_path)
     return model
 
 

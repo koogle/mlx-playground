@@ -5,9 +5,8 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 from model import YOLO
 from loss import yolo_loss
-from data.voc import VOCDataset, create_data_loader
+from data.voc import create_data_loader
 import json
-from mlx.utils import tree_flatten, tree_map
 
 
 def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
@@ -138,9 +137,7 @@ def train(
 
     # Load dataset with augmentation
     print("Loading dataset...")
-    train_loader = create_data_loader(
-        data_dir, batch_size=batch_size, split="train", augment=True
-    )
+    train_loader = create_data_loader(data_dir, batch_size=batch_size, augment=True)
 
     # Training loop
     print("\nStarting training...")

@@ -61,31 +61,35 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
     try:
         # Print initial parameter stats
         print("\nModel parameters before loading:")
-        backbone_conv1_w = model.backbone.conv1.weight
-        backbone_conv1_b = model.backbone.conv1.bias
-        print(
-            f"Conv1 weight shape: {backbone_conv1_w.shape}, mean: {mx.mean(backbone_conv1_w):.4f}"
-        )
-        print(
-            f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}"
-        )
+        current_params = tree_flatten(model.parameters())
+        for k, v in current_params:
+            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
 
         # Load model weights
         model_path = os.path.join(checkpoint_dir, f"yolo_epoch_{epoch}.npz")
         print(f"\nLoading model from {model_path}")
         model_state = mx.load(model_path)
 
-        # Get current parameter names in same order
-        current_params = tree_flatten(model.parameters())
-        param_names = [k for k, _ in current_params]
-
-        # Create parameter dictionary with correct names
-        print("\nModel parameters after loading:  ")
+        # Print loaded parameters
+        print("\nLoaded parameters from checkpoint:")
         for k, v in model_state.items():
             print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
 
-        params = {k: model_state[k] for k in param_names}
-        model.update(params)
+        # Create parameter dictionary preserving the order from tree_flatten
+        ordered_params = {}
+        for k, _ in current_params:
+            if k not in model_state:
+                raise ValueError(f"Parameter {k} not found in checkpoint")
+            ordered_params[k] = model_state[k]
+
+        # Update model with ordered parameters
+        model.update(ordered_params)
+
+        # Verify parameters after update
+        print("\nModel parameters after update:")
+        updated_params = tree_flatten(model.parameters())
+        for k, v in updated_params:
+            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
 
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")

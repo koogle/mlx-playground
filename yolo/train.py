@@ -17,8 +17,7 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     # Save model weights
     try:
         save_path = os.path.join(save_dir, f"yolo_epoch_{epoch}.npz")
-        flat_params = tree_flatten(model.parameters())
-
+        
         # Print some parameter stats before saving
         print("\nModel parameters before saving:")
         backbone_conv1_w = model.backbone.conv1.weight
@@ -30,7 +29,14 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
             f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}"
         )
 
-        mx.savez(save_path, **dict(flat_params))
+        # Save flattened parameters with their paths
+        params = model.parameters()
+        flat_params = tree_flatten(params)
+        param_dict = {f"param_{i}": v for i, (_, v) in enumerate(flat_params)}
+        param_paths = {f"path_{i}": k for i, (k, _) in enumerate(flat_params)}
+        save_dict = {**param_dict, **param_paths, "num_params": len(flat_params)}
+        
+        mx.savez(save_path, **save_dict)
         print(f"Successfully saved model to {save_path}")
     except Exception as e:
         print(f"Error saving model state: {str(e)}")
@@ -78,9 +84,19 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         # Load model weights
         model_path = os.path.join(checkpoint_dir, f"yolo_epoch_{epoch}.npz")
         print(f"\nLoading model from {model_path}")
-        model_state = mx.load(model_path)
-        model.update(model_state)
-        mx.eval(model.parameters())  # Force evaluation of model parameters
+        state_dict = mx.load(model_path)
+        
+        # Reconstruct parameter tree
+        num_params = state_dict["num_params"]
+        params = [(state_dict[f"path_{i}"], state_dict[f"param_{i}"]) 
+                 for i in range(num_params)]
+        
+        # Update model parameters
+        model.update(dict(params))
+        
+        # Force evaluation of parameters
+        _ = tree_map(lambda x: x.item() if isinstance(x, mx.array) else x, 
+                    model.parameters())
 
         # Print parameter stats after loading
         print("\nModel parameters after loading:")

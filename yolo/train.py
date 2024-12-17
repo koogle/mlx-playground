@@ -66,6 +66,8 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         print(f"Loading optimizer state from {optimizer_path}")
         opt_dict = mx.load(optimizer_path)
 
+        print(opt_dict)
+
         # Recreate optimizer with saved hyperparameters
         new_optimizer = optim.Adam(
             learning_rate=float(opt_dict["lr"]),

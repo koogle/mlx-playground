@@ -34,7 +34,7 @@ CLASS_TO_IDX = {cls_name: idx for idx, cls_name in enumerate(VOC_CLASSES)}
 
 
 def augment_image(
-    image: np.ndarray, boxes: np.ndarray
+    image: np.ndarray, boxes: np.ndarray, target_size: int
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Apply data augmentation to image and boxes"""
     # Convert any float type [0-1] to uint8 [0-255]
@@ -72,6 +72,16 @@ def augment_image(
         ).astype(np.uint8)
         image = np.array(
             Image.fromarray(hsv, mode="HSV").convert("RGB"), dtype=np.uint8
+        )
+
+    # Resize back to target size
+    if image.shape[:2] != (target_size, target_size):
+        # Adjust box coordinates for final resize
+        curr_h, curr_w = image.shape[:2]
+        boxes[:, [0, 2]] *= np.float32(target_size) / curr_w
+        boxes[:, [1, 3]] *= np.float32(target_size) / curr_h
+        image = np.array(
+            Image.fromarray(image).resize((target_size, target_size)), dtype=np.uint8
         )
 
     # Convert back to float32 [0-1]
@@ -183,7 +193,7 @@ class VOCDataset:
 
         if self.augment:
             anno = self._get_annotation(idx)
-            image, anno["boxes"] = augment_image(image, anno["boxes"])
+            image, anno["boxes"] = augment_image(image, anno["boxes"], self.img_size)
 
         return image.astype(np.float32)  # Ensure float32 type
 

@@ -37,6 +37,10 @@ def augment_image(
     image: np.ndarray, boxes: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Apply data augmentation to image and boxes"""
+    # Convert float32 [0-1] to uint8 [0-255]
+    if image.dtype == np.float32:
+        image = (image * 255).astype(np.uint8)
+
     # Random horizontal flip
     if np.random.random() < 0.5:
         image = np.fliplr(image)
@@ -64,7 +68,9 @@ def augment_image(
         hsv[:, :, 1] = np.clip(hsv[:, :, 1] * saturation, 0, 255)
         image = np.array(Image.fromarray(hsv, mode="HSV").convert("RGB"))
 
-    return image.astype(np.uint8), boxes
+    # Convert back to float32 [0-1]
+    image = image.astype(np.float32) / 255.0
+    return image, boxes
 
 
 class VOCDataset:

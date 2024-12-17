@@ -82,14 +82,16 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
                 raise ValueError(f"Parameter {k} not found in checkpoint")
             ordered_params[k] = model_state[k]
 
-        # Update model with ordered parameters
+        # Update model with ordered parameters and evaluate
         model.update(ordered_params)
+        mx.eval(model.parameters())  # Force evaluation of the update
 
         # Verify parameters after update
         print("\nModel parameters after update:")
         updated_params = tree_flatten(model.parameters())
         for k, v in updated_params:
-            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
+            v_eval = mx.eval(v)  # Evaluate each parameter
+            print(f"{k}: {v_eval.shape}, mean: {mx.mean(v_eval):.4f}")
 
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")

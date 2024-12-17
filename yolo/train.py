@@ -27,8 +27,14 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     # Save optimizer state
     try:
         save_path = os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz")
-        flat_opt_state = tree_flatten(optimizer.state)
-        mx.savez(save_path, **dict(flat_opt_state))
+        # Save both state and hyperparameters
+        save_dict = {
+            "state": tree_flatten(optimizer.state),
+            "lr": optimizer.learning_rate,
+            "betas": optimizer.betas,
+            "eps": optimizer.eps
+        }
+        mx.savez(save_path, **save_dict)
         print(f"Successfully saved optimizer state to {save_path}")
     except Exception as e:
         print(f"Error saving optimizer state: {str(e)}")
@@ -53,19 +59,26 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         print(f"Loading model from {model_path}")
         model_state = mx.load(model_path)
         model.update(model_state)
+        mx.eval(model.parameters())  # Force evaluation of model parameters
 
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
         print(f"Loading optimizer state from {optimizer_path}")
-        optimizer_state = mx.load(optimizer_path)
+        opt_dict = mx.load(optimizer_path)
         
-        # Ensure optimizer state matches model parameters
-        optimizer.state = optimizer_state
-        optimizer._state = optimizer_state  # Update internal state
+        # Recreate optimizer with saved hyperparameters
+        new_optimizer = optim.Adam(
+            learning_rate=float(opt_dict["lr"]), 
+            betas=opt_dict["betas"].tolist(),
+            eps=float(opt_dict["eps"])
+        )
         
-        # Force evaluation to ensure weights are loaded
-        mx.eval(model.parameters())
-        mx.eval(optimizer.state)
+        # Update optimizer state
+        new_optimizer.state = opt_dict["state"]
+        mx.eval(new_optimizer.state)  # Force evaluation
+        
+        # Replace old optimizer with new one
+        optimizer.__dict__.update(new_optimizer.__dict__)
 
         # Load training info
         info_path = os.path.join(checkpoint_dir, f"info_epoch_{epoch}.json")

@@ -74,9 +74,6 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
             betas=optimizer.betas,
             eps=optimizer.eps,
         )
-        # Update optimizer state
-        new_optimizer.state = opt_dict["state"]
-        mx.eval(new_optimizer.state)  # Force evaluation
 
         # Replace old optimizer with new one
         optimizer.__dict__.update(new_optimizer.__dict__)

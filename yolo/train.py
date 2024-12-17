@@ -47,22 +47,38 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
 
 def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
     """Load model checkpoint"""
-    # Load model weights
-    model_path = os.path.join(checkpoint_dir, f"yolo_epoch_{epoch}.npz")
-    model_state = mx.load(model_path)
-    model.update(model_state)
+    try:
+        # Load model weights
+        model_path = os.path.join(checkpoint_dir, f"yolo_epoch_{epoch}.npz")
+        print(f"Loading model from {model_path}")
+        model_state = mx.load(model_path)
+        model.update(model_state)
 
-    # Load optimizer state
-    optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
-    optimizer_state = mx.load(optimizer_path)
-    optimizer.state.update(optimizer_state)
+        # Load optimizer state
+        optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
+        print(f"Loading optimizer state from {optimizer_path}")
+        optimizer_state = mx.load(optimizer_path)
+        
+        # Ensure optimizer state matches model parameters
+        optimizer.state = optimizer_state
+        optimizer._state = optimizer_state  # Update internal state
+        
+        # Force evaluation to ensure weights are loaded
+        mx.eval(model.parameters())
+        mx.eval(optimizer.state)
 
-    # Load training info
-    info_path = os.path.join(checkpoint_dir, f"info_epoch_{epoch}.json")
-    with open(info_path, "r") as f:
-        info = json.load(f)
-
-    return info["epoch"], info["loss"]
+        # Load training info
+        info_path = os.path.join(checkpoint_dir, f"info_epoch_{epoch}.json")
+        with open(info_path, "r") as f:
+            info = json.load(f)
+            
+        print(f"Successfully loaded checkpoint from epoch {epoch}")
+        print(f"Previous loss: {info['loss']:.4f}")
+        
+        return epoch, info["loss"]
+    except Exception as e:
+        print(f"Error loading checkpoint: {str(e)}")
+        raise
 
 
 def train(
@@ -87,9 +103,23 @@ def train(
 
     # Resume from checkpoint if specified
     start_epoch = 0
+    last_loss = None
     if resume_epoch is not None:
-        start_epoch, _ = load_checkpoint(model, optimizer, save_dir, resume_epoch)
-        print(f"Resumed from epoch {start_epoch}")
+        start_epoch, last_loss = load_checkpoint(model, optimizer, save_dir, resume_epoch)
+        print(f"Resumed from epoch {start_epoch} with loss {last_loss:.4f}")
+        
+        # Ensure model is in training mode after loading
+        model.train(True)
+        
+        # Verify model state
+        dummy_input = mx.zeros((1, 3, 448, 448))
+        try:
+            _ = model(dummy_input)
+            mx.eval(_)
+            print("Model successfully verified with dummy input")
+        except Exception as e:
+            print(f"Error verifying model: {str(e)}")
+            raise
 
     # Create dataset and data loader
     print("Loading dataset...")

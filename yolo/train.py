@@ -173,18 +173,32 @@ def train(
 
 
 if __name__ == "__main__":
-    # Training configuration
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Train YOLO model")
+    parser.add_argument("--data-dir", default="./VOCdevkit/VOC2012", help="Path to VOC dataset")
+    parser.add_argument("--save-dir", default="./checkpoints", help="Directory to save checkpoints")
+    parser.add_argument("--num-epochs", type=int, default=135, help="Number of epochs to train")
+    parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
+    parser.add_argument("--accumulation-steps", type=int, default=2, help="Number of gradient accumulation steps")
+    parser.add_argument("--learning-rate", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--beta1", type=float, default=0.9, help="Beta1 for Adam optimizer")
+    parser.add_argument("--beta2", type=float, default=0.999, help="Beta2 for Adam optimizer")
+    parser.add_argument("--epsilon", type=float, default=1e-8, help="Epsilon for Adam optimizer")
+    parser.add_argument("--resume-epoch", type=int, help="Resume training from this epoch")
+    args = parser.parse_args()
+    
     config = {
-        "data_dir": "./VOCdevkit/VOC2012",
-        "save_dir": "./checkpoints",
-        "num_epochs": 135,
-        "batch_size": 32,
-        "accumulation_steps": 2,
-        "learning_rate": 0.001,
-        "beta1": 0.9,
-        "beta2": 0.999,
-        "epsilon": 1e-8,
-        "resume_epoch": None,
+        "data_dir": args.data_dir,
+        "save_dir": args.save_dir,
+        "num_epochs": args.num_epochs,
+        "batch_size": args.batch_size,
+        "accumulation_steps": args.accumulation_steps,
+        "learning_rate": args.learning_rate,
+        "beta1": args.beta1,
+        "beta2": args.beta2,
+        "epsilon": args.epsilon,
+        "resume_epoch": args.resume_epoch,
     }
 
     train(**config)

@@ -5,7 +5,7 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 from model import YOLO
 from loss import yolo_loss
-from data.voc import create_data_loader
+from data.voc import VOCDataset, create_data_loader
 import json
 
 
@@ -137,7 +137,10 @@ def train(
 
     # Load dataset with augmentation
     print("Loading dataset...")
-    train_loader = create_data_loader(data_dir, batch_size=batch_size, augment=True)
+    train_dataset = VOCDataset(data_dir, year="2012", image_set="train", augment=True)
+    train_loader = create_data_loader(
+        train_dataset, batch_size=batch_size, shuffle=True
+    )
 
     # Training loop
     print("\nStarting training...")

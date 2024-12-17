@@ -39,38 +39,43 @@ def augment_image(
     """Apply data augmentation to image and boxes"""
     # Convert any float type [0-1] to uint8 [0-255]
     if np.issubdtype(image.dtype, np.floating):
-        image = (image * 255).astype(np.uint8)
+        image = (image * 255.0).clip(0, 255).astype(np.uint8)
 
     # Random horizontal flip
     if np.random.random() < 0.5:
-        image = np.fliplr(image)
+        image = np.fliplr(image).astype(np.uint8)
+        boxes = boxes.copy()
         boxes[:, [0, 2]] = 1 - boxes[:, [2, 0]]  # Flip x coordinates
 
     # Random scaling (zoom in/out)
-    scale = np.random.uniform(0.8, 1.2)
+    scale = np.float32(np.random.uniform(0.8, 1.2))
     h, w = image.shape[:2]
     nh, nw = int(h * scale), int(w * scale)
-    image = np.array(Image.fromarray(image).resize((nw, nh)))
+    image = np.array(Image.fromarray(image).resize((nw, nh)), dtype=np.uint8)
 
     # Adjust box coordinates for scaling
-    boxes[:, [0, 2]] *= float(nw) / w
-    boxes[:, [1, 3]] *= float(nh) / h
+    boxes = boxes.copy()
+    boxes[:, [0, 2]] *= np.float32(nw) / w
+    boxes[:, [1, 3]] *= np.float32(nh) / h
 
     # Random brightness
     if np.random.random() < 0.5:
-        delta = np.random.uniform(-32, 32)
-        image = np.clip(image + delta, 0, 255)
+        delta = np.float32(np.random.uniform(-32, 32))
+        image = np.clip(image.astype(np.float32) + delta, 0, 255).astype(np.uint8)
 
     # Random saturation
     if np.random.random() < 0.5:
-        saturation = np.random.uniform(0.5, 1.5)
-        hsv = np.array(Image.fromarray(image).convert("HSV"))
-        hsv[:, :, 1] = np.clip(hsv[:, :, 1] * saturation, 0, 255)
-        image = np.array(Image.fromarray(hsv, mode="HSV").convert("RGB"))
+        saturation = np.float32(np.random.uniform(0.5, 1.5))
+        hsv = np.array(Image.fromarray(image).convert("HSV"), dtype=np.uint8)
+        hsv[:, :, 1] = np.clip(
+            hsv[:, :, 1].astype(np.float32) * saturation, 0, 255
+        ).astype(np.uint8)
+        image = np.array(
+            Image.fromarray(hsv, mode="HSV").convert("RGB"), dtype=np.uint8
+        )
 
     # Convert back to float32 [0-1]
-    image = image.astype(np.float32) / 255.0
-    return image, boxes
+    return image.astype(np.float32) / 255.0, boxes
 
 
 class VOCDataset:
@@ -179,9 +184,8 @@ class VOCDataset:
         if self.augment:
             anno = self._get_annotation(idx)
             image, anno["boxes"] = augment_image(image, anno["boxes"])
-            image = image.astype(np.float32)  # Ensure float32 type
 
-        return image
+        return image.astype(np.float32)  # Ensure float32 type
 
     def _convert_to_grid(self, boxes: np.ndarray, classes: np.ndarray) -> np.ndarray:
         """Convert boxes and classes to YOLO grid format"""

@@ -32,7 +32,7 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
             "state": tree_flatten(optimizer.state),
             "lr": optimizer.learning_rate,
             "betas": optimizer.betas,
-            "eps": optimizer.eps
+            "eps": optimizer.eps,
         }
         mx.savez(save_path, **save_dict)
         print(f"Successfully saved optimizer state to {save_path}")
@@ -65,18 +65,18 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
         print(f"Loading optimizer state from {optimizer_path}")
         opt_dict = mx.load(optimizer_path)
-        
+
         # Recreate optimizer with saved hyperparameters
         new_optimizer = optim.Adam(
-            learning_rate=float(opt_dict["lr"]), 
+            learning_rate=float(opt_dict["lr"]),
             betas=opt_dict["betas"].tolist(),
-            eps=float(opt_dict["eps"])
+            eps=float(opt_dict["eps"]),
         )
-        
+
         # Update optimizer state
         new_optimizer.state = opt_dict["state"]
         mx.eval(new_optimizer.state)  # Force evaluation
-        
+
         # Replace old optimizer with new one
         optimizer.__dict__.update(new_optimizer.__dict__)
 
@@ -84,10 +84,10 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         info_path = os.path.join(checkpoint_dir, f"info_epoch_{epoch}.json")
         with open(info_path, "r") as f:
             info = json.load(f)
-            
+
         print(f"Successfully loaded checkpoint from epoch {epoch}")
         print(f"Previous loss: {info['loss']:.4f}")
-        
+
         return epoch, info["loss"]
     except Exception as e:
         print(f"Error loading checkpoint: {str(e)}")
@@ -118,12 +118,14 @@ def train(
     start_epoch = 0
     last_loss = None
     if resume_epoch is not None:
-        start_epoch, last_loss = load_checkpoint(model, optimizer, save_dir, resume_epoch)
+        start_epoch, last_loss = load_checkpoint(
+            model, optimizer, save_dir, resume_epoch
+        )
         print(f"Resumed from epoch {start_epoch} with loss {last_loss:.4f}")
-        
+
         # Ensure model is in training mode after loading
         model.train(True)
-        
+
         # Verify model state with dummy input in NHWC format
         dummy_input = mx.zeros((1, 448, 448, 3))  # (batch, height, width, channels)
         try:
@@ -217,20 +219,41 @@ def train(
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Train YOLO model")
-    parser.add_argument("--data-dir", default="./VOCdevkit/VOC2012", help="Path to VOC dataset")
-    parser.add_argument("--save-dir", default="./checkpoints", help="Directory to save checkpoints")
-    parser.add_argument("--num-epochs", type=int, default=135, help="Number of epochs to train")
+    parser.add_argument(
+        "--data-dir", default="./VOCdevkit/VOC2012", help="Path to VOC dataset"
+    )
+    parser.add_argument(
+        "--save-dir", default="./checkpoints", help="Directory to save checkpoints"
+    )
+    parser.add_argument(
+        "--num-epochs", type=int, default=135, help="Number of epochs to train"
+    )
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
-    parser.add_argument("--accumulation-steps", type=int, default=2, help="Number of gradient accumulation steps")
-    parser.add_argument("--learning-rate", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--beta1", type=float, default=0.9, help="Beta1 for Adam optimizer")
-    parser.add_argument("--beta2", type=float, default=0.999, help="Beta2 for Adam optimizer")
-    parser.add_argument("--epsilon", type=float, default=1e-8, help="Epsilon for Adam optimizer")
-    parser.add_argument("--resume-epoch", type=int, help="Resume training from this epoch")
+    parser.add_argument(
+        "--accumulation-steps",
+        type=int,
+        default=2,
+        help="Number of gradient accumulation steps",
+    )
+    parser.add_argument(
+        "--learning-rate", type=float, default=0.001, help="Learning rate"
+    )
+    parser.add_argument(
+        "--beta1", type=float, default=0.9, help="Beta1 for Adam optimizer"
+    )
+    parser.add_argument(
+        "--beta2", type=float, default=0.999, help="Beta2 for Adam optimizer"
+    )
+    parser.add_argument(
+        "--epsilon", type=float, default=1e-8, help="Epsilon for Adam optimizer"
+    )
+    parser.add_argument(
+        "--resume-epoch", type=int, help="Resume training from this epoch"
+    )
     args = parser.parse_args()
-    
+
     config = {
         "data_dir": args.data_dir,
         "save_dir": args.save_dir,

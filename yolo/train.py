@@ -10,22 +10,14 @@ import json
 from mlx.utils import tree_flatten, tree_map
 
 
-def save_checkpoint(model, optimizer, epoch, loss, save_dir):
+def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
     """Save model checkpoint"""
     os.makedirs(save_dir, exist_ok=True)
 
     # Save model weights
     try:
         save_path = os.path.join(save_dir, f"yolo_epoch_{epoch}.npz")
-
-        # Save flattened parameters
-        flat_params = tree_flatten(model.parameters())
-
-        print("\nModel parameters after saving: ")
-        for k, v in flat_params:
-            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
-
-        mx.savez(save_path, **dict(flat_params))
+        model.save_weights(save_path)
         print(f"Successfully saved model to {save_path}")
     except Exception as e:
         print(f"Error saving model state: {str(e)}")
@@ -56,42 +48,11 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     print(f"Successfully saved training info to {info_path}")
 
 
-def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
+def load_checkpoint(model: YOLO, optimizer, checkpoint_dir, epoch):
     """Load model checkpoint"""
     try:
-        # Print initial parameter stats
-        print("\nModel parameters before loading:")
-        current_params = tree_flatten(model.parameters())
-        for k, v in current_params:
-            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
-
-        # Load model weights
         model_path = os.path.join(checkpoint_dir, f"yolo_epoch_{epoch}.npz")
-        print(f"\nLoading model from {model_path}")
-        model_state = mx.load(model_path)
-
-        # Print loaded parameters
-        print("\nLoaded parameters from checkpoint:")
-        for k, v in model_state.items():
-            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
-
-        # Create parameter dictionary preserving the order from tree_flatten
-        ordered_params = {}
-        for k, _ in current_params:
-            if k not in model_state:
-                raise ValueError(f"Parameter {k} not found in checkpoint")
-            ordered_params[k] = model_state[k]
-
-        # Update model with ordered parameters and evaluate
-        model.update(ordered_params)
-        mx.eval(model.parameters())  # Force evaluation of the update
-
-        # Verify parameters after update
-        print("\nModel parameters after update:")
-        updated_params = tree_flatten(model.parameters())
-        for k, v in updated_params:
-            mx.eval(v)
-            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
+        model.load_weights(model_path)
 
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
@@ -137,6 +98,7 @@ def train(
     # Create model and optimizer
     print("Creating model...")
     model = YOLO()
+
     optimizer = optim.Adam(
         learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
     )

@@ -18,17 +18,6 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     try:
         save_path = os.path.join(save_dir, f"yolo_epoch_{epoch}.npz")
 
-        # Print some parameter stats before saving
-        print("\nModel parameters before saving:")
-        backbone_conv1_w = model.backbone.conv1.weight
-        backbone_conv1_b = model.backbone.conv1.bias
-        print(
-            f"Conv1 weight shape: {backbone_conv1_w.shape}, mean: {mx.mean(backbone_conv1_w):.4f}"
-        )
-        print(
-            f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}"
-        )
-
         # Save flattened parameters
         flat_params = tree_flatten(model.parameters())
 
@@ -91,6 +80,10 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         param_names = [k for k, _ in current_params]
 
         # Create parameter dictionary with correct names
+        print("\nModel parameters after loading:  ")
+        for k, v in model_state.items():
+            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
+
         params = {k: model_state[k] for k in param_names}
         model.update(params)
 

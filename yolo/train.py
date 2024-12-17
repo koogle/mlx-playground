@@ -201,7 +201,7 @@ def train(
         )
 
         # Save checkpoint every 5 epochs
-        if epoch % 5 == 0 or epoch == num_epochs - 1:
+        if (epoch % 5 == 0) or (epoch == num_epochs - 1):
             save_checkpoint(model, optimizer, epoch + 1, avg_loss, save_dir)
             print(f"Checkpoint saved at epoch {epoch+1}")
 

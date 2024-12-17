@@ -37,8 +37,8 @@ def augment_image(
     image: np.ndarray, boxes: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Apply data augmentation to image and boxes"""
-    # Convert float32 [0-1] to uint8 [0-255]
-    if image.dtype == np.float32:
+    # Convert any float type [0-1] to uint8 [0-255]
+    if np.issubdtype(image.dtype, np.floating):
         image = (image * 255).astype(np.uint8)
 
     # Random horizontal flip
@@ -167,14 +167,10 @@ class VOCDataset:
         }
 
     def _load_image(self, idx: int) -> np.ndarray:
-        """Load and preprocess image"""
-        img_id = self.image_ids[idx]
-        img_path = os.path.join(self.image_dir, f"{img_id}.jpg")
-
-        # Load and convert to RGB
-        image = Image.open(img_path).convert("RGB")
-
-        # Resize
+        """Load image from disk and preprocess"""
+        # Get image path
+        image_path = os.path.join(self.image_dir, self.image_ids[idx] + ".jpg")
+        image = Image.open(image_path).convert("RGB")
         image = image.resize((self.img_size, self.img_size))
 
         # Convert to numpy array and normalize
@@ -183,7 +179,7 @@ class VOCDataset:
         if self.augment:
             anno = self._get_annotation(idx)
             image, anno["boxes"] = augment_image(image, anno["boxes"])
-            image = np.clip(image, 0, 1)
+            image = image.astype(np.float32)  # Ensure float32 type
 
         return image
 

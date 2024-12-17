@@ -70,11 +70,10 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
 
         # Recreate optimizer with saved hyperparameters
         new_optimizer = optim.Adam(
-            learning_rate=float(opt_dict["lr"]),
-            betas=opt_dict["betas"].tolist(),
-            eps=float(opt_dict["eps"]),
+            learning_rate=float(opt_dict["learning_rate"]),
+            betas=optimizer.betas,
+            eps=optimizer.eps,
         )
-
         # Update optimizer state
         new_optimizer.state = opt_dict["state"]
         mx.eval(new_optimizer.state)  # Force evaluation

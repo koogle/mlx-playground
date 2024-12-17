@@ -33,6 +33,40 @@ VOC_CLASSES = [
 CLASS_TO_IDX = {cls_name: idx for idx, cls_name in enumerate(VOC_CLASSES)}
 
 
+def augment_image(
+    image: np.ndarray, boxes: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Apply data augmentation to image and boxes"""
+    # Random horizontal flip
+    if np.random.random() < 0.5:
+        image = np.fliplr(image)
+        boxes[:, [0, 2]] = 1 - boxes[:, [2, 0]]  # Flip x coordinates
+
+    # Random scaling (zoom in/out)
+    scale = np.random.uniform(0.8, 1.2)
+    h, w = image.shape[:2]
+    nh, nw = int(h * scale), int(w * scale)
+    image = np.array(Image.fromarray(image).resize((nw, nh)))
+
+    # Adjust box coordinates for scaling
+    boxes[:, [0, 2]] *= float(nw) / w
+    boxes[:, [1, 3]] *= float(nh) / h
+
+    # Random brightness
+    if np.random.random() < 0.5:
+        delta = np.random.uniform(-32, 32)
+        image = np.clip(image + delta, 0, 255)
+
+    # Random saturation
+    if np.random.random() < 0.5:
+        saturation = np.random.uniform(0.5, 1.5)
+        hsv = np.array(Image.fromarray(image).convert("HSV"))
+        hsv[:, :, 1] = np.clip(hsv[:, :, 1] * saturation, 0, 255)
+        image = np.array(Image.fromarray(hsv, mode="HSV").convert("RGB"))
+
+    return image.astype(np.uint8), boxes
+
+
 class VOCDataset:
     def __init__(
         self,
@@ -42,6 +76,7 @@ class VOCDataset:
         img_size: int = 448,
         grid_size: int = 7,
         num_boxes: int = 2,
+        augment: bool = True,
     ):
         """
         PASCAL VOC Dataset loader
@@ -53,6 +88,7 @@ class VOCDataset:
             img_size: Input image size (448 for YOLO)
             grid_size: Grid size (7 for YOLO)
             num_boxes: Number of boxes per grid cell (2 for YOLO)
+            augment: Whether to apply data augmentation
         """
         self.data_dir = data_dir
         self.year = year
@@ -60,6 +96,7 @@ class VOCDataset:
         self.img_size = img_size
         self.grid_size = grid_size
         self.num_boxes = num_boxes
+        self.augment = augment and image_set == "train"  # Only augment training data
 
         # Paths
         self.image_dir = os.path.join(data_dir, "JPEGImages")
@@ -136,6 +173,11 @@ class VOCDataset:
 
         # Convert to numpy array and normalize
         image = np.array(image, dtype=np.float32) / 255.0
+
+        if self.augment:
+            anno = self._get_annotation(idx)
+            image, anno["boxes"] = augment_image(image, anno["boxes"])
+            image = np.clip(image, 0, 1)
 
         return image
 

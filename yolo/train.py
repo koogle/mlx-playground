@@ -82,6 +82,24 @@ def load_checkpoint(model: YOLO, optimizer, checkpoint_dir, epoch):
         raise
 
 
+def clip_gradients(gradients, max_norm: float = 10.0):
+    """Clip gradients by global norm"""
+    total_norm = mx.sqrt(sum(mx.sum(g * g) for g in gradients))
+    clip_coef = max_norm / (total_norm + 1e-6)
+    clip_coef = mx.minimum(clip_coef, 1.0)
+    return [g * clip_coef for g in gradients]
+
+
+def adjust_learning_rate(optimizer, epoch, initial_lr):
+    """Adjust learning rate using step decay"""
+    # Decay learning rate by 0.1 at epochs 60 and 90
+    if epoch == 60:
+        optimizer.learning_rate = initial_lr * 0.1
+    elif epoch == 90:
+        optimizer.learning_rate = initial_lr * 0.01
+    return optimizer.learning_rate
+
+
 def train(
     data_dir: str,
     save_dir: str,
@@ -93,6 +111,7 @@ def train(
     beta2: float = 0.999,
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
+    max_grad_norm: float = 10.0,
 ):
     """Train YOLO model"""
     # Create model and optimizer
@@ -105,99 +124,85 @@ def train(
 
     # Resume from checkpoint if specified
     start_epoch = 0
-    last_loss = None
     if resume_epoch is not None:
-        start_epoch, last_loss = load_checkpoint(
+        print(f"Resuming from epoch {resume_epoch}")
+        start_epoch, prev_loss = load_checkpoint(
             model, optimizer, save_dir, resume_epoch
         )
-        print(f"Resumed from epoch {start_epoch} with loss {last_loss:.4f}")
+        print(f"Resumed from epoch {start_epoch} with loss {prev_loss:.4f}")
 
-        # Ensure model is in training mode after loading
-        model.train(True)
+    # Verify model works with dummy input
+    dummy_input = mx.random.normal((1, 448, 448, 3))
+    _ = model(dummy_input)
+    print("Model successfully verified with dummy input")
 
-        # Verify model state with dummy input in NHWC format
-        dummy_input = mx.zeros((1, 448, 448, 3))  # (batch, height, width, channels)
-        try:
-            _ = model(dummy_input)
-            mx.eval(_)
-            print("Model successfully verified with dummy input")
-        except Exception as e:
-            print(f"Error verifying model: {str(e)}")
-            raise
-
-    # Create dataset and data loader
+    # Load dataset with augmentation
     print("Loading dataset...")
-    dataset = VOCDataset(data_dir, year="2012", image_set="train")
-    val_dataset = VOCDataset(data_dir, year="2012", image_set="val")
+    train_loader = create_data_loader(
+        data_dir, batch_size=batch_size, split="train", augment=True
+    )
 
     # Training loop
-    print("Starting training...")
+    print("\nStarting training...")
     for epoch in range(start_epoch, num_epochs):
-        model.train(True)  # Set to training mode
         epoch_loss = 0.0
+        batch_count = 0
+        accumulated_loss = 0.0
+        accumulated_grads = None
+        step_count = 0
         start_time = time.time()
 
-        # Get training batches
-        train_images, train_targets = create_data_loader(
-            dataset, batch_size, shuffle=True
-        )
+        # Adjust learning rate
+        current_lr = adjust_learning_rate(optimizer, epoch, learning_rate)
+        print(f"\nEpoch [{epoch+1}/{num_epochs}], Learning Rate: {current_lr:.6f}")
 
-        accumulated_grads = None
-        # Train for one epoch
-        for batch_idx, (images, targets) in enumerate(zip(train_images, train_targets)):
+        for batch_idx, (images, targets) in enumerate(train_loader):
+            # Forward pass
+            predictions = model(images)
+            loss = yolo_loss(predictions, targets)
+            loss = loss / accumulation_steps  # Normalize loss for gradient accumulation
+            accumulated_loss += loss
 
-            def loss_fn(params):
-                model.update(params)
-                predictions = model(images)
-                return yolo_loss(predictions, targets)
+            # Compute gradients
+            gradients = mx.grad(model.parameters())(predictions, targets)
 
-            # Compute loss and gradients
-            loss, grads = mx.value_and_grad(loss_fn)(model.parameters())
-
-            # Scale gradients for accumulation
-            grads = tree_map(lambda x: x / accumulation_steps, grads)
+            # Clip gradients
+            gradients = clip_gradients(gradients, max_grad_norm)
 
             # Accumulate gradients
             if accumulated_grads is None:
-                accumulated_grads = grads
+                accumulated_grads = gradients
             else:
-                accumulated_grads = tree_map(
-                    lambda x, y: x + y, accumulated_grads, grads
-                )
+                accumulated_grads = [
+                    g1 + g2 for g1, g2 in zip(accumulated_grads, gradients)
+                ]
 
-            # Update weights after accumulation steps
-            if (batch_idx + 1) % accumulation_steps == 0:
+            # Update weights with accumulated gradients
+            step_count += 1
+            if step_count == accumulation_steps:
                 optimizer.update(model, accumulated_grads)
-                accumulated_grads = None
-                mx.eval(model.parameters())  # Force evaluation to free memory
-
-            epoch_loss += loss.item()
-
-            # Print progress
-            if (batch_idx + 1) % 10 == 0:
-                print(
-                    f"Epoch [{epoch+1}/{num_epochs}], "
-                    f"Batch [{batch_idx+1}/{len(train_images)}], "
-                    f"Loss: {loss.item():.4f}"
-                )
-
-            # Force memory cleanup
-            if (batch_idx + 1) % 5 == 0:
                 mx.eval(model.parameters())
 
-        # Update with any remaining accumulated gradients
-        if accumulated_grads is not None:
-            optimizer.update(model, accumulated_grads)
-            mx.eval(model.parameters())
+                epoch_loss += accumulated_loss.item() * accumulation_steps
+                batch_count += 1
+                step_count = 0
+                accumulated_loss = 0.0
+                accumulated_grads = None
 
-        # Compute epoch statistics
-        avg_loss = epoch_loss / len(train_images)
-        epoch_time = time.time() - start_time
+                if batch_count % 10 == 0:
+                    print(
+                        f"Epoch [{epoch+1}/{num_epochs}], "
+                        f"Batch [{batch_count}/{len(train_loader)//accumulation_steps}], "
+                        f"Loss: {loss.item():.4f}"
+                    )
 
+        # Compute average loss for the epoch
+        avg_loss = epoch_loss / batch_count
+        end_time = time.time()
         print(
             f"Epoch [{epoch+1}/{num_epochs}], "
             f"Average Loss: {avg_loss:.4f}, "
-            f"Time: {epoch_time:.2f}s"
+            f"Time: {end_time - start_time:.2f}s"
         )
 
         # Save checkpoint every 5 epochs
@@ -241,6 +246,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--resume-epoch", type=int, help="Resume training from this epoch"
     )
+    parser.add_argument(
+        "--max-grad-norm", type=float, default=10.0, help="Maximum gradient norm"
+    )
     args = parser.parse_args()
 
     config = {
@@ -254,6 +262,7 @@ if __name__ == "__main__":
         "beta2": args.beta2,
         "epsilon": args.epsilon,
         "resume_epoch": args.resume_epoch,
+        "max_grad_norm": args.max_grad_norm,
     }
 
     train(**config)

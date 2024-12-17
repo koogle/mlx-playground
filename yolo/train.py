@@ -18,6 +18,14 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     try:
         save_path = os.path.join(save_dir, f"yolo_epoch_{epoch}.npz")
         flat_params = tree_flatten(model.parameters())
+        
+        # Print some parameter stats before saving
+        print("\nModel parameters before saving:")
+        backbone_conv1_w = model.backbone.conv1.weight
+        backbone_conv1_b = model.backbone.conv1.bias
+        print(f"Conv1 weight shape: {backbone_conv1_w.shape}, mean: {mx.mean(backbone_conv1_w):.4f}")
+        print(f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}")
+        
         mx.savez(save_path, **dict(flat_params))
         print(f"Successfully saved model to {save_path}")
     except Exception as e:
@@ -54,19 +62,31 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
 def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
     """Load model checkpoint"""
     try:
+        # Print initial parameter stats
+        print("\nModel parameters before loading:")
+        backbone_conv1_w = model.backbone.conv1.weight
+        backbone_conv1_b = model.backbone.conv1.bias
+        print(f"Conv1 weight shape: {backbone_conv1_w.shape}, mean: {mx.mean(backbone_conv1_w):.4f}")
+        print(f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}")
+
         # Load model weights
         model_path = os.path.join(checkpoint_dir, f"yolo_epoch_{epoch}.npz")
-        print(f"Loading model from {model_path}")
+        print(f"\nLoading model from {model_path}")
         model_state = mx.load(model_path)
         model.update(model_state)
         mx.eval(model.parameters())  # Force evaluation of model parameters
 
+        # Print parameter stats after loading
+        print("\nModel parameters after loading:")
+        backbone_conv1_w = model.backbone.conv1.weight
+        backbone_conv1_b = model.backbone.conv1.bias
+        print(f"Conv1 weight shape: {backbone_conv1_w.shape}, mean: {mx.mean(backbone_conv1_w):.4f}")
+        print(f"Conv1 bias shape: {backbone_conv1_b.shape}, mean: {mx.mean(backbone_conv1_b):.4f}")
+
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
-        print(f"Loading optimizer state from {optimizer_path}")
+        print(f"\nLoading optimizer state from {optimizer_path}")
         opt_dict = mx.load(optimizer_path)
-
-        print(opt_dict.keys())
 
         # Recreate optimizer with saved hyperparameters
         new_optimizer = optim.Adam(
@@ -74,6 +94,10 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
             betas=optimizer.betas,
             eps=optimizer.eps,
         )
+        
+        # Set the optimizer state
+        new_optimizer.state = opt_dict
+        mx.eval(new_optimizer.state)  # Force evaluation
 
         # Replace old optimizer with new one
         optimizer.__dict__.update(new_optimizer.__dict__)
@@ -83,7 +107,7 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         with open(info_path, "r") as f:
             info = json.load(f)
 
-        print(f"Successfully loaded checkpoint from epoch {epoch}")
+        print(f"\nSuccessfully loaded checkpoint from epoch {epoch}")
         print(f"Previous loss: {info['loss']:.4f}")
 
         return epoch, info["loss"]

@@ -39,12 +39,10 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     # Save optimizer state
     try:
         save_path = os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz")
-        # Save both state and hyperparameters
+        # Only save the learning rate and step count
         save_dict = {
-            "state": tree_flatten(optimizer.state),
-            "lr": optimizer.learning_rate,
-            "betas": optimizer.betas,
-            "eps": optimizer.eps,
+            "learning_rate": mx.array(optimizer.learning_rate, dtype=mx.float32),
+            "step": mx.array(optimizer.state.get("step", 0), dtype=mx.int32)
         }
         mx.savez(save_path, **save_dict)
         print(f"Successfully saved optimizer state to {save_path}")
@@ -100,19 +98,14 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         print(f"\nLoading optimizer state from {optimizer_path}")
         opt_dict = mx.load(optimizer_path)
 
-        # Recreate optimizer with saved hyperparameters
-        new_optimizer = optim.Adam(
-            learning_rate=float(opt_dict["learning_rate"]),
-            betas=optimizer.betas,
-            eps=optimizer.eps,
-        )
+        # Update optimizer with saved state
+        optimizer.learning_rate = float(opt_dict["learning_rate"])
+        if "step" in opt_dict:
+            optimizer.state["step"] = int(opt_dict["step"])
 
-        # Set the optimizer state
-        new_optimizer.state = opt_dict
-        mx.eval(new_optimizer.state)  # Force evaluation
-
-        # Replace old optimizer with new one
-        optimizer.__dict__.update(new_optimizer.__dict__)
+        print(f"Loaded learning rate: {optimizer.learning_rate}")
+        if "step" in opt_dict:
+            print(f"Loaded step count: {optimizer.state['step']}")
 
         # Load training info
         info_path = os.path.join(checkpoint_dir, f"info_epoch_{epoch}.json")
@@ -246,7 +239,7 @@ def train(
         )
 
         # Save checkpoint every 5 epochs
-        if (epoch + 1) % 2 == 0 or epoch == num_epochs - 1:
+        if epoch % 5 == 0 or epoch == num_epochs - 1:
             save_checkpoint(model, optimizer, epoch + 1, avg_loss, save_dir)
             print(f"Checkpoint saved at epoch {epoch+1}")
 

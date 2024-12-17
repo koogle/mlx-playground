@@ -91,7 +91,7 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         updated_params = tree_flatten(model.parameters())
         for k, v in updated_params:
             mx.eval(v)
-            print(f"{k}: {v}, mean: {mx.mean(v):.4f}")
+            print(f"{k}: {v.shape}, mean: {mx.mean(v):.4f}")
 
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")

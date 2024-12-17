@@ -53,8 +53,8 @@ class DarkNet(nn.Module):
         self.relu = nn.ReLU()
 
     def __call__(self, x):
-        # Input should be in NCHW format (batch, channels, height, width)
-        # MLX Conv2d expects NCHW format
+        # Input should be in NHWC format (batch, height, width, channels)
+        # MLX Conv2d weights are in (out_channels, kernel_h, kernel_w, in_channels) format
 
         # Initial convolutions
         x = self.relu(self.bn1(self.conv1(x)))

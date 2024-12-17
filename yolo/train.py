@@ -111,8 +111,8 @@ def train(
         # Ensure model is in training mode after loading
         model.train(True)
         
-        # Verify model state with correct input shape (NCHW format)
-        dummy_input = mx.zeros((1, 3, 448, 448))  # Changed to NCHW format
+        # Verify model state with dummy input in NHWC format
+        dummy_input = mx.zeros((1, 448, 448, 3))  # (batch, height, width, channels)
         try:
             _ = model(dummy_input)
             mx.eval(_)

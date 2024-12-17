@@ -90,6 +90,7 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
         print("\nModel parameters after update:")
         updated_params = tree_flatten(model.parameters())
         for k, v in updated_params:
+            mx.eval(v)
             print(f"{k}: {v}, mean: {mx.mean(v):.4f}")
 
         # Load optimizer state

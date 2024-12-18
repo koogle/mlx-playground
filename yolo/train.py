@@ -207,18 +207,22 @@ def train(
                 optimizer.update(model, accumulated_grads)
                 mx.eval(model.parameters())
 
-                epoch_loss += accumulated_loss.item() * accumulation_steps
+                # Add the accumulated loss (already normalized by accumulation_steps)
+                epoch_loss += accumulated_loss.item()
                 batch_count += 1
-                step_count = 0
-                accumulated_loss = 0.0
-                accumulated_grads = None
-
+                
                 if batch_count % 10 == 0:
+                    current_avg_loss = accumulated_loss.item()  # Already normalized
                     print(
                         f"Epoch [{epoch+1}/{num_epochs}], "
                         f"Batch [{batch_count}/{len(batch_images)//accumulation_steps}], "
-                        f"Loss: {loss.item():.4f}"
+                        f"Loss: {current_avg_loss:.4f}"
                     )
+
+                # Reset accumulators
+                step_count = 0
+                accumulated_loss = 0.0
+                accumulated_grads = None
 
         # Compute average loss for the epoch
         avg_loss = epoch_loss / batch_count

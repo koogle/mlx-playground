@@ -195,11 +195,10 @@ def train(
             if accumulated_grads is None:
                 accumulated_grads = gradients
             else:
+                # Add gradients element-wise while maintaining dictionary structure
                 accumulated_grads = {
-                    k: g1 + g2
-                    for k, g1, g2 in zip(
-                        gradients.keys(), gradients.values(), accumulated_grads.values()
-                    )
+                    k: accumulated_grads[k] + gradients[k] if isinstance(gradients[k], mx.array) else gradients[k]
+                    for k in gradients.keys()
                 }
 
             # Update weights with accumulated gradients

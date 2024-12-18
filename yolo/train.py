@@ -90,12 +90,15 @@ def clip_gradients(gradients, max_norm: float = 10.0):
             total_norm_sq += mx.sum(grad * grad).item()
     total_norm = mx.sqrt(total_norm_sq)
 
-    # Compute scaling factor
-    clip_coef = max_norm / (total_norm + 1e-6)
-    clip_coef = mx.minimum(clip_coef, 1.0)
+    # Compute scaling factor as a scalar
+    clip_coef = float(max_norm / (total_norm + 1e-6))
+    clip_coef = min(clip_coef, 1.0)
 
-    # Scale all gradients
-    return {k: g * clip_coef for k, g in gradients.items()}
+    # Scale all gradients with scalar coefficient
+    return {
+        k: g * mx.array(clip_coef) if isinstance(g, mx.array) else g
+        for k, g in gradients.items()
+    }
 
 
 def adjust_learning_rate(optimizer, epoch, initial_lr):

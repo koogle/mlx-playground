@@ -249,52 +249,59 @@ class VOCDataset:
         return image, target
 
 
-def create_data_loader(
-    dataset: VOCDataset, batch_size: int, shuffle: bool = True
-) -> Tuple[List[mx.array], List[mx.array]]:
-    """Create batched data loader"""
-    indices = np.arange(len(dataset))
-    if shuffle:
-        np.random.shuffle(indices)
-
-    # Create batches with minimal memory overhead
-    images = []
-    targets = []
-    batch_indices = []
-
-    for idx in indices:
-        batch_indices.append(idx)
-
-        if len(batch_indices) == batch_size:
-            # Process batch
-            batch_images = []
-            batch_targets = []
-
-            for bidx in batch_indices:
-                image, target = dataset[bidx]
-                batch_images.append(image)
-                batch_targets.append(target)
-
-            # Stack and convert to MLX arrays
-            images.append(mx.stack(batch_images))
-            targets.append(mx.stack(batch_targets))
-
-            # Clear batch indices
-            batch_indices = []
-            mx.eval(images[-1])  # Force evaluation to free memory
-            mx.eval(targets[-1])
-
-    # Handle remaining samples
-    if batch_indices:
+class DataLoader:
+    def __init__(self, dataset: VOCDataset, batch_size: int, shuffle: bool = True):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.indices = np.arange(len(dataset))
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+        
+        # Calculate number of batches
+        self.num_batches = len(dataset) // batch_size
+        if len(dataset) % batch_size != 0:
+            self.num_batches += 1
+    
+    def __len__(self):
+        return self.num_batches
+    
+    def __iter__(self):
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+        self.batch_idx = 0
+        return self
+    
+    def __next__(self):
+        if self.batch_idx >= self.num_batches:
+            raise StopIteration
+        
+        # Get indices for current batch
+        start_idx = self.batch_idx * self.batch_size
+        end_idx = min(start_idx + self.batch_size, len(self.indices))
+        batch_indices = self.indices[start_idx:end_idx]
+        
+        # Process batch
         batch_images = []
         batch_targets = []
-        for bidx in batch_indices:
-            image, target = dataset[bidx]
+        
+        for idx in batch_indices:
+            image, target = self.dataset[idx]
             batch_images.append(image)
             batch_targets.append(target)
-        images.append(mx.stack(batch_images))
-        targets.append(mx.stack(batch_targets))
-        mx.eval(images[-1])
-        mx.eval(targets[-1])
+        
+        # Stack and convert to MLX arrays
+        images = mx.stack(batch_images)
+        targets = mx.stack(batch_targets)
+        mx.eval(images)
+        mx.eval(targets)
+        
+        self.batch_idx += 1
+        return images, targets
 
-    return images, targets
+
+def create_data_loader(
+    dataset: VOCDataset, batch_size: int, shuffle: bool = True
+) -> DataLoader:
+    """Create batched data loader"""
+    return DataLoader(dataset, batch_size, shuffle)

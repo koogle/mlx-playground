@@ -168,15 +168,7 @@ def train(
         current_lr = adjust_learning_rate(optimizer, epoch, learning_rate)
         print(f"\nEpoch [{epoch+1}/{num_epochs}], Learning Rate: {current_lr:.6f}")
 
-        # Get all batches for the epoch
-        batch_images, batch_targets = train_loader
-        total_batches = len(batch_images)
-
-        for batch_idx in range(total_batches):
-            # Get current batch
-            images = batch_images[batch_idx]
-            targets = batch_targets[batch_idx]
-
+        for images, targets in train_loader:
             # Define loss function for gradient computation
             def loss_fn(params):
                 model.update(params)
@@ -215,7 +207,7 @@ def train(
                     current_avg_loss = accumulated_loss.item()  # Already normalized
                     print(
                         f"Epoch [{epoch+1}/{num_epochs}], "
-                        f"Batch [{batch_count}/{len(batch_images)//accumulation_steps}], "
+                        f"Batch [{batch_count}/{len(train_loader)//accumulation_steps}], "
                         f"Loss: {current_avg_loss:.4f}"
                     )
 

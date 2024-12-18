@@ -83,10 +83,19 @@ def load_checkpoint(model: YOLO, optimizer, checkpoint_dir, epoch):
 
 def clip_gradients(gradients, max_norm: float = 10.0):
     """Clip gradients by global norm"""
-    total_norm = mx.sqrt(sum(mx.sum(g * g) for g in gradients))
+    # Compute total norm across all gradient values in the dictionary
+    total_norm_sq = 0.0
+    for grad in gradients.values():
+        if isinstance(grad, mx.array):
+            total_norm_sq += mx.sum(grad * grad).item()
+    total_norm = mx.sqrt(total_norm_sq)
+
+    # Compute scaling factor
     clip_coef = max_norm / (total_norm + 1e-6)
     clip_coef = mx.minimum(clip_coef, 1.0)
-    return [g * clip_coef for g in gradients]
+
+    # Scale all gradients
+    return {k: g * clip_coef for k, g in gradients.items()}
 
 
 def adjust_learning_rate(optimizer, epoch, initial_lr):
@@ -183,9 +192,12 @@ def train(
             if accumulated_grads is None:
                 accumulated_grads = gradients
             else:
-                accumulated_grads = [
-                    g1 + g2 for g1, g2 in zip(accumulated_grads, gradients)
-                ]
+                accumulated_grads = {
+                    k: g1 + g2
+                    for k, g1, g2 in zip(
+                        gradients.keys(), gradients.values(), accumulated_grads.values()
+                    )
+                }
 
             # Update weights with accumulated gradients
             step_count += 1

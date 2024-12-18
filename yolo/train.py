@@ -165,14 +165,16 @@ def train(
             images = batch_images[batch_idx]
             targets = batch_targets[batch_idx]
 
-            # Forward pass
-            predictions = model(images)
-            loss = yolo_loss(predictions, targets)
+            # Define loss function for gradient computation
+            def loss_fn(params):
+                model.update(params)
+                predictions = model(images)
+                return yolo_loss(predictions, targets)
+
+            # Forward pass and compute loss
+            loss, gradients = mx.value_and_grad(loss_fn)(model.parameters())
             loss = loss / accumulation_steps  # Normalize loss for gradient accumulation
             accumulated_loss += loss
-
-            # Compute gradients
-            gradients = mx.grad(model.parameters())(predictions, targets)
 
             # Clip gradients
             gradients = clip_gradients(gradients, max_grad_norm)

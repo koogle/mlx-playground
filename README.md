@@ -1,48 +1,45 @@
 # MLX Playground
 
-This repository contains various machine learning examples implemented using Apple's MLX framework. It serves as a playground for experimenting with MLX's features and capabilities.
+This repository contains machine learning examples implemented using Apple's MLX framework, focusing on efficient implementations for Apple Silicon.
 
-## Examples
+## YOLO Object Detection
 
-### 1. MNIST Classification
+A streamlined implementation of YOLO (You Only Look Once) object detection using MLX, optimized for Apple Silicon.
 
-A simple implementation of MNIST digit classification using MLX.
-
-#### Features
-- Basic CNN model for digit classification
-- MNIST dataset loading and preprocessing
-- Training and evaluation scripts
-
-#### Usage
-```bash
-# Train the MNIST model
-python mnist/train.py
-
-# Test the model
-python mnist/test.py
-```
-
-### 2. YOLO Object Detection
-
-Implementation of YOLO (You Only Look Once) object detection using MLX.
-
-#### Features
-- YOLO model implementation in MLX
-- Real-time object detection using webcam
-- Support for image file detection
+### Features
+- YOLO v1 architecture implemented in MLX
 - Training on PASCAL VOC dataset
-- Memory-optimized training with gradient accumulation
+- Memory-efficient training with gradient accumulation
+- Real-time object detection capabilities
+- Optimized for Apple Silicon using MLX
 
-#### Supported Classes
-The YOLO model can detect 20 object classes from PASCAL VOC:
+### Model Architecture
+- Input resolution: 448x448 pixels
+- Backbone: Custom CNN architecture
+- Output: 7x7 grid with 2 bounding boxes per cell
+- Classes: 20 PASCAL VOC classes
+- Loss: Multi-part loss function (classification, localization, confidence)
+
+### Dataset
+The model is trained on PASCAL VOC 2012 with 20 object classes:
 - Vehicles: aeroplane, bicycle, boat, bus, car, motorbike, train
 - Animals: bird, cat, cow, dog, horse, sheep
 - Indoor Objects: bottle, chair, diningtable, pottedplant, sofa, tvmonitor
 - People: person
 
-#### Usage
+### Usage
 
-1. Training:
+1. Setup:
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/mlx-playground.git
+cd mlx-playground
+
+# Install dependencies
+pip install mlx opencv-python pillow numpy
+```
+
+2. Training:
 ```bash
 python yolo/train.py \
     --data-dir path/to/VOCdevkit/VOC2012 \
@@ -51,7 +48,13 @@ python yolo/train.py \
     --accumulation-steps 2
 ```
 
-2. Detection:
+Training parameters:
+- `--batch-size`: Number of images per mini-batch
+- `--accumulation-steps`: Number of gradient accumulation steps
+- `--save-dir`: Directory to save model checkpoints
+- `--data-dir`: Path to VOC dataset
+
+3. Detection:
 ```bash
 # Image detection
 python yolo/detect.py --model path/to/model.npz --image path/to/image.jpg
@@ -60,48 +63,32 @@ python yolo/detect.py --model path/to/model.npz --image path/to/image.jpg
 python yolo/detect.py --model path/to/model.npz --camera
 ```
 
-Camera Controls:
-- Press 'q' to quit
-- Detection runs once per second for optimal performance
-- On-screen display shows FPS, detection count, and inference timing
+### Implementation Details
+- Efficient MLX operations for forward and backward passes
+- Gradient accumulation for memory-efficient training
+- Non-maximum suppression for post-processing detections
+- Configurable confidence thresholds
+- Real-time inference optimizations
 
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/mlx-playground.git
-cd mlx-playground
+### Project Structure
 ```
-
-2. Install dependencies:
-```bash
-pip install mlx opencv-python pillow numpy
+yolo/
+├── model.py      # YOLO model architecture
+├── train.py      # Training script
+├── loss.py       # Loss function implementation
+├── detect.py     # Detection script
+└── data/         # Dataset handling
+    └── voc.py    # VOC dataset loader
 ```
-
-## Implementation Details
-
-### MNIST
-- Simple CNN architecture
-- Input: 28x28 grayscale images
-- Output: 10 classes (digits 0-9)
-- Dataset: Standard MNIST dataset
-
-### YOLO
-- Architecture: YOLO v1
-- Input Size: 448x448 pixels
-- Grid Size: 7x7
-- Boxes per Cell: 2
-- Dataset: PASCAL VOC 2012
-- Optimizations:
-  - Gradient accumulation for memory-efficient training
-  - Once-per-second inference for real-time detection
-  - Configurable confidence threshold
-  - Non-maximum suppression for overlapping detections
 
 ## Contributing
 
-Feel free to contribute additional examples or improvements to existing ones. Please follow the existing code structure and add appropriate documentation.
+Contributions are welcome! Please feel free to submit pull requests, particularly for:
+- Additional ML model implementations
+- Performance optimizations
+- Documentation improvements
+- Bug fixes
 
 ## License
 
-[Your License Here]
+MIT License

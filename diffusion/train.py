@@ -6,6 +6,7 @@ import mlx.optimizers as optim
 from model import UNet
 from scheduler import NoiseScheduler
 from loss import diffusion_loss
+from data.voc import VOCDiffusionDataset, create_data_loader
 import json
 
 
@@ -84,6 +85,7 @@ def train_step(model, scheduler, optimizer, images, t):
 
 
 def train(
+    data_dir: str,
     save_dir: str,
     image_size: int = 64,
     batch_size: int = 8,
@@ -106,6 +108,12 @@ def train(
     optimizer = optim.Adam(learning_rate=learning_rate)
     scheduler = NoiseScheduler()
 
+    # Initialize dataset and dataloader
+    print("Setting up dataset...")
+    dataset = VOCDiffusionDataset(data_dir=data_dir, img_size=image_size)
+    dataloader = create_data_loader(dataset, batch_size=batch_size)
+    print(f"Dataset size: {len(dataset)} images")
+
     # Resume from checkpoint if specified
     if resume_epoch is not None:
         load_checkpoint(model, optimizer, save_dir, resume_epoch)
@@ -118,23 +126,21 @@ def train(
         epoch_loss = 0
         start_time = time.time()
 
-        # TODO: Replace with your actual data loading logic
-        num_batches = 100  # This should be your actual number of batches
-        for batch_idx in range(num_batches):
-            # TODO: Replace with your actual data loading
-            images = mx.random.uniform((batch_size, 3, image_size, image_size))
-            
+        for batch_idx, (images, descriptions) in enumerate(dataloader):
             # Sample random timesteps
-            t = mx.random.randint(0, scheduler.num_timesteps, (batch_size,))
+            t = mx.random.randint(0, scheduler.num_timesteps, (images.shape[0],))
             
             # Training step
             loss = train_step(model, scheduler, optimizer, images, t)
             epoch_loss += loss
 
             if batch_idx % 10 == 0:
-                print(f"Epoch {epoch}, Batch {batch_idx}/{num_batches}, Loss: {loss:.4f}")
+                print(f"Epoch {epoch}, Batch {batch_idx}/{len(dataloader)}, Loss: {loss:.4f}")
+                print(f"Sample descriptions:")
+                for desc in descriptions[:2]:  # Print first two descriptions
+                    print(f"  - {desc}")
 
-        epoch_loss /= num_batches
+        epoch_loss /= len(dataloader)
         epoch_time = time.time() - start_time
         print(f"Epoch {epoch}: Average Loss = {epoch_loss:.4f}, Time = {epoch_time:.2f}s")
 
@@ -146,7 +152,7 @@ def train(
         if epoch % 10 == 0:
             print("Generating samples...")
             samples = scheduler.sample(model, image_size=image_size, batch_size=4)
-            # TODO: Add your image saving logic here
+            # TODO: Add image saving logic here
 
     print("Training completed!")
 
@@ -155,6 +161,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Train Diffusion Model")
+    parser.add_argument("--data_dir", type=str, required=True, help="Path to VOC dataset directory")
     parser.add_argument("--save_dir", type=str, required=True, help="Directory to save checkpoints")
     parser.add_argument("--image_size", type=int, default=64, help="Size of images")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
@@ -164,6 +171,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     train(
+        data_dir=args.data_dir,
         save_dir=args.save_dir,
         image_size=args.image_size,
         batch_size=args.batch_size,

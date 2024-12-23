@@ -32,10 +32,9 @@ def preprocess_image(image, size=448):
     image = image.resize((size, size))
     image = np.array(image, dtype=np.float32) / 255.0
 
-    # Convert to MLX array (keeping NHWC format)
+    # Convert to MLX array and add batch dimension (keeping NHWC format)
     image = mx.array(image)
-    # Add batch dimension
-    image = mx.expand_dims(image, axis=0)
+    image = mx.expand_dims(image, axis=0)  # Add batch dimension while keeping NHWC
 
     return image, orig_size
 
@@ -145,20 +144,22 @@ def draw_boxes(image_path, boxes, class_ids, scores, output_path=None):
     image = Image.open(image_path)
     draw = ImageDraw.Draw(image)
 
-    # Scale boxes to image size
-    width, height = image.size
-    boxes = boxes * np.array([width, height, width, height])
+    if len(boxes) > 0:  # Only process if there are boxes
+        # Scale boxes to image size
+        width, height = image.size
+        boxes = boxes * np.array([width, height, width, height])
 
-    for box, class_id, score in zip(boxes, class_ids, scores):
-        x1, y1, x2, y2 = box
+        for box, class_id, score in zip(boxes, class_ids, scores):
+            x1, y1, x2, y2 = box
 
-        # Draw box
-        draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
+            # Draw box
+            draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
 
-        # Draw label
-        label = f"{VOC_CLASSES[class_id]}: {score:.2f}"
-        draw.text((x1, y1 - 10), label, fill="red")
+            # Draw label
+            label = f"{VOC_CLASSES[class_id]}: {score:.2f}"
+            draw.text((x1, y1 - 10), label, fill="red")
 
+    # Save or show image
     if output_path:
         image.save(output_path)
     else:
@@ -197,7 +198,7 @@ def main():
     parser.add_argument("--camera-id", type=int, default=0, help="Camera device ID")
     parser.add_argument("--output", help="Path to output image")
     parser.add_argument(
-        "--conf-thresh", type=float, default=0.5, help="Confidence threshold"
+        "--conf-thresh", type=float, default=0.01, help="Confidence threshold"
     )
     parser.add_argument("--nms-thresh", type=float, default=0.4, help="NMS threshold")
     args = parser.parse_args()
@@ -319,19 +320,20 @@ def main():
             cap.release()
             cv2.destroyAllWindows()
     else:
-        # Process single image
+        # Process image
         print("Processing image...")
         image, orig_size = preprocess_image(args.image)
-
-        # Run inference
         predictions = model(image)
-        mx.eval(predictions)
+
+        # Debug prints
+        print("Input image shape:", image.shape)
+        print("Raw predictions shape:", predictions.shape)
+        print("Max confidence:", float(mx.max(predictions[..., 4:5])))
+        print("Max class prob:", float(mx.max(predictions[..., 10:])))
 
         # Decode predictions
         boxes, class_ids, scores = decode_predictions(
-            predictions,
-            confidence_threshold=args.conf_thresh,
-            nms_threshold=args.nms_thresh,
+            predictions, args.conf_thresh, args.nms_thresh
         )
 
         # Draw results

@@ -39,7 +39,9 @@ def preprocess_image(image, size=448):
     return image, orig_size
 
 
-def decode_predictions(predictions, confidence_threshold=0.1, class_threshold=0.1, nms_threshold=0.4):
+def decode_predictions(
+    predictions, confidence_threshold=0.1, class_threshold=0.1, nms_threshold=0.4
+):
     """Decode YOLO predictions to bounding boxes"""
     S = 7  # Grid size
     B = 2  # Boxes per cell
@@ -58,7 +60,7 @@ def decode_predictions(predictions, confidence_threshold=0.1, class_threshold=0.
     for i in range(S):
         for j in range(S):
             # Get class probabilities
-            cell_class_probs = predictions[0, i, j, B * 5:]
+            cell_class_probs = predictions[0, i, j, B * 5 :]
 
             # For each box
             for b in range(B):
@@ -106,7 +108,9 @@ def decode_predictions(predictions, confidence_threshold=0.1, class_threshold=0.
                 print(f"  Class probability: {float(class_prob):.4f}")
                 print(f"  Final score (confidence * class_prob): {float(score):.4f}")
                 print(f"  Top 3 class probabilities:")
-                top_classes = [int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]]
+                top_classes = [
+                    int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]
+                ]
                 for c in top_classes:
                     print(f"    {VOC_CLASSES[c]}: {float(cell_class_probs[c]):.4f}")
 
@@ -220,9 +224,11 @@ def main():
     parser.add_argument("--camera-id", type=int, default=0, help="Camera device ID")
     parser.add_argument("--output", help="Path to output image")
     parser.add_argument(
-        "--conf-thresh", type=float, default=0.01, help="Confidence threshold"
+        "--conf-thresh", type=float, default=0.1, help="Confidence threshold"
     )
-    parser.add_argument("--class-thresh", type=float, default=0.01, help="Class probability threshold")
+    parser.add_argument(
+        "--class-thresh", type=float, default=0.1, help="Class probability threshold"
+    )
     parser.add_argument("--nms-thresh", type=float, default=0.4, help="NMS threshold")
     args = parser.parse_args()
 

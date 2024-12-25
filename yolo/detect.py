@@ -39,7 +39,7 @@ def preprocess_image(image, size=448):
     return image, orig_size
 
 
-def decode_predictions(predictions, confidence_threshold=0.5, nms_threshold=0.4):
+def decode_predictions(predictions, confidence_threshold=0.1, class_threshold=0.1, nms_threshold=0.4):
     """Decode YOLO predictions to bounding boxes"""
     S = 7  # Grid size
     B = 2  # Boxes per cell
@@ -66,43 +66,49 @@ def decode_predictions(predictions, confidence_threshold=0.5, nms_threshold=0.4)
                 box = predictions[0, i, j, b * 5 : (b + 1) * 5]
                 confidence = box[4]
 
+                # Skip if box confidence is too low
+                if confidence < confidence_threshold:
+                    continue
+
                 # Get class with maximum probability
                 class_id = int(mx.argmax(cell_class_probs))  # Convert to int
                 class_prob = cell_class_probs[class_id]
 
-                # Final score
+                # Skip if class probability is too low
+                if class_prob < class_threshold:
+                    continue
+
+                # Final score (still multiply for ranking in NMS)
                 score = confidence * class_prob
 
-                if score > confidence_threshold:
-                    # Convert box coordinates
-                    x = (box[0] + i) / S
-                    y = (box[1] + j) / S
-                    w = box[2]
-                    h = box[3]
+                # Convert box coordinates
+                x = (box[0] + i) / S
+                y = (box[1] + j) / S
+                w = box[2]
+                h = box[3]
 
-                    # Convert to corner format
-                    x1 = x - w / 2
-                    y1 = y - h / 2
-                    x2 = x + w / 2
-                    y2 = y + h / 2
+                # Convert to corner format
+                x1 = x - w / 2
+                y1 = y - h / 2
+                x2 = x + w / 2
+                y2 = y + h / 2
 
-                    boxes.append([x1, y1, x2, y2])
-                    class_ids.append(class_id)
-                    scores.append(score)
-                    confidences.append(confidence)  # Store raw confidence
-                    class_probs.append(class_prob)  # Store raw class probability
+                boxes.append([x1, y1, x2, y2])
+                class_ids.append(class_id)
+                scores.append(score)
+                confidences.append(confidence)
+                class_probs.append(class_prob)
 
-                    # Print detailed information for each detection
-                    print(f"\nDetection in cell ({i}, {j}):")
-                    print(f"  Class: {VOC_CLASSES[class_id]}")
-                    print(f"  Box confidence: {float(confidence):.4f}")
-                    print(f"  Class probability: {float(class_prob):.4f}")
-                    print(f"  Final score (confidence * class_prob): {float(score):.4f}")
-                    print(f"  Top 3 class probabilities:")
-                    # Get top 3 class probabilities
-                    top_classes = [int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]]  # Convert to int
-                    for c in top_classes:
-                        print(f"    {VOC_CLASSES[c]}: {float(cell_class_probs[c]):.4f}")
+                # Print detailed information for each detection
+                print(f"\nDetection in cell ({i}, {j}):")
+                print(f"  Class: {VOC_CLASSES[class_id]}")
+                print(f"  Box confidence: {float(confidence):.4f}")
+                print(f"  Class probability: {float(class_prob):.4f}")
+                print(f"  Final score (confidence * class_prob): {float(score):.4f}")
+                print(f"  Top 3 class probabilities:")
+                top_classes = [int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]]
+                for c in top_classes:
+                    print(f"    {VOC_CLASSES[c]}: {float(cell_class_probs[c]):.4f}")
 
     if not boxes:
         return [], [], []
@@ -111,8 +117,6 @@ def decode_predictions(predictions, confidence_threshold=0.5, nms_threshold=0.4)
     boxes = np.array(boxes)
     scores = np.array(scores)
     class_ids = np.array(class_ids)
-    confidences = np.array(confidences)
-    class_probs = np.array(class_probs)
 
     # Apply NMS
     selected_indices = []
@@ -218,6 +222,7 @@ def main():
     parser.add_argument(
         "--conf-thresh", type=float, default=0.01, help="Confidence threshold"
     )
+    parser.add_argument("--class-thresh", type=float, default=0.01, help="Class probability threshold")
     parser.add_argument("--nms-thresh", type=float, default=0.4, help="NMS threshold")
     args = parser.parse_args()
 
@@ -273,6 +278,7 @@ def main():
                     last_boxes, last_class_ids, last_scores = decode_predictions(
                         predictions,
                         confidence_threshold=args.conf_thresh,
+                        class_threshold=args.class_thresh,
                         nms_threshold=args.nms_thresh,
                     )
                     last_inference_time = current_time
@@ -351,7 +357,7 @@ def main():
 
         # Decode predictions
         boxes, class_ids, scores = decode_predictions(
-            predictions, args.conf_thresh, args.nms_thresh
+            predictions, args.conf_thresh, args.class_thresh, args.nms_thresh
         )
 
         # Draw results

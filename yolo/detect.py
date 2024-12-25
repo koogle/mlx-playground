@@ -51,12 +51,14 @@ def decode_predictions(predictions, confidence_threshold=0.5, nms_threshold=0.4)
     boxes = []
     class_ids = []
     scores = []
+    confidences = []  # Store raw confidences
+    class_probs = []  # Store raw class probabilities
 
     # For each cell in the grid
     for i in range(S):
         for j in range(S):
             # Get class probabilities
-            class_probs = predictions[0, i, j, B * 5 :]
+            cell_class_probs = predictions[0, i, j, B * 5:]
 
             # For each box
             for b in range(B):
@@ -65,8 +67,8 @@ def decode_predictions(predictions, confidence_threshold=0.5, nms_threshold=0.4)
                 confidence = box[4]
 
                 # Get class with maximum probability
-                class_id = mx.argmax(class_probs)
-                class_prob = class_probs[class_id]
+                class_id = int(mx.argmax(cell_class_probs))  # Convert to int
+                class_prob = cell_class_probs[class_id]
 
                 # Final score
                 score = confidence * class_prob
@@ -87,6 +89,20 @@ def decode_predictions(predictions, confidence_threshold=0.5, nms_threshold=0.4)
                     boxes.append([x1, y1, x2, y2])
                     class_ids.append(class_id)
                     scores.append(score)
+                    confidences.append(confidence)  # Store raw confidence
+                    class_probs.append(class_prob)  # Store raw class probability
+
+                    # Print detailed information for each detection
+                    print(f"\nDetection in cell ({i}, {j}):")
+                    print(f"  Class: {VOC_CLASSES[class_id]}")
+                    print(f"  Box confidence: {float(confidence):.4f}")
+                    print(f"  Class probability: {float(class_prob):.4f}")
+                    print(f"  Final score (confidence * class_prob): {float(score):.4f}")
+                    print(f"  Top 3 class probabilities:")
+                    # Get top 3 class probabilities
+                    top_classes = [int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]]  # Convert to int
+                    for c in top_classes:
+                        print(f"    {VOC_CLASSES[c]}: {float(cell_class_probs[c]):.4f}")
 
     if not boxes:
         return [], [], []
@@ -95,6 +111,8 @@ def decode_predictions(predictions, confidence_threshold=0.5, nms_threshold=0.4)
     boxes = np.array(boxes)
     scores = np.array(scores)
     class_ids = np.array(class_ids)
+    confidences = np.array(confidences)
+    class_probs = np.array(class_probs)
 
     # Apply NMS
     selected_indices = []

@@ -17,25 +17,31 @@ def load_model(checkpoint_path):
 
 
 def preprocess_image(image, size=448):
-    """Load and preprocess image for inference"""
+    """Preprocess image for YOLO model"""
     if isinstance(image, str):
-        # If input is a path, load the image
+        # Load image from file
         image = Image.open(image).convert("RGB")
-        orig_size = image.size
-    else:
-        # If input is a numpy array (from cv2), convert BGR to RGB
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        orig_size = (image.shape[1], image.shape[0])
-        image = Image.fromarray(image)
-
-    # Resize and convert to numpy array
-    image = image.resize((size, size))
-    image = np.array(image, dtype=np.float32) / 255.0
-
-    # Convert to MLX array and add batch dimension (keeping NHWC format)
+        image = np.array(image)
+    elif isinstance(image, np.ndarray):
+        # If OpenCV image (BGR), convert to RGB
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    
+    # Store original size
+    orig_size = image.shape[:2]  # (height, width)
+    
+    # Resize image
+    image = cv2.resize(image, (size, size))
+    
+    # Convert to float and normalize
+    image = image.astype(np.float32) / 255.0
+    
+    # Add batch dimension
+    image = np.expand_dims(image, axis=0)
+    
+    # Convert to MLX array
     image = mx.array(image)
-    image = mx.expand_dims(image, axis=0)  # Add batch dimension while keeping NHWC
-
+    
     return image, orig_size
 
 
@@ -193,27 +199,70 @@ def draw_boxes(image_path, boxes, class_ids, scores, output_path=None):
 
 
 def draw_boxes_cv2(image, boxes, class_ids, scores):
-    """Draw bounding boxes on OpenCV image"""
-    # Return original image if no detections
-    if len(boxes) == 0 or boxes.size == 0:
-        return image
-
+    """Draw bounding boxes on OpenCV image with improved visualization"""
+    image = image.copy()
     height, width = image.shape[:2]
-    boxes = boxes * np.array([width, height, width, height])
-
+    
+    # Define a color map for different classes
+    color_map = {}
+    
     for box, class_id, score in zip(boxes, class_ids, scores):
-        x1, y1, x2, y2 = map(int, box)
-
-        # Draw box
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 2)
-
-        # Draw label
+        # Convert normalized coordinates to pixel coordinates
+        x1, y1, x2, y2 = box
+        x1 = int(x1 * width)
+        y1 = int(y1 * height)
+        x2 = int(x2 * width)
+        y2 = int(y2 * height)
+        
+        # Get color for this class
+        if class_id not in color_map:
+            color_map[class_id] = tuple(np.random.randint(0, 255, 3).tolist())
+        color = color_map[class_id]
+        
+        # Draw box with thickness relative to confidence
+        thickness = max(2, int(score * 4))
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+        
+        # Prepare label with class name and score
         label = f"{VOC_CLASSES[class_id]}: {score:.2f}"
-        cv2.putText(
-            image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2
+        
+        # Get label size for background rectangle
+        (label_w, label_h), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
         )
-
+        
+        # Draw label background
+        cv2.rectangle(
+            image,
+            (x1, y1 - label_h - baseline - 5),
+            (x1 + label_w, y1),
+            color,
+            -1,
+        )
+        
+        # Draw label text in white
+        cv2.putText(
+            image,
+            label,
+            (x1, y1 - baseline - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+    
     return image
+
+
+def debug_show_preprocessed(image):
+    """Show preprocessed image for debugging"""
+    # Convert MLX array to numpy and denormalize
+    img = image[0].numpy() * 255
+    img = img.astype(np.uint8)
+    
+    # Create a window and show the image
+    cv2.imshow("Preprocessed Input", img)
+    cv2.waitKey(1)
 
 
 def main():
@@ -241,6 +290,7 @@ def main():
 
     if args.camera:
         print("Opening camera...")
+        print("Press SPACE to capture and process a frame, ESC to exit")
         cap = cv2.VideoCapture(args.camera_id)
 
         if not cap.isOpened():
@@ -249,103 +299,68 @@ def main():
 
         # Set camera properties for better performance
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer size
-
-        fps = 0
-        frame_count = 0
-        start_time = time.time()
-        last_inference_time = time.time()
-        last_boxes, last_class_ids, last_scores = [], [], []
+        
+        # Create windows
+        cv2.namedWindow("Camera Preview", cv2.WINDOW_NORMAL)
+        cv2.namedWindow("Processed Frame", cv2.WINDOW_NORMAL)
+        cv2.namedWindow("Debug: Preprocessed", cv2.WINDOW_NORMAL)
 
         try:
             while True:
+                # Clear buffer by reading multiple frames
+                for _ in range(5):
+                    cap.read()
+                
+                # Read fresh frame
                 ret, frame = cap.read()
                 if not ret:
                     print("Error: Could not read frame")
                     break
 
-                # Update FPS
-                frame_count += 1
-                if frame_count % 30 == 0:
-                    end_time = time.time()
-                    fps = 30 / (end_time - start_time)
-                    start_time = time.time()
-
-                # Run inference only once per second
-                current_time = time.time()
-                if current_time - last_inference_time >= 1.0:
+                # Show live preview
+                cv2.imshow("Camera Preview", frame)
+                
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27:  # ESC key
+                    break
+                elif key == 32:  # SPACE key
+                    print("\nProcessing captured frame...")
+                    
+                    # Make a copy of the frame for processing
+                    process_frame = frame.copy()
+                    
                     # Preprocess frame
-                    image, orig_size = preprocess_image(frame)
-
+                    image, orig_size = preprocess_image(process_frame)
+                    
+                    # Show preprocessed image for debugging
+                    debug_show_preprocessed(image)
+                    
                     # Run inference
                     predictions = model(image)
                     mx.eval(predictions)
 
                     # Decode predictions
-                    last_boxes, last_class_ids, last_scores = decode_predictions(
+                    boxes, class_ids, scores = decode_predictions(
                         predictions,
                         confidence_threshold=args.conf_thresh,
                         class_threshold=args.class_thresh,
                         nms_threshold=args.nms_thresh,
                     )
-                    last_inference_time = current_time
 
-                    # Print detections to console
-                    if len(last_boxes) > 0:
+                    # Draw results
+                    result_frame = draw_boxes_cv2(process_frame, boxes, class_ids, scores)
+                    
+                    # Show processed frame in a separate window
+                    cv2.imshow("Processed Frame", result_frame)
+                    
+                    # Print detections
+                    if len(boxes) > 0:
                         print("\nDetections:")
-                        for cls_id, score in zip(last_class_ids, last_scores):
+                        for cls_id, score in zip(class_ids, scores):
                             print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
                     else:
                         print("\nNo detections")
 
-                # Draw results using last available predictions
-                frame = draw_boxes_cv2(frame, last_boxes, last_class_ids, last_scores)
-
-                # Add FPS counter and inference info
-                cv2.putText(
-                    frame,
-                    f"FPS: {fps:.1f}",
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-                cv2.putText(
-                    frame,
-                    f"Inference: {time.time() - last_inference_time:.1f}s ago",
-                    (10, 70),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-
-                # Add detection count
-                status = (
-                    f"Detected: {len(last_boxes)} objects"
-                    if len(last_boxes) > 0
-                    else "No detections"
-                )
-                cv2.putText(
-                    frame,
-                    status,
-                    (10, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-
-                # Display the frame
-                cv2.imshow("YOLO Detection", frame)
-                cv2.waitKey(1)  # This is crucial for window updates
-
-                # Break on 'q' press
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
-
-        except Exception as e:
-            print(f"Error during camera capture: {str(e)}")
         finally:
             cap.release()
             cv2.destroyAllWindows()

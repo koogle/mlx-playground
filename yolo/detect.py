@@ -257,11 +257,14 @@ def draw_boxes_cv2(image, boxes, class_ids, scores):
 def debug_show_preprocessed(image):
     """Show preprocessed image for debugging"""
     # Convert MLX array to numpy and denormalize
-    img = image[0].numpy() * 255
-    img = img.astype(np.uint8)
+    img = mx.astype(image[0], mx.uint8).astype(np.uint8) * 255
+    
+    # Convert to RGB for display
+    if img.shape[-1] == 3:  # If it has 3 channels
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     
     # Create a window and show the image
-    cv2.imshow("Preprocessed Input", img)
+    cv2.imshow("Debug: Preprocessed", img)
     cv2.waitKey(1)
 
 

@@ -16,7 +16,7 @@ def load_model(checkpoint_path):
     return model
 
 
-def preprocess_image(image, size=448):
+def preprocess_image(image, size=448, args=None):
     """Preprocess image for YOLO model"""
     if isinstance(image, str):
         # Load image from file
@@ -26,6 +26,11 @@ def preprocess_image(image, size=448):
         # If OpenCV image (BGR), convert to RGB
         if len(image.shape) == 3 and image.shape[2] == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    
+    if args and args.debug:
+        print(f"Input image shape: {image.shape}")
+        print(f"Input image dtype: {image.dtype}")
+        print(f"Input image range: [{image.min()}, {image.max()}]")
     
     # Store original size
     orig_size = image.shape[:2]  # (height, width)
@@ -41,6 +46,11 @@ def preprocess_image(image, size=448):
     
     # Convert to MLX array
     image = mx.array(image)
+    
+    if args and args.debug:
+        print(f"Preprocessed shape: {image.shape}")
+        print(f"Preprocessed dtype: {image.dtype}")
+        print(f"Preprocessed range: [{float(mx.min(image))}, {float(mx.max(image))}]")
     
     return image, orig_size
 
@@ -303,23 +313,43 @@ def main():
 
         # Set camera properties for better performance
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer size
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         
         # Create window
         cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
         
         # Variables to store last detection
         last_result = None
+        frame_count = 0
 
         try:
             while True:
+                # Flush the buffer
+                for _ in range(4):  # Read and discard frames to get the latest
+                    cap.read()
+                
                 # Read fresh frame
                 ret, frame = cap.read()
                 if not ret:
                     print("Error: Could not read frame")
                     break
 
+                frame_count += 1
+                
                 # Make a copy for display
                 display_frame = frame.copy()
+
+                # Add frame counter for debugging
+                cv2.putText(
+                    display_frame,
+                    f"Frame: {frame_count}",
+                    (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 0),
+                    2,
+                )
 
                 # Add instructions overlay
                 cv2.putText(
@@ -346,10 +376,14 @@ def main():
                 if key == 27:  # ESC key
                     break
                 elif key == 32:  # SPACE key
-                    print("\nProcessing frame...")
+                    if args.debug:
+                        print(f"\nProcessing frame {frame_count}")
+                        # Print unique identifier for frame
+                        frame_hash = hash(frame.tobytes())
+                        print(f"Frame hash: {frame_hash}")
                     
                     # Preprocess frame
-                    image, orig_size = preprocess_image(frame)
+                    image, orig_size = preprocess_image(frame.copy(), args=args)
                     
                     # Run inference
                     predictions = model(image)
@@ -382,7 +416,7 @@ def main():
     else:
         # Process image
         print("Processing image...")
-        image, orig_size = preprocess_image(args.image)
+        image, orig_size = preprocess_image(args.image, args=args)
         predictions = model(image)
 
         # Debug prints

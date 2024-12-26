@@ -303,84 +303,40 @@ def main():
     model = load_model(args.model)
 
     if args.camera:
-        print("Opening camera...")
-        print("Press SPACE to capture and process a frame, ESC to exit")
+        print("Opening camera... Press ESC to exit")
         cap = cv2.VideoCapture(args.camera_id)
 
         if not cap.isOpened():
             print("Error: Could not open camera")
             return
 
-        # Set camera properties for better performance
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer size
+        # Set camera properties
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         
         # Create window
         cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
-        
-        # Variables to store last detection
-        last_result = None
-        frame_count = 0
+
+        last_process_time = 0
+        process_interval = 0.5  # Process every 0.5 seconds
 
         try:
             while True:
-                # Flush the buffer
-                for _ in range(4):  # Read and discard frames to get the latest
+                # Clear buffer and get fresh frame
+                for _ in range(4):
                     cap.read()
-                
-                # Read fresh frame
                 ret, frame = cap.read()
                 if not ret:
                     print("Error: Could not read frame")
                     break
 
-                frame_count += 1
-                
-                # Make a copy for display
-                display_frame = frame.copy()
-
-                # Add frame counter for debugging
-                cv2.putText(
-                    display_frame,
-                    f"Frame: {frame_count}",
-                    (10, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-
-                # Add instructions overlay
-                cv2.putText(
-                    display_frame,
-                    "Press SPACE to detect, ESC to exit",
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-
-                # If we have a detection result, show it instead
-                if last_result is not None:
-                    display_frame = last_result
-                    # Reset after showing for a brief moment
-                    if cv2.getTickCount() % (cv2.getTickFrequency() * 2) == 0:  # Reset after 2 seconds
-                        last_result = None
-                
-                # Show current frame
-                cv2.imshow("YOLO Detection", display_frame)
-                
-                key = cv2.waitKey(1) & 0xFF
-                if key == 27:  # ESC key
-                    break
-                elif key == 32:  # SPACE key
+                # Process frame every interval
+                current_time = time.time()
+                if current_time - last_process_time >= process_interval:
                     if args.debug:
-                        print(f"\nProcessing frame {frame_count}")
-                        # Print unique identifier for frame
-                        frame_hash = hash(frame.tobytes())
-                        print(f"Frame hash: {frame_hash}")
+                        print("\nProcessing new frame...")
+                        print(f"Frame shape: {frame.shape}")
                     
                     # Preprocess frame
                     image, orig_size = preprocess_image(frame.copy(), args=args)
@@ -398,17 +354,25 @@ def main():
                         debug=args.debug
                     )
 
-                    # Draw results
-                    result_frame = draw_boxes_cv2(frame.copy(), boxes, class_ids, scores)
-                    last_result = result_frame  # Store for display
+                    # Draw results directly on the frame
+                    frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
                     
-                    # Print summary of detections
+                    # Print detections
                     if len(boxes) > 0:
                         print(f"\nFound {len(boxes)} detections:")
                         for cls_id, score in zip(class_ids, scores):
                             print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
-                    else:
+                    elif args.debug:
                         print("\nNo detections found")
+                    
+                    last_process_time = current_time
+
+                # Show the frame with detections
+                cv2.imshow("YOLO Detection", frame)
+
+                # Check for exit
+                if cv2.waitKey(1) & 0xFF == 27:  # ESC
+                    break
 
         finally:
             cap.release()

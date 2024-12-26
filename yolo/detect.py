@@ -46,7 +46,7 @@ def preprocess_image(image, size=448):
 
 
 def decode_predictions(
-    predictions, confidence_threshold=0.1, class_threshold=0.1, nms_threshold=0.4
+    predictions, confidence_threshold=0.1, class_threshold=0.1, nms_threshold=0.4, debug=False
 ):
     """Decode YOLO predictions to bounding boxes"""
     S = 7  # Grid size
@@ -107,18 +107,18 @@ def decode_predictions(
                 confidences.append(confidence)
                 class_probs.append(class_prob)
 
-                # Print detailed information for each detection
-                print(f"\nDetection in cell ({i}, {j}):")
-                print(f"  Class: {VOC_CLASSES[class_id]}")
-                print(f"  Box confidence: {float(confidence):.4f}")
-                print(f"  Class probability: {float(class_prob):.4f}")
-                print(f"  Final score (confidence * class_prob): {float(score):.4f}")
-                print(f"  Top 3 class probabilities:")
-                top_classes = [
-                    int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]
-                ]
-                for c in top_classes:
-                    print(f"    {VOC_CLASSES[c]}: {float(cell_class_probs[c]):.4f}")
+                if debug:
+                    print(f"\nDetection in cell ({i}, {j}):")
+                    print(f"  Class: {VOC_CLASSES[class_id]}")
+                    print(f"  Box confidence: {float(confidence):.4f}")
+                    print(f"  Class probability: {float(class_prob):.4f}")
+                    print(f"  Final score (confidence * class_prob): {float(score):.4f}")
+                    print(f"  Top 3 class probabilities:")
+                    top_classes = [
+                        int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]
+                    ]
+                    for c in top_classes:
+                        print(f"    {VOC_CLASSES[c]}: {float(cell_class_probs[c]):.4f}")
 
     if not boxes:
         return [], [], []
@@ -282,6 +282,7 @@ def main():
         "--class-thresh", type=float, default=0.1, help="Class probability threshold"
     )
     parser.add_argument("--nms-thresh", type=float, default=0.4, help="NMS threshold")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
 
     if not args.image and not args.camera:
@@ -303,10 +304,8 @@ def main():
         # Set camera properties for better performance
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer size
         
-        # Create windows
-        cv2.namedWindow("Camera Preview", cv2.WINDOW_NORMAL)
-        cv2.namedWindow("Processed Frame", cv2.WINDOW_NORMAL)
-        cv2.namedWindow("Debug: Preprocessed", cv2.WINDOW_NORMAL)
+        # Create window
+        cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
 
         try:
             while True:
@@ -320,23 +319,27 @@ def main():
                     print("Error: Could not read frame")
                     break
 
-                # Show live preview
-                cv2.imshow("Camera Preview", frame)
+                # Show live preview with instructions
+                preview = frame.copy()
+                cv2.putText(
+                    preview,
+                    "Press SPACE to detect, ESC to exit",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 0),
+                    2,
+                )
+                cv2.imshow("YOLO Detection", preview)
                 
                 key = cv2.waitKey(1) & 0xFF
                 if key == 27:  # ESC key
                     break
                 elif key == 32:  # SPACE key
-                    print("\nProcessing captured frame...")
-                    
-                    # Make a copy of the frame for processing
-                    process_frame = frame.copy()
+                    print("\nProcessing frame...")
                     
                     # Preprocess frame
-                    image, orig_size = preprocess_image(process_frame)
-                    
-                    # Show preprocessed image for debugging
-                    debug_show_preprocessed(image)
+                    image, orig_size = preprocess_image(frame)
                     
                     # Run inference
                     predictions = model(image)
@@ -348,21 +351,22 @@ def main():
                         confidence_threshold=args.conf_thresh,
                         class_threshold=args.class_thresh,
                         nms_threshold=args.nms_thresh,
+                        debug=args.debug
                     )
 
                     # Draw results
-                    result_frame = draw_boxes_cv2(process_frame, boxes, class_ids, scores)
+                    result_frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
                     
-                    # Show processed frame in a separate window
-                    cv2.imshow("Processed Frame", result_frame)
+                    # Show processed frame
+                    cv2.imshow("YOLO Detection", result_frame)
                     
-                    # Print detections
+                    # Print summary of detections
                     if len(boxes) > 0:
-                        print("\nDetections:")
+                        print(f"\nFound {len(boxes)} detections:")
                         for cls_id, score in zip(class_ids, scores):
                             print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
                     else:
-                        print("\nNo detections")
+                        print("\nNo detections found")
 
         finally:
             cap.release()
@@ -381,7 +385,7 @@ def main():
 
         # Decode predictions
         boxes, class_ids, scores = decode_predictions(
-            predictions, args.conf_thresh, args.class_thresh, args.nms_thresh
+            predictions, args.conf_thresh, args.class_thresh, args.nms_thresh, debug=args.debug
         )
 
         # Draw results

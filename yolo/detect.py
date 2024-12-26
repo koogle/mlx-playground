@@ -306,23 +306,24 @@ def main():
         
         # Create window
         cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
+        
+        # Variables to store last detection
+        last_result = None
 
         try:
             while True:
-                # Clear buffer by reading multiple frames
-                for _ in range(5):
-                    cap.read()
-                
                 # Read fresh frame
                 ret, frame = cap.read()
                 if not ret:
                     print("Error: Could not read frame")
                     break
 
-                # Show live preview with instructions
-                preview = frame.copy()
+                # Make a copy for display
+                display_frame = frame.copy()
+
+                # Add instructions overlay
                 cv2.putText(
-                    preview,
+                    display_frame,
                     "Press SPACE to detect, ESC to exit",
                     (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX,
@@ -330,7 +331,16 @@ def main():
                     (0, 255, 0),
                     2,
                 )
-                cv2.imshow("YOLO Detection", preview)
+
+                # If we have a detection result, show it instead
+                if last_result is not None:
+                    display_frame = last_result
+                    # Reset after showing for a brief moment
+                    if cv2.getTickCount() % (cv2.getTickFrequency() * 2) == 0:  # Reset after 2 seconds
+                        last_result = None
+                
+                # Show current frame
+                cv2.imshow("YOLO Detection", display_frame)
                 
                 key = cv2.waitKey(1) & 0xFF
                 if key == 27:  # ESC key
@@ -355,10 +365,8 @@ def main():
                     )
 
                     # Draw results
-                    result_frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
-                    
-                    # Show processed frame
-                    cv2.imshow("YOLO Detection", result_frame)
+                    result_frame = draw_boxes_cv2(frame.copy(), boxes, class_ids, scores)
+                    last_result = result_frame  # Store for display
                     
                     # Print summary of detections
                     if len(boxes) > 0:

@@ -165,10 +165,12 @@ def yolo_loss(predictions, targets, model, lambda_coord=2.0, lambda_noobj=0.1):
         (pred_xy - (target_boxes[..., :2] * S - grid)) ** 2
     ) / (num_responsible * S)
     
-    # WH loss (normalized and using sqrt)
+    # WH loss (using anchor boxes)
+    target_wh = target_boxes[..., 2:4]  # [batch, S, S, 1, 2]
+    anchor_mask = mx.reshape(model.anchors, (1, 1, 1, B, 2))  # [1, 1, 1, B, 2]
     wh_loss = mx.sum(
         responsible_mask *
-        (mx.sqrt(pred_wh + 1e-6) - mx.sqrt(target_boxes[..., 2:4] / anchors + 1e-6)) ** 2
+        (mx.log(pred_wh + 1e-6) - mx.log(target_wh / anchor_mask + 1e-6)) ** 2
     ) / num_responsible
     
     # 2. Object confidence loss (for responsible boxes)
@@ -190,7 +192,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=2.0, lambda_noobj=0.1):
     # Combine all losses with their respective weights
     total_loss = (
         lambda_coord * (xy_loss + wh_loss) +  # Coordinate loss
-        2.0 * obj_loss +                      # Boost object confidence loss
+        obj_loss +                            # Object confidence loss
         lambda_noobj * noobj_loss +           # No-object confidence loss
         class_loss                            # Class prediction loss
     )

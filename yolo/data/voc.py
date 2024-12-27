@@ -201,6 +201,7 @@ class VOCDataset:
         """Convert boxes and classes to YOLO grid format"""
         grid_size = self.grid_size
         num_classes = len(VOC_CLASSES)
+        num_boxes = self.num_boxes
 
         # Initialize target grid - shape: [S, S, 5 + C] where 5 is [x, y, w, h, confidence]
         target = np.zeros((grid_size, grid_size, 5 + num_classes), dtype=np.float32)
@@ -215,18 +216,24 @@ class VOCDataset:
             grid_x = min(grid_size - 1, max(0, grid_x))
             grid_y = min(grid_size - 1, max(0, grid_y))
 
-            # Convert box coordinates relative to grid cell
-            x = center_x * grid_size - grid_x
-            y = center_y * grid_size - grid_y
-            w = box[2]
-            h = box[3]
+            # Convert box coordinates relative to grid cell (keep as ratio)
+            x = center_x * grid_size - grid_x  # Relative x within cell
+            y = center_y * grid_size - grid_y  # Relative y within cell
+            w = box[2]  # Width as ratio of image size
+            h = box[3]  # Height as ratio of image size
 
-            # Set box coordinates and confidence
-            target[grid_y, grid_x, :4] = [x, y, w, h]
-            target[grid_y, grid_x, 4] = 1  # Object confidence
+            # Only update if no object or current object is larger
+            curr_box_area = w * h
+            existing_box_area = target[grid_y, grid_x, 2] * target[grid_y, grid_x, 3]
+            
+            if target[grid_y, grid_x, 4] == 0 or curr_box_area > existing_box_area:
+                # Set box coordinates and confidence
+                target[grid_y, grid_x, :4] = [x, y, w, h]
+                target[grid_y, grid_x, 4] = 1  # Object confidence
 
-            # Set class probability
-            target[grid_y, grid_x, 5 + cls] = 1
+                # Set class probability
+                target[grid_y, grid_x, 5:] = 0  # Clear existing class
+                target[grid_y, grid_x, 5 + cls] = 1
 
         return target
 

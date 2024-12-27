@@ -41,80 +41,115 @@ class DarkNetBlock(nn.Module):
         return self.relu(self.bn(self.conv(x)))
 
 
-class DarkNetBackbone(nn.Module):
-    """
-    Configurable DarkNet backbone
+class DarkNet19(nn.Module):
+    """Darknet-19 backbone with configurable output size"""
 
-    Args:
-        config: List[ConvConfig]: Layer configurations
-        input_channels: int: Number of input channels (default: 3 for RGB)
-        target_size: int: Target output size (e.g., 7 for 7x7 feature maps)
-        input_size: int: Input image size (default: 448 for YOLOv2)
-    """
-
-    def __init__(
-        self,
-        config: List[ConvConfig],
-        input_channels: int = 3,
-        target_size: int = 7,
-        input_size: int = 448,
-    ):
+    def __init__(self, target_size: int = 7):
         super().__init__()
         self.target_size = target_size
-        self.input_size = input_size
         self.relu = nn.ReLU()
 
-        # Build backbone layers directly as attributes
-        in_channels = input_channels
-        curr_size = input_size
-        
-        for i, conv_config in enumerate(config):
-            # Create conv and bn layers directly as attributes
-            setattr(self, f"conv_{i}", nn.Conv2d(
-                in_channels,
-                conv_config.out_channels,
-                kernel_size=conv_config.kernel_size,
-                stride=conv_config.stride,
-                padding=conv_config.padding,
-            ))
-            setattr(self, f"bn_{i}", nn.BatchNorm(conv_config.out_channels))
-            
-            in_channels = conv_config.out_channels
-            curr_size = curr_size // conv_config.stride
+        # Initial convolution layers
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm(32)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.num_layers = len(config)
+        # Layer 2
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm(64)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        # Add final pooling if needed
-        if curr_size > target_size:
-            pool_size = curr_size // target_size
-            if pool_size > 1:
-                self.pool = nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
-            else:
-                self.pool = None
-        else:
-            self.pool = None
+        # Layer 3
+        self.conv3_1 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn3_1 = nn.BatchNorm(128)
+        self.conv3_2 = nn.Conv2d(128, 64, kernel_size=1)
+        self.bn3_2 = nn.BatchNorm(64)
+        self.conv3_3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn3_3 = nn.BatchNorm(128)
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # Layer 4
+        self.conv4_1 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn4_1 = nn.BatchNorm(256)
+        self.conv4_2 = nn.Conv2d(256, 128, kernel_size=1)
+        self.bn4_2 = nn.BatchNorm(128)
+        self.conv4_3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn4_3 = nn.BatchNorm(256)
+        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # Layer 5
+        self.conv5_1 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.bn5_1 = nn.BatchNorm(512)
+        self.conv5_2 = nn.Conv2d(512, 256, kernel_size=1)
+        self.bn5_2 = nn.BatchNorm(256)
+        self.conv5_3 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.bn5_3 = nn.BatchNorm(512)
+        self.conv5_4 = nn.Conv2d(512, 256, kernel_size=1)
+        self.bn5_4 = nn.BatchNorm(256)
+        self.conv5_5 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.bn5_5 = nn.BatchNorm(512)
+        self.pool5 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # Layer 6
+        self.conv6_1 = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
+        self.bn6_1 = nn.BatchNorm(1024)
+        self.conv6_2 = nn.Conv2d(1024, 512, kernel_size=1)
+        self.bn6_2 = nn.BatchNorm(512)
+        self.conv6_3 = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
+        self.bn6_3 = nn.BatchNorm(1024)
+        self.conv6_4 = nn.Conv2d(1024, 512, kernel_size=1)
+        self.bn6_4 = nn.BatchNorm(512)
+        self.conv6_5 = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
+        self.bn6_5 = nn.BatchNorm(1024)
 
     def __call__(self, x):
-        # Direct layer-to-layer connections
-        for i in range(self.num_layers):
-            conv = getattr(self, f"conv_{i}")
-            bn = getattr(self, f"bn_{i}")
-            x = self.relu(bn(conv(x)))
+        # Initial conv
+        x = self.relu(self.bn1(self.conv1(x)))  # 448 -> 448
+        x = self.pool1(x)  # 448 -> 224
 
-        if self.pool is not None:
-            x = self.pool(x)
+        # Layer 2
+        x = self.relu(self.bn2(self.conv2(x)))  # 224 -> 224
+        x = self.pool2(x)  # 224 -> 112
+
+        # Layer 3
+        x = self.relu(self.bn3_1(self.conv3_1(x)))
+        x = self.relu(self.bn3_2(self.conv3_2(x)))
+        x = self.relu(self.bn3_3(self.conv3_3(x)))
+        x = self.pool3(x)  # 112 -> 56
+
+        # Layer 4
+        x = self.relu(self.bn4_1(self.conv4_1(x)))
+        x = self.relu(self.bn4_2(self.conv4_2(x)))
+        x = self.relu(self.bn4_3(self.conv4_3(x)))
+        x = self.pool4(x)  # 56 -> 28
+
+        # Layer 5
+        x = self.relu(self.bn5_1(self.conv5_1(x)))
+        x = self.relu(self.bn5_2(self.conv5_2(x)))
+        x = self.relu(self.bn5_3(self.conv5_3(x)))
+        x = self.relu(self.bn5_4(self.conv5_4(x)))
+        x = self.relu(self.bn5_5(self.conv5_5(x)))
+        x = self.pool5(x)  # 28 -> 14
+
+        # Layer 6
+        x = self.relu(self.bn6_1(self.conv6_1(x)))
+        x = self.relu(self.bn6_2(self.conv6_2(x)))
+        x = self.relu(self.bn6_3(self.conv6_3(x)))
+        x = self.relu(self.bn6_4(self.conv6_4(x)))
+        x = self.relu(self.bn6_5(self.conv6_5(x)))  # 14 -> 14
+
+        # Add final pooling if needed to reach target size
+        curr_size = x.shape[2]  # Assuming square feature maps
+        if curr_size > self.target_size:
+            pool_size = curr_size // self.target_size
+            if pool_size > 1:
+                x = nn.max_pool2d(x, kernel_size=pool_size, stride=pool_size)
 
         return x
 
 
 class YOLO(nn.Module):
-    """
-    YOLOv2 model with configurable backbone
-
-    The model outputs predictions in the format:
-    [tx, ty, tw, th, to] for each bounding box
-    and C class probabilities
-    """
+    """YOLOv2 object detection model"""
 
     def __init__(self, S=7, B=2, C=20):
         """
@@ -128,52 +163,26 @@ class YOLO(nn.Module):
         self.B = B
         self.C = C
 
-        # Define backbone configuration
-        backbone_config = [
-            # Initial layers (448 -> 224)
-            ConvConfig(32),
-            ConvConfig(64, stride=2),
-            # Downsample to 112
-            ConvConfig(128),
-            ConvConfig(64, kernel_size=1),
-            ConvConfig(128, stride=2),
-            # Downsample to 56
-            ConvConfig(256),
-            ConvConfig(128, kernel_size=1),
-            ConvConfig(256, stride=2),
-            # Downsample to 28
-            ConvConfig(512),
-            ConvConfig(256, kernel_size=1),
-            ConvConfig(512),
-            ConvConfig(256, kernel_size=1),
-            ConvConfig(512, stride=2),
-            # Final feature extraction
-            ConvConfig(1024),
-            ConvConfig(512, kernel_size=1),
-            ConvConfig(1024),
-            ConvConfig(512, kernel_size=1),
-            ConvConfig(1024),
-        ]
-
-        # Create backbone
-        self.backbone = DarkNetBackbone(
-            config=backbone_config, input_channels=3, target_size=S, input_size=448
-        )
+        # Create backbone with target size S
+        self.backbone = DarkNet19(target_size=S)
 
         # Detection head
-        self.detect1 = DarkNetBlock(1024, ConvConfig(1024))
-        self.detect2 = DarkNetBlock(1024, ConvConfig(1024))
+        self.detect1 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
+        self.bn_detect1 = nn.BatchNorm(1024)
+        self.detect2 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
+        self.bn_detect2 = nn.BatchNorm(1024)
 
         # Final detection layer
         self.conv_final = nn.Conv2d(1024, B * (5 + C), kernel_size=1)
 
+        # Activation
+        self.relu = nn.ReLU()
+
         # Initialize anchor boxes
-        self.anchors = mx.array(
-            [
-                [1.3221, 1.73145],
-                [3.19275, 4.00944],
-            ]
-        )
+        self.anchors = mx.array([
+            [1.3221, 1.73145],
+            [3.19275, 4.00944],
+        ])
 
     def __call__(self, x):
         """
@@ -190,11 +199,11 @@ class YOLO(nn.Module):
         batch_size = x.shape[0]
 
         # Backbone
-        x = self.backbone(x)
+        x = self.backbone(x)  # SxSx1024
 
         # Detection head
-        x = self.detect1(x)
-        x = self.detect2(x)
+        x = self.relu(self.bn_detect1(self.detect1(x)))
+        x = self.relu(self.bn_detect2(self.detect2(x)))
         x = self.conv_final(x)
 
         # Reshape to (batch_size, S, S, B * (5 + C))
@@ -204,15 +213,8 @@ class YOLO(nn.Module):
         return x
 
     def decode_predictions(self, pred):
-        """
-        Convert network output to bounding boxes
-        Args:
-            pred: Raw network output [batch, S, S, B * (5 + C)]
-        Returns:
-            boxes: [batch, S, S, B, 4] - normalized box coordinates (cx, cy, w, h)
-            confidence: [batch, S, S, B] - objectness scores
-            class_probs: [batch, S, S, B, C] - class probabilities
-        """
+        """Decode raw predictions to bounding boxes"""
+        # Implementation remains the same
         batch_size = pred.shape[0]
 
         # Reshape to [batch, S, S, B, 5 + C]

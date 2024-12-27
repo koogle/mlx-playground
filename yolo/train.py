@@ -128,9 +128,12 @@ def clip_gradients(gradients, max_norm: float = 10.0):
 
 
 def adjust_learning_rate(optimizer, epoch, initial_lr):
-    """Adjust learning rate using step decay"""
+    """Adjust learning rate using warmup and step decay"""
+    # Warmup for first 5 epochs
+    if epoch < 5:
+        optimizer.learning_rate = initial_lr * ((epoch + 1) / 5)
     # Decay learning rate by 0.1 at epochs 60 and 90
-    if epoch == 60:
+    elif epoch == 60:
         optimizer.learning_rate = initial_lr * 0.1
     elif epoch == 90:
         optimizer.learning_rate = initial_lr * 0.01
@@ -143,12 +146,12 @@ def train(
     num_epochs: int = 135,
     batch_size: int = 32,
     accumulation_steps: int = 2,
-    learning_rate: float = 0.001,
+    learning_rate: float = 0.0001,
     beta1: float = 0.9,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
-    max_grad_norm: float = 10.0,
+    max_grad_norm: float = 5.0,
     grid_size: int = 7,
 ):
     """Train YOLO model
@@ -304,7 +307,7 @@ if __name__ == "__main__":
         help="Number of gradient accumulation steps",
     )
     parser.add_argument(
-        "--learning-rate", type=float, default=0.001, help="Learning rate"
+        "--learning-rate", type=float, default=0.0001, help="Learning rate"
     )
     parser.add_argument(
         "--beta1", type=float, default=0.9, help="Beta1 for Adam optimizer"
@@ -319,7 +322,7 @@ if __name__ == "__main__":
         "--resume-epoch", type=int, help="Resume training from this epoch"
     )
     parser.add_argument(
-        "--max-grad-norm", type=float, default=10.0, help="Maximum gradient norm"
+        "--max-grad-norm", type=float, default=5.0, help="Maximum gradient norm"
     )
     parser.add_argument(
         "--grid-size",

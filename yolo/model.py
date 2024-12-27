@@ -162,7 +162,9 @@ class YOLO(nn.Module):
         # Final detection layer
         # For each cell: B * (5 + C) outputs
         # 5 = [tx, ty, tw, th, to] for each box
-        self.conv_final = nn.Conv2d(1024 + 256, B * (5 + C), kernel_size=1)
+        # Input: 1024 + 256 = 1280 channels
+        # Output: B * (5 + C) = 5 * (5 + 20) = 125 channels
+        self.conv_final = nn.Conv2d(1280, B * (5 + C), kernel_size=1)
         self.relu = nn.ReLU()
 
     def __call__(self, x, return_features=False):
@@ -182,7 +184,12 @@ class YOLO(nn.Module):
         x = mx.concatenate([route, conv7_features], axis=3)  # 1280 channels (256 + 1024)
 
         # Final detection layer
-        x = self.conv_final(x)
+        x = self.conv_final(x)  # B * (5 + C) = 125 channels
+
+        # Verify shape before reshape
+        if x.shape != (1, self.S, self.S, self.B * (5 + self.C)):
+            print(f"Warning: Unexpected shape before reshape: {x.shape}, "
+                  f"expected (1,{self.S},{self.S},{self.B * (5 + self.C)})")
 
         # Reshape output to [batch, S, S, B * (5 + C)]
         batch_size = x.shape[0]

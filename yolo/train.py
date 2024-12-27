@@ -29,7 +29,7 @@ def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
             "S": model.S,
             "B": model.B,
             "C": model.C,
-            "anchors": model.anchors.tolist()
+            "anchors": model.anchors.tolist(),
         }
         with open(config_path, "w") as f:
             json.dump(config, f)
@@ -52,11 +52,7 @@ def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
         raise
 
     # Save training info
-    info = {
-        "epoch": epoch,
-        "loss": loss,
-        "model_config": config
-    }
+    info = {"epoch": epoch, "loss": loss, "model_config": config}
     info_path = os.path.join(save_dir, f"info_epoch_{epoch}.json")
     with open(info_path, "w") as f:
         json.dump(info, f)
@@ -70,9 +66,8 @@ def load_checkpoint(model: YOLO, optimizer, checkpoint_dir, epoch):
         config_path = os.path.join(checkpoint_dir, f"yolo_config_{epoch}.json")
         with open(config_path, "r") as f:
             config = json.load(f)
-        
-        if (config["S"] != model.S or config["B"] != model.B or 
-            config["C"] != model.C):
+
+        if config["S"] != model.S or config["B"] != model.B or config["C"] != model.C:
             raise ValueError(
                 f"Model config mismatch. Checkpoint has S={config['S']}, "
                 f"B={config['B']}, C={config['C']}, but model has S={model.S}, "
@@ -154,7 +149,7 @@ def train(
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
     max_grad_norm: float = 10.0,
-    grid_size: int = 7,
+    grid_size: int = 14,
 ):
     """Train YOLO model"""
     # Create model and optimizer
@@ -181,7 +176,9 @@ def train(
 
     # Load dataset with augmentation
     print("Loading dataset...")
-    train_dataset = VOCDataset(data_dir, year="2012", image_set="train", augment=True, S=grid_size)
+    train_dataset = VOCDataset(
+        data_dir, year="2012", image_set="train", augment=True, S=grid_size
+    )
     train_loader = create_data_loader(
         train_dataset, batch_size=batch_size, shuffle=True
     )

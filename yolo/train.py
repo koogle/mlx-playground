@@ -129,9 +129,9 @@ def clip_gradients(gradients, max_norm: float = 10.0):
 
 def adjust_learning_rate(optimizer, epoch, initial_lr):
     """Adjust learning rate using warmup and step decay"""
-    # Warmup for first 5 epochs
-    if epoch < 5:
-        optimizer.learning_rate = initial_lr * ((epoch + 1) / 5)
+    # Warmup for first 3 epochs
+    if epoch < 3:
+        optimizer.learning_rate = initial_lr * ((epoch + 1) / 3)
     # Decay learning rate by 0.1 at epochs 60 and 90
     elif epoch == 60:
         optimizer.learning_rate = initial_lr * 0.1
@@ -146,7 +146,7 @@ def train(
     num_epochs: int = 135,
     batch_size: int = 32,
     accumulation_steps: int = 2,
-    learning_rate: float = 0.0001,
+    learning_rate: float = 0.001,
     beta1: float = 0.9,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
@@ -307,7 +307,7 @@ if __name__ == "__main__":
         help="Number of gradient accumulation steps",
     )
     parser.add_argument(
-        "--learning-rate", type=float, default=0.0001, help="Learning rate"
+        "--learning-rate", type=float, default=0.001, help="Learning rate"
     )
     parser.add_argument(
         "--beta1", type=float, default=0.9, help="Beta1 for Adam optimizer"

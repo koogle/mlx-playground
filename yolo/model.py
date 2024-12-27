@@ -94,7 +94,7 @@ class YOLO(nn.Module):
     and C class probabilities
     """
 
-    def __init__(self, S=7, B=2, C=20):
+    def __init__(self, S=12, B=2, C=20):
         """
         Args:
             S: Grid size (S x S)
@@ -116,7 +116,7 @@ class YOLO(nn.Module):
 
         # Fully connected layers
         self.flatten = lambda x: mx.reshape(x, (x.shape[0], -1))
-        self.fc1 = nn.Linear(7 * 7 * 1024, 4096)
+        self.fc1 = nn.Linear(12 * 12 * 1024, 4096)
 
         self.dropout = nn.Dropout(p=0.5) if self.training else lambda x: x
         self.fc2 = nn.Linear(4096, S * S * (B * 5 + C))

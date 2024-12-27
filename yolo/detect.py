@@ -63,7 +63,7 @@ def decode_predictions(
     debug=False,
 ):
     """Decode YOLO predictions to bounding boxes"""
-    S = 7  # Grid size
+    S = 12  # Grid size
     B = 2  # Boxes per cell
     C = 20  # Number of classes
 

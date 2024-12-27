@@ -143,7 +143,7 @@ class YOLO(nn.Module):
                 mx.reshape(x, (x.shape[0], x.shape[1], x.shape[2], 2, x.shape[3] // 2)),
                 (0, 1, 2, 4, 3)
             ),
-            (x.shape[0], x.shape[1], x.shape[2], x.shape[3])
+            (x.shape[0], x.shape[1] // 2, x.shape[2] // 2, x.shape[3] * 4)
         )
 
         # Detection layers
@@ -153,7 +153,7 @@ class YOLO(nn.Module):
         self.bn7 = nn.BatchNorm(1024)
 
         # Combine fine-grained features
-        self.conv_passthrough = nn.Conv2d(256, 64, kernel_size=1)  # Changed input channels from 512 to 256
+        self.conv_passthrough = nn.Conv2d(256, 64, kernel_size=1)
         self.bn_passthrough = nn.BatchNorm(64)
 
         # Final detection layer
@@ -164,18 +164,18 @@ class YOLO(nn.Module):
 
     def __call__(self, x, return_features=False):
         # Get features from backbone
-        x, route = self.backbone(x)  # route is from conv4_3 (256 channels)
-
+        x, route = self.backbone(x)  # route is from conv4_3 (256 channels, 52x52)
+        
         # Detection head
-        conv6_features = self.relu(self.bn6(self.conv6(x)))
-        conv7_features = self.relu(self.bn7(self.conv7(conv6_features)))
+        conv6_features = self.relu(self.bn6(self.conv6(x)))  # 1024 channels, 13x13
+        conv7_features = self.relu(self.bn7(self.conv7(conv6_features)))  # 1024 channels, 13x13
 
-        # Process passthrough layer
-        route = self.relu(self.bn_passthrough(self.conv_passthrough(route)))
-        route = self.reorg(route)  # Reorg to match feature map size
+        # Process passthrough layer (space-to-depth)
+        route = self.relu(self.bn_passthrough(self.conv_passthrough(route)))  # 64 channels
+        route = self.reorg(route)  # 256 channels (64*4), halved spatial dimensions
 
         # Concatenate passthrough features with conv7
-        x = mx.concatenate([route, conv7_features], axis=3)
+        x = mx.concatenate([route, conv7_features], axis=3)  # 1280 channels (256 + 1024)
 
         # Final detection layer
         x = self.conv_final(x)
@@ -187,7 +187,8 @@ class YOLO(nn.Module):
         if return_features:
             return x, {
                 'conv6': conv6_features,
-                'conv7': conv7_features
+                'conv7': conv7_features,
+                'route': route
             }
         return x
 

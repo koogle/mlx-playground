@@ -109,9 +109,6 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
         
     Returns:
         Total loss (scalar), averaged over batch
-    
-    Raises:
-        ValueError: If input shapes or values are invalid
     """
     # Validate inputs
     validate_inputs(predictions, targets, model)
@@ -125,9 +122,9 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     # Reshape predictions to [batch, S, S, B, 5 + C]
     pred = mx.reshape(predictions, (-1, S, S, B, 5 + C))
     
-    # Split predictions into components with proper activation functions
+    # Split predictions into components
     pred_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates [batch, S, S, B, 2]
-    pred_wh = mx.exp(mx.clip(pred[..., 2:4], -math.log(1e4), math.log(1e4)))  # Width/height with clipping
+    pred_wh = mx.exp(mx.clip(pred[..., 2:4], -math.log(1e4), math.log(1e4)))  # Width/height
     pred_conf = mx.sigmoid(pred[..., 4:5])  # Object confidence [batch, S, S, B, 1]
     pred_class = mx.sigmoid(pred[..., 5:])  # Class probabilities [batch, S, S, B, C]
     
@@ -158,38 +155,48 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     responsible_mask = mx.expand_dims(ious >= best_ious, axis=-1)  # [batch, S, S, B, 1]
     responsible_mask = responsible_mask * target_obj  # Only for cells with objects
     
+    # Count number of responsible boxes for normalization
+    num_responsible = mx.sum(responsible_mask) + 1e-6
+    
     # 1. Coordinate loss (only for responsible boxes)
-    xy_scale = 2 - target_boxes[..., 2:4] * target_boxes[..., 2:4]  # Scale based on box size
+    # Simpler scale factor based on target box size
+    xy_scale = mx.sqrt(2 - target_boxes[..., 2:4])  # Less aggressive scaling
+    
+    # XY loss (normalized by grid size)
     xy_loss = mx.sum(
         responsible_mask * xy_scale *
         (pred_xy - (target_boxes[..., :2] * S - grid)) ** 2
-    )
+    ) / (num_responsible * S)
     
+    # WH loss (normalized and using better scale)
     wh_loss = mx.sum(
         responsible_mask * xy_scale *
-        (mx.log(pred_wh + 1e-6) - mx.log(target_boxes[..., 2:4] / anchors + 1e-6)) ** 2
-    )
+        (mx.sqrt(pred_wh + 1e-6) - mx.sqrt(target_boxes[..., 2:4] / anchors + 1e-6)) ** 2
+    ) / num_responsible
     
     # 2. Object confidence loss (for responsible boxes)
-    obj_loss = mx.sum(responsible_mask * (pred_conf - ious[..., None]) ** 2)
+    obj_loss = mx.sum(
+        responsible_mask * (pred_conf - ious[..., None]) ** 2
+    ) / num_responsible
     
     # 3. No-object confidence loss (for non-responsible boxes)
-    noobj_mask = (1 - responsible_mask) * (1 - target_obj)  # Exclude cells with objects
-    noobj_loss = mx.sum(noobj_mask * pred_conf ** 2)
+    noobj_mask = (1 - responsible_mask) * (1 - target_obj)
+    num_noobj = mx.sum(noobj_mask) + 1e-6
+    noobj_loss = mx.sum(noobj_mask * pred_conf ** 2) / num_noobj
     
-    # 4. Class prediction loss (only for cells with objects)
+    # 4. Class prediction loss (only for cells with objects and responsible boxes)
     class_loss = mx.sum(
-        mx.expand_dims(target_obj[..., 0], axis=-1) * 
+        responsible_mask * 
         (pred_class - mx.expand_dims(target_class, axis=3)) ** 2
-    )
+    ) / num_responsible
     
     # Combine all losses with their respective weights
+    # Scale down coordinate loss weight since we're using better normalization
     total_loss = (
-        lambda_coord * (xy_loss + wh_loss) +  # Coordinate loss
-        obj_loss +                            # Object confidence loss
-        lambda_noobj * noobj_loss +           # No-object confidence loss
-        class_loss                            # Class prediction loss
+        (lambda_coord * 0.5) * (xy_loss + wh_loss) +  # Coordinate loss (scaled down)
+        obj_loss +                                     # Object confidence loss
+        lambda_noobj * noobj_loss +                   # No-object confidence loss
+        class_loss                                    # Class prediction loss
     )
     
-    # Normalize by batch size and return
-    return total_loss / batch_size
+    return total_loss

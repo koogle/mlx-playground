@@ -65,6 +65,19 @@ class DarkNetBackbone(nn.Module):
             self.layers.append(DarkNetBlock(in_channels, conv_config))
             in_channels = conv_config.out_channels
 
+        # Calculate final feature map size
+        curr_size = 224  # Assuming initial input size of 224x224
+        for conv_config in config:
+            curr_size = curr_size // conv_config.stride
+
+        # Add pooling if needed to reach target size
+        if curr_size > self.target_size:
+            pool_size = curr_size // self.target_size
+            if pool_size > 1:
+                self.layers.append(
+                    nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
+                )
+
         # Register layers as attributes
         for i, layer in enumerate(self.layers):
             setattr(self, f"block_{i}", layer)
@@ -73,15 +86,6 @@ class DarkNetBackbone(nn.Module):
         # Pass through all layers
         for layer in self.layers:
             x = layer(x)
-
-        # Calculate current feature map size
-        curr_size = x.shape[2]  # Assuming square feature maps
-
-        # Add pooling if needed to reach target size
-        if curr_size > self.target_size:
-            pool_size = curr_size // self.target_size
-            if pool_size > 1:
-                x = nn.MaxPool2d(x, kernel_size=pool_size, stride=pool_size)
 
         return x
 

@@ -177,7 +177,7 @@ def train(
     # Load dataset with augmentation
     print("Loading dataset...")
     train_dataset = VOCDataset(
-        data_dir, year="2012", image_set="train", augment=True, S=grid_size
+        data_dir, year="2012", image_set="train", augment=True, grid_size=grid_size
     )
     train_loader = create_data_loader(
         train_dataset, batch_size=batch_size, shuffle=True

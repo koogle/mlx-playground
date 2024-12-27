@@ -152,7 +152,7 @@ def train(
     grid_size: int = 7,
 ):
     """Train YOLO model
-    
+
     Args:
         data_dir: Path to VOC dataset
         save_dir: Directory to save checkpoints
@@ -169,11 +169,7 @@ def train(
     """
     # Create model and optimizer
     print("Creating model...")
-    model = YOLO(
-        S=grid_size,  # Use same grid_size for model
-        B=2,
-        C=len(VOC_CLASSES)
-    )
+    model = YOLO(S=grid_size, B=2, C=len(VOC_CLASSES))  # Use same grid_size for model
 
     optimizer = optim.Adam(
         learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
@@ -200,7 +196,7 @@ def train(
         year="2012",
         image_set="train",
         augment=True,
-        grid_size=grid_size
+        grid_size=grid_size,
     )
     train_loader = create_data_loader(
         train_dataset, batch_size=batch_size, shuffle=True

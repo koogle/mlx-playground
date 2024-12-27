@@ -113,7 +113,7 @@ class YOLO(nn.Module):
     and C class probabilities
     """
 
-    def __init__(self, S=14, B=5, C=20):
+    def __init__(self, S=7, B=5, C=20):
         """
         Args:
             S: Grid size (S x S)

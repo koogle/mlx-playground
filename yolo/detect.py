@@ -270,9 +270,8 @@ def draw_boxes_cv2(image, boxes, class_ids, scores):
     return image
 
 
-def visualize_features(features, window_name="Features"):
+def visualize_features(features, orig_size, window_name="Features"):
     """Visualize feature maps from the model"""
-
     # Convert features to numpy and take first sample from batch
     conv6 = np.array(features["conv6"][0])  # Shape: [H, W, C]
     conv7 = np.array(features["conv7"][0])  # Shape: [H, W, C]
@@ -293,24 +292,23 @@ def visualize_features(features, window_name="Features"):
         * 255
     ).astype(np.uint8)
 
-    # Resize for better visualization
-    conv6_viz = cv2.resize(conv6_viz, (224, 224), interpolation=cv2.INTER_NEAREST)
-    conv7_viz = cv2.resize(conv7_viz, (224, 224), interpolation=cv2.INTER_NEAREST)
+    # Resize to match original image size
+    height, width = orig_size
+    conv6_viz = cv2.resize(conv6_viz, (width, height), interpolation=cv2.INTER_LINEAR)
+    conv7_viz = cv2.resize(conv7_viz, (width, height), interpolation=cv2.INTER_LINEAR)
 
     # Apply colormap for better visualization
     conv6_viz = cv2.applyColorMap(conv6_viz, cv2.COLORMAP_JET)
     conv7_viz = cv2.applyColorMap(conv7_viz, cv2.COLORMAP_JET)
 
-    # Stack horizontally
-    viz = np.hstack([conv6_viz, conv7_viz])
-
     # Add labels
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(viz, "Conv6", (50, 20), font, 0.7, (255, 255, 255), 2)
-    cv2.putText(viz, "Conv7", (274, 20), font, 0.7, (255, 255, 255), 2)
+    cv2.putText(conv6_viz, "Conv6", (20, 40), font, 1.0, (255, 255, 255), 2)
+    cv2.putText(conv7_viz, "Conv7", (20, 40), font, 1.0, (255, 255, 255), 2)
 
-    # Show in window
-    cv2.imshow(window_name, viz)
+    # Show in separate windows
+    cv2.imshow(window_name + " Conv6", conv6_viz)
+    cv2.imshow(window_name + " Conv7", conv7_viz)
     cv2.waitKey(1)
 
 
@@ -343,6 +341,9 @@ def main():
     )
     parser.add_argument("--nms-thresh", type=float, default=0.4, help="NMS threshold")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument(
+        "--show-features", action="store_true", help="Show feature map visualizations"
+    )
     args = parser.parse_args()
 
     if not args.image and not args.camera:
@@ -367,7 +368,9 @@ def main():
 
         # Create windows
         cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
-        cv2.namedWindow("Feature Maps", cv2.WINDOW_NORMAL)
+        if args.show_features:
+            cv2.namedWindow("Feature Maps Conv6", cv2.WINDOW_NORMAL)
+            cv2.namedWindow("Feature Maps Conv7", cv2.WINDOW_NORMAL)
 
         last_process_time = 0
         process_interval = 0.5  # Process every 0.5 seconds
@@ -396,8 +399,9 @@ def main():
                     predictions, features = model(image, return_features=True)
                     mx.eval(predictions)
 
-                    # Visualize feature maps
-                    visualize_features(features, "Feature Maps")
+                    # Visualize feature maps if enabled
+                    if args.show_features:
+                        visualize_features(features, orig_size, "Feature Maps")
 
                     # Decode predictions
                     boxes, class_ids, scores = decode_predictions(
@@ -446,8 +450,9 @@ def main():
             print("Max confidence:", float(mx.max(predictions[..., 4:5])))
             print("Max class prob:", float(mx.max(predictions[..., 10:])))
 
-        # Visualize feature maps
-        visualize_features(features, "Feature Maps")
+        # Visualize feature maps if enabled
+        if args.show_features:
+            visualize_features(features, orig_size, "Feature Maps")
 
         # Decode predictions
         boxes, class_ids, scores = decode_predictions(

@@ -174,10 +174,10 @@ class YOLO(nn.Module):
         x, route = self.backbone(x)  # route is from conv4_3 (256 channels, 52x52)
 
         # Detection head
-        conv6_features = self.relu(self.bn6(self.conv6(x)))  # 1024 channels, 14x14
+        conv6_features = self.relu(self.bn6(self.conv6(x)))  # 1024 channels, 7x7
         conv7_features = self.relu(
             self.bn7(self.conv7(conv6_features))
-        )  # 1024 channels, 14x14
+        )  # 1024 channels, 7x7
 
         # Process passthrough layer (space-to-depth)
         route = self.route_pool(route)  # Additional pooling to match spatial dimensions

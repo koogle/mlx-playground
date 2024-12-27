@@ -377,9 +377,8 @@ def main():
 
         try:
             while True:
-                # Clear buffer and get fresh frame
-                for _ in range(4):
-                    cap.read()
+                # Wait for 400ms before reading the next frame
+                time.sleep(0.4)
                 ret, frame = cap.read()
                 if not ret:
                     print("Error: Could not read frame")
@@ -393,7 +392,7 @@ def main():
                         print(f"Frame shape: {frame.shape}")
 
                     # Preprocess frame
-                    image, orig_size = preprocess_image(frame.copy(), args=args)
+                    image, orig_size = preprocess_image(frame, args=args)
 
                     # Run inference with feature extraction
                     predictions, features = model(image, return_features=True)

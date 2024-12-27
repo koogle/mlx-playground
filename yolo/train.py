@@ -204,7 +204,7 @@ def train(
             def loss_fn(params):
                 model.update(params)
                 predictions = model(images)
-                return yolo_loss(predictions, targets)
+                return yolo_loss(predictions, targets, model)
 
             # Forward pass and compute loss
             loss, gradients = mx.value_and_grad(loss_fn)(model.parameters())

@@ -192,13 +192,14 @@ class YOLO(nn.Module):
         )  # 1280 channels (256 + 1024)
 
         # Final detection layer
-        x = self.conv_final(x)
+        x = self.conv_final(x)  # B * (5 + C) = 125 channels
 
         # Verify shape before reshape
-        if x.shape != (1, self.S, self.S, self.B * (5 + self.C)):
+        expected_channels = self.B * (5 + self.C)
+        if x.shape[1:] != (self.S, self.S, expected_channels):
             print(
                 f"Warning: Unexpected shape before reshape: {x.shape}, "
-                f"expected (1,{self.S},{self.S},{self.B * (5 + self.C)})"
+                f"expected (batch,{self.S},{self.S},{expected_channels})"
             )
 
         # Reshape output to [batch, S, S, B * (5 + C)]

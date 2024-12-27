@@ -372,56 +372,83 @@ def main():
             cv2.namedWindow("Feature Maps Conv6", cv2.WINDOW_NORMAL)
             cv2.namedWindow("Feature Maps Conv7", cv2.WINDOW_NORMAL)
 
-        last_process_time = 0
         process_interval = 0.5  # Process every 0.5 seconds
 
         try:
             while True:
                 # Wait for 400ms before reading the next frame
-                time.sleep(0.4)
+                # This is not correct but good enough
+                time.sleep(process_interval)
                 ret, frame = cap.read()
                 if not ret:
                     print("Error: Could not read frame")
                     break
 
                 # Process frame every interval
-                current_time = time.time()
-                if current_time - last_process_time >= process_interval:
-                    if args.debug:
-                        print("\nProcessing new frame...")
-                        print(f"Frame shape: {frame.shape}")
+                if args.debug:
+                    print("\nProcessing new frame...")
+                    print(f"Frame shape: {frame.shape}")
 
-                    # Preprocess frame
-                    image, orig_size = preprocess_image(frame, args=args)
+                # Preprocess frame
+                image, orig_size = preprocess_image(frame, args=args)
 
-                    # Run inference with feature extraction
-                    predictions, features = model(image, return_features=True)
-                    # Visualize feature maps if enabled
-                    if args.show_features:
-                        visualize_features(features, orig_size, "Feature Maps")
+                # Run inference with feature extraction
+                predictions, features = model(image, return_features=True)
 
-                    # Decode predictions
-                    boxes, class_ids, scores = decode_predictions(
-                        predictions,
-                        confidence_threshold=args.conf_thresh,
-                        class_threshold=args.class_thresh,
-                        nms_threshold=args.nms_thresh,
-                        debug=args.debug,
+                # Evaluate all outputs
+                mx.eval(predictions)
+                mx.eval(features["conv6"])
+                mx.eval(features["conv7"])
+
+                print("Input image shape:", image.shape)
+                print("Raw predictions shape:", predictions.shape)
+                print("Max confidence:", float(mx.max(predictions[..., 4:5])))
+                print("Max class prob:", float(mx.max(predictions[..., 10:])))
+                print("Max prediction:", float(mx.max(predictions)))
+
+                if args.debug:
+                    print(
+                        "Feature shapes:",
+                        "conv6:",
+                        features["conv6"].shape,
+                        "conv7:",
+                        features["conv7"].shape,
+                    )
+                    print(
+                        "Feature ranges:",
+                        "conv6:",
+                        float(mx.min(features["conv6"])),
+                        "to",
+                        float(mx.max(features["conv6"])),
+                        "conv7:",
+                        float(mx.min(features["conv7"])),
+                        "to",
+                        float(mx.max(features["conv7"])),
                     )
 
-                    # Draw results directly on the frame
-                    frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
+                # Visualize feature maps if enabled
+                if args.show_features:
+                    visualize_features(features, orig_size, "Feature Maps")
 
-                    # Print detections
-                    if len(boxes) > 0:
-                        print(f"\nFound {len(boxes)} detections:")
-                        for cls_id, score in zip(class_ids, scores):
-                            print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
-                    elif args.debug:
-                        print("\nNo detections found")
+                # Decode predictions
+                boxes, class_ids, scores = decode_predictions(
+                    predictions,
+                    confidence_threshold=args.conf_thresh,
+                    class_threshold=args.class_thresh,
+                    nms_threshold=args.nms_thresh,
+                    debug=args.debug,
+                )
 
-                    last_process_time = current_time
+                # Draw results directly on the frame
+                frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
 
+                # Print detections
+                if len(boxes) > 0:
+                    print(f"\nFound {len(boxes)} detections:")
+                    for cls_id, score in zip(class_ids, scores):
+                        print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
+                elif args.debug:
+                    print("\nNo detections found")
                 # Show the frame with detections
                 cv2.imshow("YOLO Detection", frame)
 
@@ -440,12 +467,36 @@ def main():
         # Run inference with feature extraction
         predictions, features = model(image, return_features=True)
 
+        # Evaluate all outputs
+        mx.eval(predictions)
+        mx.eval(features["conv6"])
+        mx.eval(features["conv7"])
+
         # Debug prints
         if args.debug:
             print("Input image shape:", image.shape)
             print("Raw predictions shape:", predictions.shape)
             print("Max confidence:", float(mx.max(predictions[..., 4:5])))
             print("Max class prob:", float(mx.max(predictions[..., 10:])))
+            print("Max prediction:", float(mx.max(predictions)))
+            print(
+                "Feature shapes:",
+                "conv6:",
+                features["conv6"].shape,
+                "conv7:",
+                features["conv7"].shape,
+            )
+            print(
+                "Feature ranges:",
+                "conv6:",
+                float(mx.min(features["conv6"])),
+                "to",
+                float(mx.max(features["conv6"])),
+                "conv7:",
+                float(mx.min(features["conv7"])),
+                "to",
+                float(mx.max(features["conv7"])),
+            )
 
         # Visualize feature maps if enabled
         if args.show_features:

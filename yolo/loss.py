@@ -23,82 +23,102 @@ def compute_iou(box1, box2):
     return intersection / (union + 1e-6)
 
 
-def yolo_loss(predictions, targets, lambda_coord=5.0, lambda_noobj=0.5):
+def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     """
-    Compute YOLO loss
+    Compute YOLOv2 loss with anchor boxes
     Args:
-        predictions: Model predictions [batch, S, S, B*5 + C]
+        predictions: Model predictions [batch, S, S, B*(5 + C)]
         targets: Ground truth [batch, S, S, 5 + C]
+        model: YOLO model instance (needed for anchor boxes)
         lambda_coord: Weight for coordinate predictions
         lambda_noobj: Weight for no object predictions
     """
+    batch_size = predictions.shape[0]
     S = predictions.shape[1]  # Grid size
-    B = 2  # Number of boxes per cell
+    B = model.B  # Number of anchor boxes per cell
+    C = model.C  # Number of classes
 
-    # Reshape predictions to [batch, S, S, B, 5] for boxes and [batch, S, S, C] for classes
-    pred_boxes = mx.reshape(predictions[..., : B * 5], (-1, S, S, B, 5))
-    pred_classes = predictions[..., B * 5 :]
+    # Reshape predictions to [batch, S, S, B, 5 + C]
+    pred = mx.reshape(predictions, (-1, S, S, B, 5 + C))
 
-    # Get target components and expand dimensions for broadcasting
+    # Split predictions
+    pred_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates
+    pred_wh = mx.exp(pred[..., 2:4])  # Width and height
+    pred_conf = mx.sigmoid(pred[..., 4:5])  # Object confidence
+    pred_class = pred[..., 5:]  # Class probabilities
+
+    # Get target components
     target_boxes = targets[..., :4]  # [batch, S, S, 4]
+    target_obj = targets[..., 4:5]  # [batch, S, S, 1]
+    target_class = targets[..., 5:]  # [batch, S, S, C]
+
+    # Expand dimensions for broadcasting with anchor boxes
     target_boxes = mx.expand_dims(target_boxes, axis=3)  # [batch, S, S, 1, 4]
-    target_obj = targets[..., 4]  # [batch, S, S]
-    target_obj = mx.expand_dims(target_obj, axis=3)  # [batch, S, S, 1]
-    target_classes = targets[..., 5:]  # [batch, S, S, C]
+    target_obj = mx.expand_dims(target_obj, axis=3)  # [batch, S, S, 1, 1]
 
-    # Compute IOUs for all predicted boxes with target
+    # Create grid offsets
+    grid_x = mx.arange(S, dtype=mx.float32)
+    grid_y = mx.arange(S, dtype=mx.float32)
+    grid_x, grid_y = mx.meshgrid(grid_x, grid_y)
+    grid_x = mx.expand_dims(grid_x, axis=-1)
+    grid_y = mx.expand_dims(grid_y, axis=-1)
+    
+    # Add grid offsets to predictions
+    pred_xy_abs = (pred_xy + mx.stack([grid_x, grid_y], axis=-1)) / S
+    
+    # Scale width and height by anchors
+    pred_wh_abs = pred_wh * model.anchors
+
+    # Combine predictions for IOU calculation
+    pred_boxes_abs = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
+
+    # Compute IOUs between predicted boxes and target
     ious = mx.stack(
-        [
-            compute_iou(pred_boxes[..., i, :4], target_boxes[..., 0, :])
-            for i in range(B)
-        ],
-        axis=-1,
+        [compute_iou(pred_boxes_abs[..., i, :], target_boxes[..., 0, :])
+         for i in range(B)],
+        axis=-1
     )  # [batch, S, S, B]
 
-    # Find best box for each target
+    # Find best anchor box for each target
     best_box_ious = mx.max(ious, axis=-1, keepdims=True)  # [batch, S, S, 1]
-    best_box_mask = ious >= best_box_ious  # [batch, S, S, B]
+    best_box_mask = (ious >= best_box_ious) * target_obj  # [batch, S, S, B]
+    best_box_mask = mx.expand_dims(best_box_mask, axis=-1)  # [batch, S, S, B, 1]
 
-    # Coordinate loss (only for cells with objects)
-    coord_mask = mx.repeat(target_obj, B, axis=-1)  # [batch, S, S, B]
-    coord_mask = coord_mask * best_box_mask  # [batch, S, S, B]
-
-    # Compute coordinate losses separately
+    # Coordinate loss (only for responsible boxes)
     xy_loss = mx.sum(
-        (pred_boxes[..., :2] - target_boxes[..., :2]) ** 2,
-        axis=-1,
-    )  # [batch, S, S, B]
+        best_box_mask * (pred_xy - (target_boxes[..., :2] * S - mx.stack([grid_x, grid_y], axis=-1))) ** 2,
+        axis=(-1, -2)
+    )
 
     wh_loss = mx.sum(
-        (
-            mx.sqrt(mx.maximum(pred_boxes[..., 2:4], 1e-6))
-            - mx.sqrt(mx.maximum(target_boxes[..., 2:4], 1e-6))
-        )
-        ** 2,
-        axis=-1,
-    )  # [batch, S, S, B]
-
-    coord_loss = lambda_coord * coord_mask * (xy_loss + wh_loss)
+        best_box_mask * (
+            mx.log(pred_wh + 1e-6) - 
+            mx.log(target_boxes[..., 2:4] / model.anchors + 1e-6)
+        ) ** 2,
+        axis=(-1, -2)
+    )
 
     # Confidence loss
-    conf_mask = mx.repeat(target_obj, B, axis=-1)  # [batch, S, S, B]
+    conf_mask = best_box_mask[..., 0]  # [batch, S, S, B]
     noobj_mask = 1 - conf_mask  # [batch, S, S, B]
 
-    conf_loss = (
-        conf_mask * (pred_boxes[..., 4] - ious) ** 2  # Object confidence loss
-        + lambda_noobj
-        * noobj_mask
-        * pred_boxes[..., 4] ** 2  # No object confidence loss
+    conf_loss = mx.sum(
+        conf_mask * (pred_conf[..., 0] - ious) ** 2 +  # Object confidence loss
+        lambda_noobj * noobj_mask * pred_conf[..., 0] ** 2,  # No object confidence loss
+        axis=(-1)
     )
 
     # Class loss (only for cells with objects)
-    class_loss = target_obj[..., 0] * mx.sum(
-        (pred_classes - target_classes) ** 2, axis=-1
+    class_loss = mx.sum(
+        target_obj[..., 0] * mx.sum(
+            mx.softmax(pred_class, axis=-1) - target_class
+        ) ** 2,
+        axis=(-1)
     )
 
     # Compute total loss
     total_loss = mx.mean(
-        mx.sum(coord_loss, axis=-1) + mx.sum(conf_loss, axis=-1) + class_loss
+        lambda_coord * (xy_loss + wh_loss) + conf_loss + class_loss
     )
 
     return total_loss

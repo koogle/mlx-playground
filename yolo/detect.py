@@ -264,6 +264,41 @@ def draw_boxes_cv2(image, boxes, class_ids, scores):
     return image
 
 
+def visualize_features(features, window_name="Features"):
+    """Visualize feature maps from the model"""
+    # Convert features to numpy and take first sample from batch
+    conv6 = features['conv6'][0].numpy()  # Shape: [H, W, C]
+    conv7 = features['conv7'][0].numpy()
+    
+    # Calculate mean activation across channels
+    conv6_mean = np.mean(conv6, axis=-1)
+    conv7_mean = np.mean(conv7, axis=-1)
+    
+    # Normalize to [0, 255] for visualization
+    conv6_viz = ((conv6_mean - conv6_mean.min()) / (conv6_mean.max() - conv6_mean.min()) * 255).astype(np.uint8)
+    conv7_viz = ((conv7_mean - conv7_mean.min()) / (conv7_mean.max() - conv7_mean.min()) * 255).astype(np.uint8)
+    
+    # Resize for better visualization
+    conv6_viz = cv2.resize(conv6_viz, (224, 224), interpolation=cv2.INTER_NEAREST)
+    conv7_viz = cv2.resize(conv7_viz, (224, 224), interpolation=cv2.INTER_NEAREST)
+    
+    # Apply colormap for better visualization
+    conv6_viz = cv2.applyColorMap(conv6_viz, cv2.COLORMAP_JET)
+    conv7_viz = cv2.applyColorMap(conv7_viz, cv2.COLORMAP_JET)
+    
+    # Stack horizontally
+    viz = np.hstack([conv6_viz, conv7_viz])
+    
+    # Add labels
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(viz, 'Conv6', (50, 20), font, 0.7, (255, 255, 255), 2)
+    cv2.putText(viz, 'Conv7', (274, 20), font, 0.7, (255, 255, 255), 2)
+    
+    # Show in window
+    cv2.imshow(window_name, viz)
+    cv2.waitKey(1)
+
+
 def debug_show_preprocessed(image):
     """Show preprocessed image for debugging"""
     # Convert MLX array to numpy and denormalize
@@ -315,8 +350,9 @@ def main():
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         
-        # Create window
+        # Create windows
         cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
+        cv2.namedWindow("Feature Maps", cv2.WINDOW_NORMAL)
 
         last_process_time = 0
         process_interval = 0.5  # Process every 0.5 seconds
@@ -341,9 +377,12 @@ def main():
                     # Preprocess frame
                     image, orig_size = preprocess_image(frame.copy(), args=args)
                     
-                    # Run inference
-                    predictions = model(image)
+                    # Run inference with feature extraction
+                    predictions, features = model(image, return_features=True)
                     mx.eval(predictions)
+
+                    # Visualize feature maps
+                    visualize_features(features, "Feature Maps")
 
                     # Decode predictions
                     boxes, class_ids, scores = decode_predictions(
@@ -381,13 +420,19 @@ def main():
         # Process image
         print("Processing image...")
         image, orig_size = preprocess_image(args.image, args=args)
-        predictions = model(image)
+        
+        # Run inference with feature extraction
+        predictions, features = model(image, return_features=True)
 
         # Debug prints
-        print("Input image shape:", image.shape)
-        print("Raw predictions shape:", predictions.shape)
-        print("Max confidence:", float(mx.max(predictions[..., 4:5])))
-        print("Max class prob:", float(mx.max(predictions[..., 10:])))
+        if args.debug:
+            print("Input image shape:", image.shape)
+            print("Raw predictions shape:", predictions.shape)
+            print("Max confidence:", float(mx.max(predictions[..., 4:5])))
+            print("Max class prob:", float(mx.max(predictions[..., 10:])))
+
+        # Visualize feature maps
+        visualize_features(features, "Feature Maps")
 
         # Decode predictions
         boxes, class_ids, scores = decode_predictions(

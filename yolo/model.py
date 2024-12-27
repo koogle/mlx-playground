@@ -122,22 +122,28 @@ class YOLO(nn.Module):
         self.fc2 = nn.Linear(4096, S * S * (B * 5 + C))
         self.relu = nn.ReLU()
 
-    def __call__(self, x):
+    def __call__(self, x, return_features=False):
         # Get features from backbone
         x = self.backbone(x)
 
         # Detection head
-        x = self.relu(self.bn6(self.conv6(x)))
-        x = self.relu(self.bn7(self.conv7(x)))
+        conv6_features = self.relu(self.bn6(self.conv6(x)))
+        conv7_features = self.relu(self.bn7(self.conv7(conv6_features)))
 
         # Flatten and FC layers
-        x = self.flatten(x)
-        x = self.relu(self.fc1(x))
-        x = self.dropout(x)
+        x = self.flatten(conv7_features)
+        fc1_features = self.relu(self.fc1(x))
+        x = self.dropout(fc1_features)
         x = self.fc2(x)
 
         # Reshape to match grid format [batch, S, S, B*5 + C]
         batch_size = x.shape[0]
         x = mx.reshape(x, (batch_size, self.S, self.S, self.B * 5 + self.C))
 
+        if return_features:
+            return x, {
+                'conv6': conv6_features,
+                'conv7': conv7_features,
+                'fc1': fc1_features
+            }
         return x

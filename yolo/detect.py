@@ -397,8 +397,6 @@ def main():
 
                     # Run inference with feature extraction
                     predictions, features = model(image, return_features=True)
-                    mx.eval(predictions)
-
                     # Visualize feature maps if enabled
                     if args.show_features:
                         visualize_features(features, orig_size, "Feature Maps")

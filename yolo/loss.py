@@ -42,10 +42,10 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     pred = mx.reshape(predictions, (-1, S, S, B, 5 + C))
 
     # Split predictions
-    pred_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates
-    pred_wh = mx.exp(pred[..., 2:4])  # Width and height
-    pred_conf = mx.sigmoid(pred[..., 4:5])  # Object confidence
-    pred_class = pred[..., 5:]  # Class probabilities
+    pred_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates [batch, S, S, B, 2]
+    pred_wh = mx.exp(pred[..., 2:4])  # Width and height [batch, S, S, B, 2]
+    pred_conf = mx.sigmoid(pred[..., 4:5])  # Object confidence [batch, S, S, B, 1]
+    pred_class = pred[..., 5:]  # Class probabilities [batch, S, S, B, C]
 
     # Get target components
     target_boxes = targets[..., :4]  # [batch, S, S, 4]
@@ -56,21 +56,24 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     target_boxes = mx.expand_dims(target_boxes, axis=3)  # [batch, S, S, 1, 4]
     target_obj = mx.expand_dims(target_obj, axis=3)  # [batch, S, S, 1, 1]
 
-    # Create grid offsets
+    # Create grid offsets [S, S]
     grid_x = mx.arange(S, dtype=mx.float32)
     grid_y = mx.arange(S, dtype=mx.float32)
     grid_x, grid_y = mx.meshgrid(grid_x, grid_y)
-    grid_x = mx.expand_dims(mx.expand_dims(grid_x, axis=-1), axis=-1)  # [S, S, 1, 1]
-    grid_y = mx.expand_dims(mx.expand_dims(grid_y, axis=-1), axis=-1)  # [S, S, 1, 1]
     
-    # Add grid offsets to predictions
-    pred_xy_abs = (pred_xy + mx.stack([grid_x, grid_y], axis=-1)) / S  # [batch, S, S, B, 2]
+    # Reshape grid for broadcasting [1, S, S, 1, 2]
+    grid = mx.stack([grid_x, grid_y], axis=-1)  # [S, S, 2]
+    grid = mx.expand_dims(mx.expand_dims(grid, axis=0), axis=3)  # [1, S, S, 1, 2]
     
-    # Scale width and height by anchors
-    pred_wh_abs = pred_wh * model.anchors  # [batch, S, S, B, 2]
+    # Add grid offsets to predictions [batch, S, S, B, 2]
+    pred_xy_abs = (pred_xy + grid) / S
+    
+    # Scale width and height by anchors [batch, S, S, B, 2]
+    anchors = mx.reshape(model.anchors, (1, 1, 1, B, 2))  # [1, 1, 1, B, 2]
+    pred_wh_abs = pred_wh * anchors
 
-    # Combine predictions for IOU calculation
-    pred_boxes_abs = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)  # [batch, S, S, B, 4]
+    # Combine predictions for IOU calculation [batch, S, S, B, 4]
+    pred_boxes_abs = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
 
     # Compute IOUs between predicted boxes and target
     ious = mx.stack(
@@ -86,14 +89,14 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
 
     # Coordinate loss (only for responsible boxes)
     xy_loss = mx.sum(
-        best_box_mask * (pred_xy - (target_boxes[..., :2] * S - mx.stack([grid_x, grid_y], axis=-1))) ** 2,
+        best_box_mask * (pred_xy - (target_boxes[..., :2] * S - grid)) ** 2,
         axis=(-1, -2)
     )
 
     wh_loss = mx.sum(
         best_box_mask * (
             mx.log(pred_wh + 1e-6) - 
-            mx.log(target_boxes[..., 2:4] / model.anchors + 1e-6)
+            mx.log(target_boxes[..., 2:4] / anchors + 1e-6)
         ) ** 2,
         axis=(-1, -2)
     )

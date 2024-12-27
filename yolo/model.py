@@ -5,7 +5,7 @@ YOLOv2 Implementation with configurable backbone architecture.
 import mlx.core as mx
 import mlx.nn as nn
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
 
 @dataclass
@@ -53,8 +53,11 @@ class DarkNetBackbone(nn.Module):
     """
 
     def __init__(
-        self, config: List[ConvConfig], input_channels: int = 3, target_size: int = 7,
-        input_size: int = 448
+        self,
+        config: List[ConvConfig],
+        input_channels: int = 3,
+        target_size: int = 7,
+        input_size: int = 448,
     ):
         super().__init__()
         self.target_size = target_size
@@ -70,13 +73,12 @@ class DarkNetBackbone(nn.Module):
             self.layers.append(DarkNetBlock(in_channels, conv_config))
             in_channels = conv_config.out_channels
             curr_size = curr_size // conv_config.stride
-            print(f"Layer {i}: feature map size = {curr_size}x{curr_size}")
 
         # Add pooling if needed to reach target size
         if curr_size > target_size:
             pool_size = curr_size // target_size
             if pool_size > 1:
-                print(f"Adding max pooling layer: {pool_size}x{pool_size}")
+
                 self.layers.append(
                     nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
                 )
@@ -86,13 +88,10 @@ class DarkNetBackbone(nn.Module):
             setattr(self, f"block_{i}", layer)
 
     def __call__(self, x):
-        # Print input shape
-        print(f"Backbone input shape: {x.shape}")
-        
+
         # Pass through all layers
         for i, layer in enumerate(self.layers):
             x = layer(x)
-            print(f"Layer {i} output shape: {x.shape}")
 
         return x
 
@@ -178,26 +177,18 @@ class YOLO(nn.Module):
             and C class probabilities
         """
         batch_size = x.shape[0]
-        print(f"\nYOLO forward pass:")
-        print(f"Input shape: {x.shape}")
 
         # Backbone
         x = self.backbone(x)
-        print(f"Backbone output shape: {x.shape}")
 
         # Detection head
         x = self.detect1(x)
-        print(f"Detect1 output shape: {x.shape}")
         x = self.detect2(x)
-        print(f"Detect2 output shape: {x.shape}")
         x = self.conv_final(x)
-        print(f"Conv final output shape: {x.shape}")
 
         # Reshape to (batch_size, S, S, B * (5 + C))
         x = mx.transpose(x, (0, 2, 3, 1))
-        print(f"After transpose shape: {x.shape}")
         x = mx.reshape(x, (batch_size, self.S, self.S, self.B * (5 + self.C)))
-        print(f"Final output shape: {x.shape}")
 
         return x
 

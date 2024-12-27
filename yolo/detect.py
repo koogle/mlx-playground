@@ -26,37 +26,41 @@ def preprocess_image(image, size=448, args=None):
         # If OpenCV image (BGR), convert to RGB
         if len(image.shape) == 3 and image.shape[2] == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    
+
     if args and args.debug:
         print(f"Input image shape: {image.shape}")
         print(f"Input image dtype: {image.dtype}")
         print(f"Input image range: [{image.min()}, {image.max()}]")
-    
+
     # Store original size
     orig_size = image.shape[:2]  # (height, width)
-    
+
     # Resize image
     image = cv2.resize(image, (size, size))
-    
+
     # Convert to float and normalize
     image = image.astype(np.float32) / 255.0
-    
+
     # Add batch dimension
     image = np.expand_dims(image, axis=0)
-    
+
     # Convert to MLX array
     image = mx.array(image)
-    
+
     if args and args.debug:
         print(f"Preprocessed shape: {image.shape}")
         print(f"Preprocessed dtype: {image.dtype}")
         print(f"Preprocessed range: [{float(mx.min(image))}, {float(mx.max(image))}]")
-    
+
     return image, orig_size
 
 
 def decode_predictions(
-    predictions, confidence_threshold=0.1, class_threshold=0.1, nms_threshold=0.4, debug=False
+    predictions,
+    confidence_threshold=0.1,
+    class_threshold=0.1,
+    nms_threshold=0.4,
+    debug=False,
 ):
     """Decode YOLO predictions to bounding boxes"""
     S = 7  # Grid size
@@ -122,7 +126,9 @@ def decode_predictions(
                     print(f"  Class: {VOC_CLASSES[class_id]}")
                     print(f"  Box confidence: {float(confidence):.4f}")
                     print(f"  Class probability: {float(class_prob):.4f}")
-                    print(f"  Final score (confidence * class_prob): {float(score):.4f}")
+                    print(
+                        f"  Final score (confidence * class_prob): {float(score):.4f}"
+                    )
                     print(f"  Top 3 class probabilities:")
                     top_classes = [
                         int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]
@@ -212,10 +218,10 @@ def draw_boxes_cv2(image, boxes, class_ids, scores):
     """Draw bounding boxes on OpenCV image with improved visualization"""
     image = image.copy()
     height, width = image.shape[:2]
-    
+
     # Define a color map for different classes
     color_map = {}
-    
+
     for box, class_id, score in zip(boxes, class_ids, scores):
         # Convert normalized coordinates to pixel coordinates
         x1, y1, x2, y2 = box
@@ -223,24 +229,24 @@ def draw_boxes_cv2(image, boxes, class_ids, scores):
         y1 = int(y1 * height)
         x2 = int(x2 * width)
         y2 = int(y2 * height)
-        
+
         # Get color for this class
         if class_id not in color_map:
             color_map[class_id] = tuple(np.random.randint(0, 255, 3).tolist())
         color = color_map[class_id]
-        
+
         # Draw box with thickness relative to confidence
         thickness = max(2, int(score * 4))
         cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
-        
+
         # Prepare label with class name and score
         label = f"{VOC_CLASSES[class_id]}: {score:.2f}"
-        
+
         # Get label size for background rectangle
         (label_w, label_h), baseline = cv2.getTextSize(
             label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
         )
-        
+
         # Draw label background
         cv2.rectangle(
             image,
@@ -249,7 +255,7 @@ def draw_boxes_cv2(image, boxes, class_ids, scores):
             color,
             -1,
         )
-        
+
         # Draw label text in white
         cv2.putText(
             image,
@@ -260,40 +266,49 @@ def draw_boxes_cv2(image, boxes, class_ids, scores):
             (255, 255, 255),
             1,
         )
-    
+
     return image
 
 
 def visualize_features(features, window_name="Features"):
     """Visualize feature maps from the model"""
+
     # Convert features to numpy and take first sample from batch
-    conv6 = features['conv6'][0].numpy()  # Shape: [H, W, C]
-    conv7 = features['conv7'][0].numpy()
-    
+    conv6 = np.array(features["conv6"][0])  # Shape: [H, W, C]
+    conv7 = np.array(features["conv7"][0])  # Shape: [H, W, C]
+
     # Calculate mean activation across channels
     conv6_mean = np.mean(conv6, axis=-1)
     conv7_mean = np.mean(conv7, axis=-1)
-    
+
     # Normalize to [0, 255] for visualization
-    conv6_viz = ((conv6_mean - conv6_mean.min()) / (conv6_mean.max() - conv6_mean.min()) * 255).astype(np.uint8)
-    conv7_viz = ((conv7_mean - conv7_mean.min()) / (conv7_mean.max() - conv7_mean.min()) * 255).astype(np.uint8)
-    
+    conv6_viz = (
+        (conv6_mean - conv6_mean.min())
+        / (conv6_mean.max() - conv6_mean.min() + 1e-8)
+        * 255
+    ).astype(np.uint8)
+    conv7_viz = (
+        (conv7_mean - conv7_mean.min())
+        / (conv7_mean.max() - conv7_mean.min() + 1e-8)
+        * 255
+    ).astype(np.uint8)
+
     # Resize for better visualization
     conv6_viz = cv2.resize(conv6_viz, (224, 224), interpolation=cv2.INTER_NEAREST)
     conv7_viz = cv2.resize(conv7_viz, (224, 224), interpolation=cv2.INTER_NEAREST)
-    
+
     # Apply colormap for better visualization
     conv6_viz = cv2.applyColorMap(conv6_viz, cv2.COLORMAP_JET)
     conv7_viz = cv2.applyColorMap(conv7_viz, cv2.COLORMAP_JET)
-    
+
     # Stack horizontally
     viz = np.hstack([conv6_viz, conv7_viz])
-    
+
     # Add labels
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(viz, 'Conv6', (50, 20), font, 0.7, (255, 255, 255), 2)
-    cv2.putText(viz, 'Conv7', (274, 20), font, 0.7, (255, 255, 255), 2)
-    
+    cv2.putText(viz, "Conv6", (50, 20), font, 0.7, (255, 255, 255), 2)
+    cv2.putText(viz, "Conv7", (274, 20), font, 0.7, (255, 255, 255), 2)
+
     # Show in window
     cv2.imshow(window_name, viz)
     cv2.waitKey(1)
@@ -302,12 +317,12 @@ def visualize_features(features, window_name="Features"):
 def debug_show_preprocessed(image):
     """Show preprocessed image for debugging"""
     # Convert MLX array to numpy and denormalize
-    img = mx.astype(image[0], mx.uint8).astype(np.uint8) * 255
-    
+    img = mx.astype(image[0], mx.uint8).to_numpy().astype(np.uint8) * 255
+
     # Convert to RGB for display
     if img.shape[-1] == 3:  # If it has 3 channels
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    
+
     # Create a window and show the image
     cv2.imshow("Debug: Preprocessed", img)
     cv2.waitKey(1)
@@ -349,7 +364,7 @@ def main():
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        
+
         # Create windows
         cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
         cv2.namedWindow("Feature Maps", cv2.WINDOW_NORMAL)
@@ -373,10 +388,10 @@ def main():
                     if args.debug:
                         print("\nProcessing new frame...")
                         print(f"Frame shape: {frame.shape}")
-                    
+
                     # Preprocess frame
                     image, orig_size = preprocess_image(frame.copy(), args=args)
-                    
+
                     # Run inference with feature extraction
                     predictions, features = model(image, return_features=True)
                     mx.eval(predictions)
@@ -390,12 +405,12 @@ def main():
                         confidence_threshold=args.conf_thresh,
                         class_threshold=args.class_thresh,
                         nms_threshold=args.nms_thresh,
-                        debug=args.debug
+                        debug=args.debug,
                     )
 
                     # Draw results directly on the frame
                     frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
-                    
+
                     # Print detections
                     if len(boxes) > 0:
                         print(f"\nFound {len(boxes)} detections:")
@@ -403,7 +418,7 @@ def main():
                             print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
                     elif args.debug:
                         print("\nNo detections found")
-                    
+
                     last_process_time = current_time
 
                 # Show the frame with detections
@@ -420,7 +435,7 @@ def main():
         # Process image
         print("Processing image...")
         image, orig_size = preprocess_image(args.image, args=args)
-        
+
         # Run inference with feature extraction
         predictions, features = model(image, return_features=True)
 
@@ -436,7 +451,11 @@ def main():
 
         # Decode predictions
         boxes, class_ids, scores = decode_predictions(
-            predictions, args.conf_thresh, args.class_thresh, args.nms_thresh, debug=args.debug
+            predictions,
+            args.conf_thresh,
+            args.class_thresh,
+            args.nms_thresh,
+            debug=args.debug,
         )
 
         # Draw results

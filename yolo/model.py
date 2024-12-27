@@ -62,36 +62,47 @@ class DarkNetBackbone(nn.Module):
         super().__init__()
         self.target_size = target_size
         self.input_size = input_size
+        self.relu = nn.ReLU()
 
-        # Build backbone layers
-        self.layers = []
+        # Build backbone layers directly as attributes
         in_channels = input_channels
-
-        # Calculate feature map sizes through the network
         curr_size = input_size
+        
         for i, conv_config in enumerate(config):
-            self.layers.append(DarkNetBlock(in_channels, conv_config))
+            # Create conv and bn layers directly as attributes
+            setattr(self, f"conv_{i}", nn.Conv2d(
+                in_channels,
+                conv_config.out_channels,
+                kernel_size=conv_config.kernel_size,
+                stride=conv_config.stride,
+                padding=conv_config.padding,
+            ))
+            setattr(self, f"bn_{i}", nn.BatchNorm(conv_config.out_channels))
+            
             in_channels = conv_config.out_channels
             curr_size = curr_size // conv_config.stride
 
-        # Add pooling if needed to reach target size
+        self.num_layers = len(config)
+
+        # Add final pooling if needed
         if curr_size > target_size:
             pool_size = curr_size // target_size
             if pool_size > 1:
-
-                self.layers.append(
-                    nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
-                )
-
-        # Register layers as attributes
-        for i, layer in enumerate(self.layers):
-            setattr(self, f"block_{i}", layer)
+                self.pool = nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
+            else:
+                self.pool = None
+        else:
+            self.pool = None
 
     def __call__(self, x):
+        # Direct layer-to-layer connections
+        for i in range(self.num_layers):
+            conv = getattr(self, f"conv_{i}")
+            bn = getattr(self, f"bn_{i}")
+            x = self.relu(bn(conv(x)))
 
-        # Pass through all layers
-        for i, layer in enumerate(self.layers):
-            x = layer(x)
+        if self.pool is not None:
+            x = self.pool(x)
 
         return x
 

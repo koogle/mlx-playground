@@ -153,7 +153,7 @@ class YOLO(nn.Module):
         self.bn7 = nn.BatchNorm(1024)
 
         # Combine fine-grained features
-        self.conv_passthrough = nn.Conv2d(512, 64, kernel_size=1)
+        self.conv_passthrough = nn.Conv2d(256, 64, kernel_size=1)  # Changed input channels from 512 to 256
         self.bn_passthrough = nn.BatchNorm(64)
 
         # Final detection layer
@@ -164,7 +164,7 @@ class YOLO(nn.Module):
 
     def __call__(self, x, return_features=False):
         # Get features from backbone
-        x, route = self.backbone(x)
+        x, route = self.backbone(x)  # route is from conv4_3 (256 channels)
 
         # Detection head
         conv6_features = self.relu(self.bn6(self.conv6(x)))

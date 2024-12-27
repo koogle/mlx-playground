@@ -179,8 +179,8 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     
     # 4. Class prediction loss (only for cells with objects)
     class_loss = mx.sum(
-        target_obj * 
-        mx.sum((pred_class - mx.expand_dims(target_class, axis=3)) ** 2, axis=-1)
+        mx.expand_dims(target_obj[..., 0], axis=-1) * 
+        (pred_class - mx.expand_dims(target_class, axis=3)) ** 2
     )
     
     # Combine all losses with their respective weights

@@ -60,17 +60,17 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     grid_x = mx.arange(S, dtype=mx.float32)
     grid_y = mx.arange(S, dtype=mx.float32)
     grid_x, grid_y = mx.meshgrid(grid_x, grid_y)
-    grid_x = mx.expand_dims(grid_x, axis=-1)
-    grid_y = mx.expand_dims(grid_y, axis=-1)
+    grid_x = mx.expand_dims(mx.expand_dims(grid_x, axis=-1), axis=-1)  # [S, S, 1, 1]
+    grid_y = mx.expand_dims(mx.expand_dims(grid_y, axis=-1), axis=-1)  # [S, S, 1, 1]
     
     # Add grid offsets to predictions
-    pred_xy_abs = (pred_xy + mx.stack([grid_x, grid_y], axis=-1)) / S
+    pred_xy_abs = (pred_xy + mx.stack([grid_x, grid_y], axis=-1)) / S  # [batch, S, S, B, 2]
     
     # Scale width and height by anchors
-    pred_wh_abs = pred_wh * model.anchors
+    pred_wh_abs = pred_wh * model.anchors  # [batch, S, S, B, 2]
 
     # Combine predictions for IOU calculation
-    pred_boxes_abs = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
+    pred_boxes_abs = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)  # [batch, S, S, B, 4]
 
     # Compute IOUs between predicted boxes and target
     ious = mx.stack(
@@ -81,8 +81,8 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
 
     # Find best anchor box for each target
     best_box_ious = mx.max(ious, axis=-1, keepdims=True)  # [batch, S, S, 1]
-    best_box_mask = (ious >= best_box_ious) * target_obj  # [batch, S, S, B]
-    best_box_mask = mx.expand_dims(best_box_mask, axis=-1)  # [batch, S, S, B, 1]
+    best_box_mask = mx.expand_dims(ious >= best_box_ious, axis=-1)  # [batch, S, S, B, 1]
+    best_box_mask = best_box_mask * mx.expand_dims(target_obj, axis=3)  # [batch, S, S, B, 1]
 
     # Coordinate loss (only for responsible boxes)
     xy_loss = mx.sum(
@@ -99,26 +99,29 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     )
 
     # Confidence loss
-    conf_mask = best_box_mask[..., 0]  # [batch, S, S, B]
-    noobj_mask = 1 - conf_mask  # [batch, S, S, B]
+    obj_loss = mx.sum(
+        best_box_mask * (pred_conf - 1) ** 2,
+        axis=(-1, -2)
+    )
 
-    conf_loss = mx.sum(
-        conf_mask * (pred_conf[..., 0] - ious) ** 2 +  # Object confidence loss
-        lambda_noobj * noobj_mask * pred_conf[..., 0] ** 2,  # No object confidence loss
-        axis=(-1)
+    noobj_loss = mx.sum(
+        (1 - best_box_mask) * pred_conf ** 2,
+        axis=(-1, -2)
     )
 
     # Class loss (only for cells with objects)
     class_loss = mx.sum(
-        target_obj[..., 0] * mx.sum(
-            mx.softmax(pred_class, axis=-1) - target_class
-        ) ** 2,
-        axis=(-1)
+        mx.expand_dims(target_obj, axis=-1) * 
+        (pred_class - mx.expand_dims(target_class, axis=3)) ** 2,
+        axis=(-1, -2)
     )
 
-    # Compute total loss
-    total_loss = mx.mean(
-        lambda_coord * (xy_loss + wh_loss) + conf_loss + class_loss
+    # Combine losses with weights
+    total_loss = (
+        lambda_coord * (xy_loss + wh_loss) +
+        obj_loss +
+        lambda_noobj * noobj_loss +
+        class_loss
     )
 
-    return total_loss
+    return mx.mean(total_loss)

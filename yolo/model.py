@@ -137,6 +137,9 @@ class YOLO(nn.Module):
 
         self.backbone = DarkNet()
 
+        # Additional pooling for route features
+        self.route_pool = pool.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+
         # Passthrough layer - reorg the route tensor
         self.reorg = lambda x: mx.reshape(
             mx.transpose(
@@ -171,6 +174,7 @@ class YOLO(nn.Module):
         conv7_features = self.relu(self.bn7(self.conv7(conv6_features)))  # 1024 channels, 13x13
 
         # Process passthrough layer (space-to-depth)
+        route = self.route_pool(route)  # Additional pooling to match spatial dimensions
         route = self.relu(self.bn_passthrough(self.conv_passthrough(route)))  # 64 channels
         route = self.reorg(route)  # 256 channels (64*4), halved spatial dimensions
 

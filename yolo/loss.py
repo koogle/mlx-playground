@@ -31,7 +31,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
         targets: Ground truth [batch, S, S, 5 + C]
         model: YOLO model instance (needed for anchor boxes)
         lambda_coord: Weight for coordinate predictions
-        lambda_noobj: Weight for no object predictions
+        lambda_noobj: Weight for no object confidence predictions
     """
     batch_size = predictions.shape[0]
     S = predictions.shape[1]  # Grid size
@@ -85,7 +85,8 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     # Find best anchor box for each target
     best_box_ious = mx.max(ious, axis=-1, keepdims=True)  # [batch, S, S, 1]
     best_box_mask = mx.expand_dims(ious >= best_box_ious, axis=-1)  # [batch, S, S, B, 1]
-    best_box_mask = best_box_mask * mx.expand_dims(target_obj, axis=3)  # [batch, S, S, B, 1]
+    target_obj_expanded = mx.reshape(target_obj, (batch_size, S, S, 1, 1))  # [batch, S, S, 1, 1]
+    best_box_mask = best_box_mask * target_obj_expanded  # [batch, S, S, B, 1]
 
     # Coordinate loss (only for responsible boxes)
     xy_loss = mx.sum(
@@ -114,7 +115,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
 
     # Class loss (only for cells with objects)
     class_loss = mx.sum(
-        mx.expand_dims(target_obj, axis=-1) * 
+        target_obj_expanded * 
         (pred_class - mx.expand_dims(target_class, axis=3)) ** 2,
         axis=(-1, -2)
     )

@@ -5,7 +5,7 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 from model import YOLO
 from loss import yolo_loss
-from data.voc import VOCDataset, create_data_loader
+from data.voc import VOCDataset, create_data_loader, VOC_CLASSES
 import json
 
 
@@ -141,7 +141,7 @@ def train(
     data_dir: str,
     save_dir: str,
     num_epochs: int = 135,
-    batch_size: int = 8,
+    batch_size: int = 32,
     accumulation_steps: int = 2,
     learning_rate: float = 0.001,
     beta1: float = 0.9,
@@ -149,12 +149,31 @@ def train(
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
     max_grad_norm: float = 10.0,
-    grid_size: int = 14,
+    grid_size: int = 7,
 ):
-    """Train YOLO model"""
+    """Train YOLO model
+    
+    Args:
+        data_dir: Path to VOC dataset
+        save_dir: Directory to save checkpoints
+        num_epochs: Number of epochs to train
+        batch_size: Batch size
+        accumulation_steps: Number of gradient accumulation steps
+        learning_rate: Learning rate
+        beta1: Beta1 for Adam optimizer
+        beta2: Beta2 for Adam optimizer
+        epsilon: Epsilon for Adam optimizer
+        resume_epoch: Resume training from this epoch
+        max_grad_norm: Maximum gradient norm
+        grid_size: Grid size for YOLO (S x S grid)
+    """
     # Create model and optimizer
     print("Creating model...")
-    model = YOLO(S=grid_size, B=5, C=20)
+    model = YOLO(
+        S=grid_size,  # Use same grid_size for model
+        B=2,
+        C=len(VOC_CLASSES)
+    )
 
     optimizer = optim.Adam(
         learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
@@ -177,7 +196,11 @@ def train(
     # Load dataset with augmentation
     print("Loading dataset...")
     train_dataset = VOCDataset(
-        data_dir, year="2012", image_set="train", augment=True, grid_size=grid_size
+        data_dir=data_dir,
+        year="2012",
+        image_set="train",
+        augment=True,
+        grid_size=grid_size
     )
     train_loader = create_data_loader(
         train_dataset, batch_size=batch_size, shuffle=True
@@ -302,6 +325,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-grad-norm", type=float, default=10.0, help="Maximum gradient norm"
     )
+    parser.add_argument(
+        "--grid-size",
+        type=int,
+        default=7,
+        help="Grid size for YOLO (S x S grid)",
+    )
     args = parser.parse_args()
 
     config = {
@@ -316,6 +345,7 @@ if __name__ == "__main__":
         "epsilon": args.epsilon,
         "resume_epoch": args.resume_epoch,
         "max_grad_norm": args.max_grad_norm,
+        "grid_size": args.grid_size,
     }
 
     train(**config)

@@ -90,7 +90,7 @@ def validate_inputs(predictions, targets, model):
         )
 
 
-def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
+def yolo_loss(predictions, targets, model, lambda_coord=2.0, lambda_noobj=0.1):
     """
     Compute YOLOv2 loss with anchor boxes.
     
@@ -104,8 +104,8 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
         predictions: Model predictions [batch, S, S, B*(5 + C)]
         targets: Ground truth [batch, S, S, 5 + C]
         model: YOLO model instance (needed for anchor boxes)
-        lambda_coord: Weight for coordinate predictions (default: 5.0)
-        lambda_noobj: Weight for no-object confidence predictions (default: 0.5)
+        lambda_coord: Weight for coordinate predictions (default: 2.0)
+        lambda_noobj: Weight for no-object confidence predictions (default: 0.1)
         
     Returns:
         Total loss (scalar), averaged over batch
@@ -159,18 +159,15 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     num_responsible = mx.sum(responsible_mask) + 1e-6
     
     # 1. Coordinate loss (only for responsible boxes)
-    # Simpler scale factor based on target box size
-    xy_scale = mx.sqrt(2 - target_boxes[..., 2:4])  # Less aggressive scaling
-    
     # XY loss (normalized by grid size)
     xy_loss = mx.sum(
-        responsible_mask * xy_scale *
+        responsible_mask *
         (pred_xy - (target_boxes[..., :2] * S - grid)) ** 2
     ) / (num_responsible * S)
     
-    # WH loss (normalized and using better scale)
+    # WH loss (normalized and using sqrt)
     wh_loss = mx.sum(
-        responsible_mask * xy_scale *
+        responsible_mask *
         (mx.sqrt(pred_wh + 1e-6) - mx.sqrt(target_boxes[..., 2:4] / anchors + 1e-6)) ** 2
     ) / num_responsible
     
@@ -191,12 +188,11 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     ) / num_responsible
     
     # Combine all losses with their respective weights
-    # Scale down coordinate loss weight since we're using better normalization
     total_loss = (
-        (lambda_coord * 0.5) * (xy_loss + wh_loss) +  # Coordinate loss (scaled down)
-        obj_loss +                                     # Object confidence loss
-        lambda_noobj * noobj_loss +                   # No-object confidence loss
-        class_loss                                    # Class prediction loss
+        lambda_coord * (xy_loss + wh_loss) +  # Coordinate loss
+        2.0 * obj_loss +                      # Boost object confidence loss
+        lambda_noobj * noobj_loss +           # No-object confidence loss
+        class_loss                            # Class prediction loss
     )
     
     return total_loss

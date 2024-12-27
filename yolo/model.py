@@ -102,6 +102,17 @@ class DarkNet19(nn.Module):
         self.conv6_5 = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
         self.bn6_5 = nn.BatchNorm(1024)
 
+        # Calculate final feature map size and add pooling if needed
+        curr_size = 14  # Size after all conv layers
+        if curr_size > target_size:
+            pool_size = curr_size // target_size
+            if pool_size > 1:
+                self.final_pool = nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
+            else:
+                self.final_pool = None
+        else:
+            self.final_pool = None
+
     def __call__(self, x):
         # Initial conv
         x = self.relu(self.bn1(self.conv1(x)))  # 448 -> 448
@@ -138,12 +149,9 @@ class DarkNet19(nn.Module):
         x = self.relu(self.bn6_4(self.conv6_4(x)))
         x = self.relu(self.bn6_5(self.conv6_5(x)))  # 14 -> 14
 
-        # Add final pooling if needed to reach target size
-        curr_size = x.shape[2]  # Assuming square feature maps
-        if curr_size > self.target_size:
-            pool_size = curr_size // self.target_size
-            if pool_size > 1:
-                x = nn.max_pool2d(x, kernel_size=pool_size, stride=pool_size)
+        # Apply final pooling if needed
+        if self.final_pool is not None:
+            x = self.final_pool(x)
 
         return x
 

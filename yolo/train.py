@@ -17,15 +17,30 @@ def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
     try:
         save_path = os.path.join(save_dir, f"yolo_epoch_{epoch}.npz")
         model.save_weights(save_path)
-        print(f"Successfully saved model to {save_path}")
+        print(f"Successfully saved model weights to {save_path}")
     except Exception as e:
-        print(f"Error saving model state: {str(e)}")
+        print(f"Error saving model weights: {str(e)}")
+        raise
+
+    # Save model config separately
+    try:
+        config_path = os.path.join(save_dir, f"yolo_config_{epoch}.json")
+        config = {
+            "S": model.S,
+            "B": model.B,
+            "C": model.C,
+            "anchors": model.anchors.tolist()
+        }
+        with open(config_path, "w") as f:
+            json.dump(config, f)
+        print(f"Successfully saved model config to {config_path}")
+    except Exception as e:
+        print(f"Error saving model config: {str(e)}")
         raise
 
     # Save optimizer state
     try:
         save_path = os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz")
-        # Only save the learning rate and step count
         save_dict = {
             "learning_rate": mx.array(optimizer.learning_rate, dtype=mx.float32),
             "step": mx.array(optimizer.state.get("step", 0), dtype=mx.int32),
@@ -40,6 +55,7 @@ def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
     info = {
         "epoch": epoch,
         "loss": loss,
+        "model_config": config
     }
     info_path = os.path.join(save_dir, f"info_epoch_{epoch}.json")
     with open(info_path, "w") as f:
@@ -50,8 +66,23 @@ def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
 def load_checkpoint(model: YOLO, optimizer, checkpoint_dir, epoch):
     """Load model checkpoint"""
     try:
+        # Load and verify model config
+        config_path = os.path.join(checkpoint_dir, f"yolo_config_{epoch}.json")
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        
+        if (config["S"] != model.S or config["B"] != model.B or 
+            config["C"] != model.C):
+            raise ValueError(
+                f"Model config mismatch. Checkpoint has S={config['S']}, "
+                f"B={config['B']}, C={config['C']}, but model has S={model.S}, "
+                f"B={model.B}, C={model.C}"
+            )
+
+        # Load model weights
         model_path = os.path.join(checkpoint_dir, f"yolo_epoch_{epoch}.npz")
         model.load_weights(model_path)
+        print(f"Successfully loaded model weights from {model_path}")
 
         # Load optimizer state
         optimizer_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
@@ -189,7 +220,11 @@ def train(
             else:
                 # Add gradients element-wise while maintaining dictionary structure
                 accumulated_grads = {
-                    k: accumulated_grads[k] + gradients[k] if isinstance(gradients[k], mx.array) else gradients[k]
+                    k: (
+                        accumulated_grads[k] + gradients[k]
+                        if isinstance(gradients[k], mx.array)
+                        else gradients[k]
+                    )
                     for k in gradients.keys()
                 }
 
@@ -202,7 +237,7 @@ def train(
                 # Add the accumulated loss (already normalized by accumulation_steps)
                 epoch_loss += accumulated_loss.item()
                 batch_count += 1
-                
+
                 if batch_count % 10 == 0:
                     current_avg_loss = accumulated_loss.item()  # Already normalized
                     print(

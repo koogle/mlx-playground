@@ -113,7 +113,7 @@ class YOLO(nn.Module):
     and C class probabilities
     """
 
-    def __init__(self, S=13, B=5, C=20):
+    def __init__(self, S=14, B=5, C=20):
         """
         Args:
             S: Grid size (S x S)
@@ -127,13 +127,15 @@ class YOLO(nn.Module):
 
         # Pre-computed anchor boxes from k-means clustering (normalized)
         # These values are from the YOLOv2 paper for VOC dataset
-        self.anchors = mx.array([
-            [1.08, 1.19],  # width, height
-            [3.42, 4.41],
-            [6.63, 11.38],
-            [9.42, 5.11],
-            [16.62, 10.52]
-        ])
+        self.anchors = mx.array(
+            [
+                [1.08, 1.19],  # width, height
+                [3.42, 4.41],
+                [6.63, 11.38],
+                [9.42, 5.11],
+                [16.62, 10.52],
+            ]
+        )
 
         self.backbone = DarkNet()
 
@@ -144,9 +146,9 @@ class YOLO(nn.Module):
         self.reorg = lambda x: mx.reshape(
             mx.transpose(
                 mx.reshape(x, (x.shape[0], x.shape[1], x.shape[2], 2, x.shape[3] // 2)),
-                (0, 1, 2, 4, 3)
+                (0, 1, 2, 4, 3),
             ),
-            (x.shape[0], x.shape[1] // 2, x.shape[2] // 2, x.shape[3] * 4)
+            (x.shape[0], x.shape[1] // 2, x.shape[2] // 2, x.shape[3] * 4),
         )
 
         # Detection layers
@@ -170,37 +172,41 @@ class YOLO(nn.Module):
     def __call__(self, x, return_features=False):
         # Get features from backbone
         x, route = self.backbone(x)  # route is from conv4_3 (256 channels, 52x52)
-        
+
         # Detection head
-        conv6_features = self.relu(self.bn6(self.conv6(x)))  # 1024 channels, 13x13
-        conv7_features = self.relu(self.bn7(self.conv7(conv6_features)))  # 1024 channels, 13x13
+        conv6_features = self.relu(self.bn6(self.conv6(x)))  # 1024 channels, 14x14
+        conv7_features = self.relu(
+            self.bn7(self.conv7(conv6_features))
+        )  # 1024 channels, 14x14
 
         # Process passthrough layer (space-to-depth)
         route = self.route_pool(route)  # Additional pooling to match spatial dimensions
-        route = self.relu(self.bn_passthrough(self.conv_passthrough(route)))  # 64 channels
+        route = self.relu(
+            self.bn_passthrough(self.conv_passthrough(route))
+        )  # 64 channels
         route = self.reorg(route)  # 256 channels (64*4), halved spatial dimensions
 
         # Concatenate passthrough features with conv7
-        x = mx.concatenate([route, conv7_features], axis=3)  # 1280 channels (256 + 1024)
+        x = mx.concatenate(
+            [route, conv7_features], axis=3
+        )  # 1280 channels (256 + 1024)
 
         # Final detection layer
-        x = self.conv_final(x)  # B * (5 + C) = 125 channels
+        x = self.conv_final(x)
 
         # Verify shape before reshape
         if x.shape != (1, self.S, self.S, self.B * (5 + self.C)):
-            print(f"Warning: Unexpected shape before reshape: {x.shape}, "
-                  f"expected (1,{self.S},{self.S},{self.B * (5 + self.C)})")
+            print(
+                f"Warning: Unexpected shape before reshape: {x.shape}, "
+                f"expected (1,{self.S},{self.S},{self.B * (5 + self.C)})"
+            )
 
         # Reshape output to [batch, S, S, B * (5 + C)]
         batch_size = x.shape[0]
         x = mx.reshape(x, (batch_size, self.S, self.S, self.B * (5 + self.C)))
 
         if return_features:
-            return x, {
-                'conv6': conv6_features,
-                'conv7': conv7_features,
-                'route': route
-            }
+            return x, {"conv6": conv6_features, "conv7": conv7_features, "route": route}
         return x
 
     def decode_predictions(self, pred):
@@ -214,29 +220,29 @@ class YOLO(nn.Module):
             class_probs: [batch, S, S, B, C] - class probabilities
         """
         batch_size = pred.shape[0]
-        
+
         # Reshape to [batch, S, S, B, 5 + C]
         pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5 + self.C))
-        
+
         # Split prediction into components
         box_xy = mx.sigmoid(pred[..., 0:2])  # tx, ty -> sigmoid for [0,1]
         box_wh = mx.exp(pred[..., 2:4])  # tw, th -> exp for scaling
         conf = mx.sigmoid(pred[..., 4:5])  # to -> sigmoid for [0,1]
         prob = mx.softmax(pred[..., 5:], axis=-1)  # class probabilities
-        
+
         # Add cell offsets to xy predictions
         grid_x = mx.arange(self.S, dtype=mx.float32)
         grid_y = mx.arange(self.S, dtype=mx.float32)
         grid_x, grid_y = mx.meshgrid(grid_x, grid_y)
         grid_x = mx.expand_dims(grid_x, axis=-1)
         grid_y = mx.expand_dims(grid_y, axis=-1)
-        
+
         box_xy = (box_xy + mx.stack([grid_x, grid_y], axis=-1)) / self.S
-        
+
         # Scale wh by anchors
         box_wh = box_wh * self.anchors
-        
+
         # Combine xy and wh
         boxes = mx.concatenate([box_xy, box_wh], axis=-1)
-        
+
         return boxes, conf, prob

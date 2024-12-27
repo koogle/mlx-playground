@@ -46,34 +46,37 @@ class DarkNetBackbone(nn.Module):
     Configurable DarkNet backbone
 
     Args:
-        config: List of ConvConfig objects defining the backbone architecture
-        input_channels: Number of input channels (default: 3 for RGB)
-        target_size: Target output size (e.g., 7 for 7x7 feature maps)
+        config: List[ConvConfig]: Layer configurations
+        input_channels: int: Number of input channels (default: 3 for RGB)
+        target_size: int: Target output size (e.g., 7 for 7x7 feature maps)
+        input_size: int: Input image size (default: 448 for YOLOv2)
     """
 
     def __init__(
-        self, config: List[ConvConfig], input_channels: int = 3, target_size: int = 7
+        self, config: List[ConvConfig], input_channels: int = 3, target_size: int = 7,
+        input_size: int = 448
     ):
         super().__init__()
         self.target_size = target_size
+        self.input_size = input_size
 
         # Build backbone layers
         self.layers = []
         in_channels = input_channels
 
+        # Calculate feature map sizes through the network
+        curr_size = input_size
         for i, conv_config in enumerate(config):
             self.layers.append(DarkNetBlock(in_channels, conv_config))
             in_channels = conv_config.out_channels
-
-        # Calculate final feature map size
-        curr_size = 224  # Assuming initial input size of 224x224
-        for conv_config in config:
             curr_size = curr_size // conv_config.stride
+            print(f"Layer {i}: feature map size = {curr_size}x{curr_size}")
 
         # Add pooling if needed to reach target size
-        if curr_size > self.target_size:
-            pool_size = curr_size // self.target_size
+        if curr_size > target_size:
+            pool_size = curr_size // target_size
             if pool_size > 1:
+                print(f"Adding max pooling layer: {pool_size}x{pool_size}")
                 self.layers.append(
                     nn.MaxPool2d(kernel_size=pool_size, stride=pool_size)
                 )
@@ -83,9 +86,13 @@ class DarkNetBackbone(nn.Module):
             setattr(self, f"block_{i}", layer)
 
     def __call__(self, x):
+        # Print input shape
+        print(f"Backbone input shape: {x.shape}")
+        
         # Pass through all layers
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             x = layer(x)
+            print(f"Layer {i} output shape: {x.shape}")
 
         return x
 
@@ -140,7 +147,7 @@ class YOLO(nn.Module):
 
         # Create backbone
         self.backbone = DarkNetBackbone(
-            config=backbone_config, input_channels=3, target_size=S
+            config=backbone_config, input_channels=3, target_size=S, input_size=448
         )
 
         # Detection head
@@ -171,18 +178,26 @@ class YOLO(nn.Module):
             and C class probabilities
         """
         batch_size = x.shape[0]
+        print(f"\nYOLO forward pass:")
+        print(f"Input shape: {x.shape}")
 
         # Backbone
-        x = self.backbone(x)  # SxSx1024
+        x = self.backbone(x)
+        print(f"Backbone output shape: {x.shape}")
 
         # Detection head
-        x = self.detect1(x)  # SxSx1024
-        x = self.detect2(x)  # SxSx1024
-        x = self.conv_final(x)  # SxSx(B*(5+C))
+        x = self.detect1(x)
+        print(f"Detect1 output shape: {x.shape}")
+        x = self.detect2(x)
+        print(f"Detect2 output shape: {x.shape}")
+        x = self.conv_final(x)
+        print(f"Conv final output shape: {x.shape}")
 
         # Reshape to (batch_size, S, S, B * (5 + C))
         x = mx.transpose(x, (0, 2, 3, 1))
+        print(f"After transpose shape: {x.shape}")
         x = mx.reshape(x, (batch_size, self.S, self.S, self.B * (5 + self.C)))
+        print(f"Final output shape: {x.shape}")
 
         return x
 

@@ -154,11 +154,12 @@ def train(
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
     max_grad_norm: float = 10.0,
+    grid_size: int = 7,
 ):
     """Train YOLO model"""
     # Create model and optimizer
     print("Creating model...")
-    model = YOLO()
+    model = YOLO(S=grid_size, B=5, C=20)
 
     optimizer = optim.Adam(
         learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
@@ -180,7 +181,7 @@ def train(
 
     # Load dataset with augmentation
     print("Loading dataset...")
-    train_dataset = VOCDataset(data_dir, year="2012", image_set="train", augment=True)
+    train_dataset = VOCDataset(data_dir, year="2012", image_set="train", augment=True, S=grid_size)
     train_loader = create_data_loader(
         train_dataset, batch_size=batch_size, shuffle=True
     )

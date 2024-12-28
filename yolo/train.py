@@ -166,7 +166,7 @@ def train_step(model, batch, optimizer):
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
 
     # Compute loss and gradients
-    (loss, components), grads = loss_and_grad_fn(images, targets)
+    (loss, components), grads = loss_and_grad_fn(model, images, targets)
 
     # Update model parameters
     optimizer.update(model, grads)

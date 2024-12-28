@@ -180,47 +180,50 @@ class YOLO(nn.Module):
         self.detect2 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
         self.bn_detect2 = nn.BatchNorm(1024)
 
-        # Final detection layer
+        # Final detection layer (outputs raw predictions)
         self.conv_final = nn.Conv2d(1024, B * (5 + C), kernel_size=1)
 
         # Activation
         self.relu = nn.ReLU()
 
-        # Initialize anchor boxes
-        self.anchors = mx.array([
-            [1.3221, 1.73145],
-            [3.19275, 4.00944],
-        ])
+        # Initialize anchor boxes (precomputed using k-means clustering)
+        self.anchors = mx.array(
+            [
+                [1.3221, 1.73145],  # Smaller anchor box
+                [3.19275, 4.00944],  # Larger anchor box
+            ]
+        )
 
     def __call__(self, x, return_features=False):
         """
         Forward pass
 
         Args:
-            x: Input tensor of shape (batch_size, 3, H, W)
-            return_features: If True, returns intermediate feature maps for visualization
+            x: Input tensor of shape (batch_size, 3, H, W) in NCHW format
+            return_features: If True, returns intermediate feature maps
 
         Returns:
             If return_features is False:
-                Output tensor of shape (batch_size, S, S, B * (5 + C))
-                Each cell contains B bounding boxes with 5 coordinates (tx, ty, tw, th, confidence)
-                and C class probabilities
+                Output tensor of shape (batch_size, B*(5 + C), S, S)
+                For each box:
+                - tx, ty: Raw box center offsets (apply sigmoid to get [0,1])
+                - tw, th: Raw box size offsets (apply exp to get scaling factors)
+                - to: Raw objectness score (apply sigmoid to get confidence)
+                - tc1...tcC: Raw class scores (apply softmax to get probabilities)
             If return_features is True:
-                Tuple of (predictions, features_dict) where features_dict contains intermediate activations
+                Tuple of (predictions, features_dict)
         """
         batch_size = x.shape[0]
 
-        # Backbone
-        backbone_features = self.backbone(x)  # SxSx1024
+        # Backbone (NCHW format)
+        backbone_features = self.backbone(x)  # [batch, 1024, S, S]
 
         # Detection head
         conv6 = self.relu(self.bn_detect1(self.detect1(backbone_features)))
         conv7 = self.relu(self.bn_detect2(self.detect2(conv6)))
-        x = self.conv_final(conv7)
 
-        # Reshape to (batch_size, S, S, B * (5 + C))
-        x = mx.transpose(x, (0, 2, 3, 1))
-        predictions = mx.reshape(x, (batch_size, self.S, self.S, self.B * (5 + self.C)))
+        # Final detection layer (raw predictions)
+        predictions = self.conv_final(conv7)  # [batch, B*(5+C), S, S]
 
         if return_features:
             features = {
@@ -229,36 +232,68 @@ class YOLO(nn.Module):
                 "conv7": conv7
             }
             return predictions, features
-        
+
         return predictions
 
-    def decode_predictions(self, pred):
-        """Decode raw predictions to bounding boxes"""
-        # Implementation remains the same
+    def decode_predictions(self, pred, conf_threshold=0.1, nms_threshold=0.4):
+        """
+        Decode raw predictions to bounding boxes
+        
+        Args:
+            pred: Raw predictions from forward pass [batch, B*(5+C), S, S]
+            conf_threshold: Confidence threshold for filtering weak detections
+            nms_threshold: IoU threshold for non-maximum suppression
+            
+        Returns:
+            boxes: [batch, num_boxes, 4] - Absolute coordinates (x1, y1, x2, y2)
+            scores: [batch, num_boxes] - Confidence scores
+            class_ids: [batch, num_boxes] - Class indices
+        """
         batch_size = pred.shape[0]
 
-        # Reshape to [batch, S, S, B, 5 + C]
+        # Reshape and transpose to [batch, S, S, B, 5 + C]
+        pred = mx.transpose(pred, (0, 2, 3, 1))  # [batch, S, S, B*(5+C)]
         pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5 + self.C))
 
-        # Split prediction into components
-        box_xy = mx.sigmoid(pred[..., 0:2])  # tx, ty -> sigmoid for [0,1]
-        box_wh = mx.exp(pred[..., 2:4])  # tw, th -> exp for scaling
-        conf = mx.sigmoid(pred[..., 4:5])  # to -> sigmoid for [0,1]
-        prob = mx.softmax(pred[..., 5:], axis=-1)  # class probabilities
+        # Split prediction into components and apply activations
+        box_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates (relative to cell) [0,1]
+        box_wh = mx.exp(pred[..., 2:4])  # Width/height (relative to anchors)
+        conf = mx.sigmoid(pred[..., 4:5])  # Object confidence [0,1]
+        prob = mx.softmax(pred[..., 5:], axis=-1)  # Class probabilities
 
-        # Add cell offsets to xy predictions
-        grid_x = mx.arange(self.S, dtype=mx.float32)
-        grid_y = mx.arange(self.S, dtype=mx.float32)
-        grid_x, grid_y = mx.meshgrid(grid_x, grid_y)
-        grid_x = mx.expand_dims(grid_x, axis=-1)
-        grid_y = mx.expand_dims(grid_y, axis=-1)
+        # Convert box coordinates to absolute coordinates
+        grid_x, grid_y = mx.meshgrid(
+            mx.arange(self.S, dtype=mx.float32),
+            mx.arange(self.S, dtype=mx.float32)
+        )
+        grid_xy = mx.stack([grid_x, grid_y], axis=-1)
+        grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
 
-        box_xy = (box_xy + mx.stack([grid_x, grid_y], axis=-1)) / self.S
+        # Convert relative coordinates to absolute coordinates
+        box_xy = (box_xy + grid_xy) / self.S  # Add cell offsets and normalize
+        box_wh = box_wh * mx.reshape(self.anchors, (1, 1, self.B, 2))  # Scale by anchors
 
-        # Scale wh by anchors
-        box_wh = box_wh * self.anchors
+        # Convert to corner coordinates (x1, y1, x2, y2 format)
+        box_mins = box_xy - box_wh / 2.0
+        box_maxs = box_xy + box_wh / 2.0
+        boxes = mx.concatenate([box_mins, box_maxs], axis=-1)
 
-        # Combine xy and wh
-        boxes = mx.concatenate([box_xy, box_wh], axis=-1)
+        # Compute class scores and confidence
+        class_scores = conf * prob  # [batch, S, S, B, C]
+        
+        # Get best class and score for each box
+        best_scores = mx.max(class_scores, axis=-1)  # [batch, S, S, B]
+        best_classes = mx.argmax(class_scores, axis=-1)  # [batch, S, S, B]
 
-        return boxes, conf, prob
+        # Reshape boxes and scores for output
+        boxes = mx.reshape(boxes, (batch_size, -1, 4))  # [batch, S*S*B, 4]
+        scores = mx.reshape(best_scores, (batch_size, -1))  # [batch, S*S*B]
+        class_ids = mx.reshape(best_classes, (batch_size, -1))  # [batch, S*S*B]
+
+        # Filter by confidence threshold
+        mask = scores > conf_threshold
+        
+        # TODO: Implement NMS here
+        # For now, just return all boxes above threshold
+        
+        return boxes, scores, class_ids

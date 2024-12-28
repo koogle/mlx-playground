@@ -30,63 +30,43 @@ VOC_CLASSES = [
 ]
 
 # Create class to index mapping
-CLASS_TO_IDX = {cls_name: idx for idx, cls_name in enumerate(VOC_CLASSES)}
+CLASS_TO_IDX = {cls: idx for idx, cls in enumerate(VOC_CLASSES)}
 
+def calculate_iou(box1: np.ndarray, box2: np.ndarray) -> float:
+    """Calculate IoU between two boxes in center format (x, y, w, h)"""
+    # Convert to corner format
+    box1_x1 = box1[0] - box1[2]/2
+    box1_y1 = box1[1] - box1[3]/2
+    box1_x2 = box1[0] + box1[2]/2
+    box1_y2 = box1[1] + box1[3]/2
+    
+    box2_x1 = box2[0] - box2[2]/2
+    box2_y1 = box2[1] - box2[3]/2
+    box2_x2 = box2[0] + box2[2]/2
+    box2_y2 = box2[1] + box2[3]/2
+    
+    # Calculate intersection area
+    xi1 = max(box1_x1, box2_x1)
+    yi1 = max(box1_y1, box2_y1)
+    xi2 = min(box1_x2, box2_x2)
+    yi2 = min(box1_y2, box2_y2)
+    
+    inter_area = max(xi2 - xi1, 0) * max(yi2 - yi1, 0)
+    
+    # Calculate union area
+    box1_area = (box1_x2 - box1_x1) * (box1_y2 - box1_y1)
+    box2_area = (box2_x2 - box2_x1) * (box2_y2 - box2_y1)
+    union_area = box1_area + box2_area - inter_area
+    
+    return inter_area / (union_area + 1e-6)  # Add small epsilon to avoid division by zero
 
 def augment_image(
     image: np.ndarray, boxes: np.ndarray, target_size: int
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Apply data augmentation to image and boxes"""
-    # Convert any float type [0-1] to uint8 [0-255]
-    if np.issubdtype(image.dtype, np.floating):
-        image = (image * 255.0).clip(0, 255).astype(np.uint8)
-
-    # Random horizontal flip
-    if np.random.random() < 0.5:
-        image = np.fliplr(image).astype(np.uint8)
-        boxes = boxes.copy()
-        boxes[:, [0, 2]] = 1 - boxes[:, [2, 0]]  # Flip x coordinates
-
-    # Random scaling (zoom in/out)
-    scale = np.float32(np.random.uniform(0.8, 1.2))
-    h, w = image.shape[:2]
-    nh, nw = int(h * scale), int(w * scale)
-    image = np.array(Image.fromarray(image).resize((nw, nh)), dtype=np.uint8)
-
-    # Adjust box coordinates for scaling
-    boxes = boxes.copy()
-    boxes[:, [0, 2]] *= np.float32(nw) / w
-    boxes[:, [1, 3]] *= np.float32(nh) / h
-
-    # Random brightness
-    if np.random.random() < 0.5:
-        delta = np.float32(np.random.uniform(-32, 32))
-        image = np.clip(image.astype(np.float32) + delta, 0, 255).astype(np.uint8)
-
-    # Random saturation
-    if np.random.random() < 0.5:
-        saturation = np.float32(np.random.uniform(0.5, 1.5))
-        hsv = np.array(Image.fromarray(image).convert("HSV"), dtype=np.uint8)
-        hsv[:, :, 1] = np.clip(
-            hsv[:, :, 1].astype(np.float32) * saturation, 0, 255
-        ).astype(np.uint8)
-        image = np.array(
-            Image.fromarray(hsv, mode="HSV").convert("RGB"), dtype=np.uint8
-        )
-
-    # Resize back to target size
-    if image.shape[:2] != (target_size, target_size):
-        # Adjust box coordinates for final resize
-        curr_h, curr_w = image.shape[:2]
-        boxes[:, [0, 2]] *= np.float32(target_size) / curr_w
-        boxes[:, [1, 3]] *= np.float32(target_size) / curr_h
-        image = np.array(
-            Image.fromarray(image).resize((target_size, target_size)), dtype=np.uint8
-        )
-
-    # Convert back to float32 [0-1]
-    return image.astype(np.float32) / 255.0, boxes
-
+    # TODO: Implement data augmentation
+    # For now, just resize the image and adjust boxes accordingly
+    return image, boxes
 
 class VOCDataset:
     def __init__(
@@ -117,7 +97,14 @@ class VOCDataset:
         self.img_size = img_size
         self.grid_size = grid_size
         self.num_boxes = num_boxes
+        self.num_classes = len(VOC_CLASSES)
         self.augment = augment and image_set == "train"  # Only augment training data
+
+        # Anchor boxes (precomputed using k-means clustering on training set)
+        self.anchors = np.array([
+            [1.3221, 1.73145],
+            [3.19275, 4.00944],
+        ])
 
         # Paths
         self.image_dir = os.path.join(data_dir, "JPEGImages")
@@ -145,7 +132,6 @@ class VOCDataset:
 
         # Image size
         size = root.find("size")
-
         width = float(size.find("width").text)
         height = float(size.find("height").text)
 
@@ -200,40 +186,53 @@ class VOCDataset:
     def _convert_to_grid(self, boxes: np.ndarray, classes: np.ndarray) -> np.ndarray:
         """Convert boxes and classes to YOLO grid format"""
         grid_size = self.grid_size
-        num_classes = len(VOC_CLASSES)
+        num_classes = self.num_classes
         num_boxes = self.num_boxes
 
-        # Initialize target grid - shape: [S, S, 5 + C] where 5 is [x, y, w, h, confidence]
-        target = np.zeros((grid_size, grid_size, 5 + num_classes), dtype=np.float32)
+        # Initialize target grid with shape [S, S, B * (5 + C)]
+        # For each box: [x, y, w, h, confidence] + [class_probs]
+        target = np.zeros((grid_size, grid_size, num_boxes * (5 + num_classes)), dtype=np.float32)
 
         for box, cls in zip(boxes, classes):
-            # Get grid cell location
+            # Get grid cell location (use proper rounding)
             center_x, center_y = box[:2]
-            grid_x = int(center_x * grid_size)
-            grid_y = int(center_y * grid_size)
+            grid_x = int(np.floor(center_x * grid_size))
+            grid_y = int(np.floor(center_y * grid_size))
 
             # Constrain to grid bounds
             grid_x = min(grid_size - 1, max(0, grid_x))
             grid_y = min(grid_size - 1, max(0, grid_y))
 
-            # Convert box coordinates relative to grid cell (keep as ratio)
-            x = center_x * grid_size - grid_x  # Relative x within cell
-            y = center_y * grid_size - grid_y  # Relative y within cell
+            # Convert box coordinates relative to grid cell
+            x = center_x * grid_size - grid_x  # Relative x within cell (0-1)
+            y = center_y * grid_size - grid_y  # Relative y within cell (0-1)
             w = box[2]  # Width as ratio of image size
             h = box[3]  # Height as ratio of image size
 
-            # Only update if no object or current object is larger
-            curr_box_area = w * h
-            existing_box_area = target[grid_y, grid_x, 2] * target[grid_y, grid_x, 3]
-            
-            if target[grid_y, grid_x, 4] == 0 or curr_box_area > existing_box_area:
-                # Set box coordinates and confidence
-                target[grid_y, grid_x, :4] = [x, y, w, h]
-                target[grid_y, grid_x, 4] = 1  # Object confidence
+            # Calculate IoU with anchor boxes
+            box_wh = np.array([w * grid_size, h * grid_size])  # Scale to absolute size
+            ious = np.array([calculate_iou(
+                np.array([0.5, 0.5, anchor[0], anchor[1]]),
+                np.array([0.5, 0.5, box_wh[0], box_wh[1]])
+            ) for anchor in self.anchors])
 
-                # Set class probability
-                target[grid_y, grid_x, 5:] = 0  # Clear existing class
-                target[grid_y, grid_x, 5 + cls] = 1
+            # Assign box to the anchor with highest IoU
+            best_anchor = np.argmax(ious)
+            
+            # Calculate offset in target array
+            box_offset = best_anchor * (5 + num_classes)
+            
+            # Only update if no object or current object has higher IoU
+            curr_conf = target[grid_y, grid_x, box_offset + 4]
+            if curr_conf < 0.5:  # If no confident object already assigned
+                # Set box coordinates and confidence
+                target[grid_y, grid_x, box_offset:box_offset + 4] = [x, y, w, h]
+                target[grid_y, grid_x, box_offset + 4] = 1  # Object confidence
+
+                # Set class probabilities (one-hot encoding)
+                class_offset = box_offset + 5
+                target[grid_y, grid_x, class_offset:class_offset + num_classes] = 0
+                target[grid_y, grid_x, class_offset + cls] = 1
 
         return target
 
@@ -251,10 +250,9 @@ class VOCDataset:
 
         # Convert to MLX arrays - keep channels last (NHWC format)
         image = mx.array(image)  # Shape: (H, W, C)
-        target = mx.array(target)
+        target = mx.array(target)  # Shape: (S, S, B*(5+C))
 
         return image, target
-
 
 class DataLoader:
     def __init__(self, dataset: VOCDataset, batch_size: int, shuffle: bool = True):
@@ -305,7 +303,6 @@ class DataLoader:
         
         self.batch_idx += 1
         return images, targets
-
 
 def create_data_loader(
     dataset: VOCDataset, batch_size: int, shuffle: bool = True

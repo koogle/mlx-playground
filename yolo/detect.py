@@ -68,7 +68,7 @@ def decode_predictions(
     C = len(VOC_CLASSES)  # Number of classes
 
     # The predictions are already in shape (batch_size, S, S, B * (5 + C))
-    # No need to reshape, just split the last dimension for each box
+    # For each box: [tx, ty, tw, th, conf] followed by C class probabilities
     boxes = []
     class_ids = []
     scores = []
@@ -78,17 +78,17 @@ def decode_predictions(
     # For each cell in the grid
     for i in range(S):
         for j in range(S):
-            # Get class probabilities (shared between boxes)
+            # Get class probabilities (comes after all box predictions)
             class_offset = B * 5
-            cell_class_logits = predictions[0, i, j, class_offset:class_offset + C]
+            cell_class_logits = predictions[0, i, j, class_offset: class_offset + C]
             cell_class_probs = mx.softmax(cell_class_logits)  # Apply softmax to class logits
 
             # For each box
             for b in range(B):
-                # Get box predictions
+                # Get box predictions (5 values: tx, ty, tw, th, conf)
                 box_offset = b * 5
-                box = predictions[0, i, j, box_offset:box_offset + 5]
-                
+                box = predictions[0, i, j, box_offset: box_offset + 5]
+
                 # Apply sigmoid to confidence score
                 confidence = mx.sigmoid(box[4])
 
@@ -111,7 +111,9 @@ def decode_predictions(
                 h = float(mx.exp(box[3]))  # exp for positive scaling
 
                 # Store predictions
-                boxes.append([x - w/2, y - h/2, x + w/2, y + h/2])  # Convert to corners
+                boxes.append(
+                    [x - w / 2, y - h / 2, x + w / 2, y + h / 2]
+                )  # Convert to corners
                 class_ids.append(class_id)
                 scores.append(float(confidence * class_prob))
                 confidences.append(float(confidence))
@@ -119,12 +121,15 @@ def decode_predictions(
 
                 if debug:
                     print(f"\nDetection in cell ({i}, {j}):")
+                    print(f"  Box: {b}")
+                    print(f"  Raw box values: {[float(v) for v in box]}")
                     print(f"  Class: {VOC_CLASSES[class_id]}")
                     print(f"  Box confidence: {float(confidence):.4f}")
                     print(f"  Class probability: {float(class_prob):.4f}")
                     print(
                         f"  Final score (confidence * class_prob): {float(confidence * class_prob):.4f}"
                     )
+                    print(f"  Box coordinates: x={x:.4f}, y={y:.4f}, w={w:.4f}, h={h:.4f}")
                     print(f"  Top 3 class probabilities:")
                     top_classes = [
                         int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]

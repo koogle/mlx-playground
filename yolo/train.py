@@ -131,13 +131,13 @@ def clip_gradients(gradients, max_norm: float = 10.0):
 def adjust_learning_rate(optimizer, epoch, initial_lr, num_epochs):
     """
     Adjust learning rate using warmup and cosine decay
-    
+
     Args:
         optimizer: The optimizer instance
         epoch: Current epoch number
         initial_lr: Initial learning rate
         num_epochs: Total number of epochs
-    
+
     Returns:
         Current learning rate
     """
@@ -155,25 +155,25 @@ def adjust_learning_rate(optimizer, epoch, initial_lr, num_epochs):
 def train_step(model, batch, optimizer):
     """Single training step"""
     images, targets = batch
-    
+
     # Define loss and gradient function
     def loss_fn(model, images, targets):
         predictions = model(images)
         loss, components = yolo_loss(predictions, targets, model)
         return loss, components
-    
+
     # Get value and grad function
-    loss_and_grad_fn = nn.value_and_grad(loss_fn, has_aux=True)
-    
+    loss_and_grad_fn = nn.value_and_grad(loss_fn)
+
     # Compute loss and gradients
     (loss, components), grads = loss_and_grad_fn(model, images, targets)
-    
+
     # Update model parameters
     optimizer.update(model, grads)
-    
+
     # Ensure updates are applied
     mx.eval(model.parameters(), optimizer.state)
-    
+
     return loss, components
 
 
@@ -230,7 +230,7 @@ def train(
     print("\nStarting training...")
     for epoch in range(start_epoch, num_epochs):
         model.train()
-        
+
         # Initialize metrics
         epoch_loss = 0
         coord_loss = 0
@@ -238,7 +238,7 @@ def train(
         class_loss = 0
         noobj_loss = 0
         num_batches = 0
-        
+
         start_time = time.time()
 
         # Adjust learning rate
@@ -248,31 +248,33 @@ def train(
         for batch in train_loader:
             # Training step
             loss, loss_components = train_step(model, batch, optimizer)
-            
+
             # Update metrics
             epoch_loss += loss.item()
-            coord_loss += loss_components['coord']
-            conf_loss += loss_components['conf']
-            class_loss += loss_components['class']
-            noobj_loss += loss_components['noobj']
+            coord_loss += loss_components["coord"]
+            conf_loss += loss_components["conf"]
+            class_loss += loss_components["class"]
+            noobj_loss += loss_components["noobj"]
             num_batches += 1
-            
+
             # Print batch progress
             if num_batches % 10 == 0:
-                print(f"Batch [{num_batches}], "
-                      f"Loss: {loss.item():.4f}, "
-                      f"Coord: {loss_components['coord']:.4f}, "
-                      f"Conf: {loss_components['conf']:.4f}, "
-                      f"Class: {loss_components['class']:.4f}, "
-                      f"NoObj: {loss_components['noobj']:.4f}")
-        
+                print(
+                    f"Batch [{num_batches}], "
+                    f"Loss: {loss.item():.4f}, "
+                    f"Coord: {loss_components['coord']:.4f}, "
+                    f"Conf: {loss_components['conf']:.4f}, "
+                    f"Class: {loss_components['class']:.4f}, "
+                    f"NoObj: {loss_components['noobj']:.4f}"
+                )
+
         # Calculate epoch metrics
         epoch_loss /= num_batches
         coord_loss /= num_batches
         conf_loss /= num_batches
         class_loss /= num_batches
         noobj_loss /= num_batches
-        
+
         # Print epoch summary
         time_taken = time.time() - start_time
         print(f"\nEpoch [{epoch+1}/{num_epochs}] Summary:")
@@ -282,7 +284,7 @@ def train(
         print(f"Conf Loss: {conf_loss:.4f}")
         print(f"Class Loss: {class_loss:.4f}")
         print(f"NoObj Loss: {noobj_loss:.4f}")
-        
+
         # Save checkpoint every 5 epochs
         if (epoch % 5 == 0) or (epoch == num_epochs - 1):
             save_checkpoint(model, optimizer, epoch + 1, epoch_loss, save_dir)

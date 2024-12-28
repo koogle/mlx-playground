@@ -63,13 +63,12 @@ def decode_predictions(
     debug=False,
 ):
     """Decode YOLO predictions to bounding boxes"""
-    S = 12  # Grid size
+    S = 7  # Grid size
     B = 2  # Boxes per cell
     C = 20  # Number of classes
 
-    # Reshape predictions
-    predictions = predictions.reshape(-1, S, S, B * 5 + C)
-
+    # The predictions are already in shape (batch_size, S, S, B * (5 + C))
+    # No need to reshape, just split the last dimension for each box
     boxes = []
     class_ids = []
     scores = []
@@ -79,13 +78,15 @@ def decode_predictions(
     # For each cell in the grid
     for i in range(S):
         for j in range(S):
-            # Get class probabilities
-            cell_class_probs = predictions[0, i, j, B * 5 :]
+            # Get class probabilities (shared between boxes)
+            class_offset = B * 5
+            cell_class_probs = predictions[0, i, j, class_offset:]
 
             # For each box
             for b in range(B):
                 # Get box predictions
-                box = predictions[0, i, j, b * 5 : (b + 1) * 5]
+                box_offset = b * 5
+                box = predictions[0, i, j, box_offset:box_offset + 5]
                 confidence = box[4]
 
                 # Skip if box confidence is too low

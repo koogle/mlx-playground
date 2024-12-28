@@ -192,33 +192,45 @@ class YOLO(nn.Module):
             [3.19275, 4.00944],
         ])
 
-    def __call__(self, x):
+    def __call__(self, x, return_features=False):
         """
         Forward pass
 
         Args:
             x: Input tensor of shape (batch_size, 3, H, W)
+            return_features: If True, returns intermediate feature maps for visualization
 
         Returns:
-            Output tensor of shape (batch_size, S, S, B * (5 + C))
-            Each cell contains B bounding boxes with 5 coordinates (tx, ty, tw, th, confidence)
-            and C class probabilities
+            If return_features is False:
+                Output tensor of shape (batch_size, S, S, B * (5 + C))
+                Each cell contains B bounding boxes with 5 coordinates (tx, ty, tw, th, confidence)
+                and C class probabilities
+            If return_features is True:
+                Tuple of (predictions, features_dict) where features_dict contains intermediate activations
         """
         batch_size = x.shape[0]
 
         # Backbone
-        x = self.backbone(x)  # SxSx1024
+        backbone_features = self.backbone(x)  # SxSx1024
 
         # Detection head
-        x = self.relu(self.bn_detect1(self.detect1(x)))
-        x = self.relu(self.bn_detect2(self.detect2(x)))
-        x = self.conv_final(x)
+        conv6 = self.relu(self.bn_detect1(self.detect1(backbone_features)))
+        conv7 = self.relu(self.bn_detect2(self.detect2(conv6)))
+        x = self.conv_final(conv7)
 
         # Reshape to (batch_size, S, S, B * (5 + C))
         x = mx.transpose(x, (0, 2, 3, 1))
-        x = mx.reshape(x, (batch_size, self.S, self.S, self.B * (5 + self.C)))
+        predictions = mx.reshape(x, (batch_size, self.S, self.S, self.B * (5 + self.C)))
 
-        return x
+        if return_features:
+            features = {
+                "backbone": backbone_features,
+                "conv6": conv6,
+                "conv7": conv7
+            }
+            return predictions, features
+        
+        return predictions
 
     def decode_predictions(self, pred):
         """Decode raw predictions to bounding boxes"""

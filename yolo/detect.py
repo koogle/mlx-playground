@@ -65,7 +65,7 @@ def decode_predictions(
     """Decode YOLO predictions to bounding boxes"""
     S = 7  # Grid size
     B = 2  # Boxes per cell
-    C = 20  # Number of classes
+    C = len(VOC_CLASSES)  # Number of classes
 
     # The predictions are already in shape (batch_size, S, S, B * (5 + C))
     # No need to reshape, just split the last dimension for each box
@@ -80,46 +80,41 @@ def decode_predictions(
         for j in range(S):
             # Get class probabilities (shared between boxes)
             class_offset = B * 5
-            cell_class_probs = predictions[0, i, j, class_offset:]
+            cell_class_logits = predictions[0, i, j, class_offset:class_offset + C]
+            cell_class_probs = mx.softmax(cell_class_logits)  # Apply softmax to class logits
 
             # For each box
             for b in range(B):
                 # Get box predictions
                 box_offset = b * 5
                 box = predictions[0, i, j, box_offset:box_offset + 5]
-                confidence = box[4]
+                
+                # Apply sigmoid to confidence score
+                confidence = mx.sigmoid(box[4])
 
                 # Skip if box confidence is too low
-                if confidence < confidence_threshold:
+                if float(confidence) < confidence_threshold:
                     continue
 
                 # Get class with maximum probability
-                class_id = int(mx.argmax(cell_class_probs))  # Convert to int
-                class_prob = cell_class_probs[class_id]
+                class_id = int(mx.argmax(cell_class_probs))
+                class_prob = float(cell_class_probs[class_id])
 
                 # Skip if class probability is too low
                 if class_prob < class_threshold:
                     continue
 
-                # Final score (still multiply for ranking in NMS)
-                score = confidence * class_prob
-
                 # Convert box coordinates
-                x = (box[0] + i) / S
-                y = (box[1] + j) / S
-                w = box[2]
-                h = box[3]
+                x = float((mx.sigmoid(box[0]) + j) / S)  # Add cell offset and normalize
+                y = float((mx.sigmoid(box[1]) + i) / S)  # Add cell offset and normalize
+                w = float(mx.exp(box[2]))  # exp for positive scaling
+                h = float(mx.exp(box[3]))  # exp for positive scaling
 
-                # Convert to corner format
-                x1 = x - w / 2
-                y1 = y - h / 2
-                x2 = x + w / 2
-                y2 = y + h / 2
-
-                boxes.append([x1, y1, x2, y2])
+                # Store predictions
+                boxes.append([x - w/2, y - h/2, x + w/2, y + h/2])  # Convert to corners
                 class_ids.append(class_id)
-                scores.append(score)
-                confidences.append(confidence)
+                scores.append(float(confidence * class_prob))
+                confidences.append(float(confidence))
                 class_probs.append(class_prob)
 
                 if debug:
@@ -128,7 +123,7 @@ def decode_predictions(
                     print(f"  Box confidence: {float(confidence):.4f}")
                     print(f"  Class probability: {float(class_prob):.4f}")
                     print(
-                        f"  Final score (confidence * class_prob): {float(score):.4f}"
+                        f"  Final score (confidence * class_prob): {float(confidence * class_prob):.4f}"
                     )
                     print(f"  Top 3 class probabilities:")
                     top_classes = [

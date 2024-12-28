@@ -171,9 +171,9 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     
     # 2. Object confidence loss (for cells with objects)
     # Calculate IoU between predicted and target boxes
-    ious = compute_box_iou(pred_boxes, targ_boxes)
+    ious = compute_box_iou(pred_boxes, targ_boxes)  # [batch, S, S, B]
     obj_loss = mx.sum(
-        obj_mask * (pred_conf - ious) ** 2
+        obj_mask * (pred_conf - mx.expand_dims(ious, axis=-1)) ** 2  # Add extra dim to match shape
     ) / num_objects
     
     # 3. No-object confidence loss (for cells without objects)

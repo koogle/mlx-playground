@@ -61,8 +61,8 @@ def validate_inputs(predictions, targets, model):
     Validate input shapes and values for the YOLO loss function.
     
     Args:
-        predictions: Model predictions [batch, S, S, B*(5 + C)]
-        targets: Ground truth targets [batch, S, S, B*(5 + C)]
+        predictions: Model predictions [batch, B*(5 + C), S, S] in NCHW format
+        targets: Ground truth targets [batch, S, S, B*(5 + C)] in NHWC format
         model: YOLO model instance
     
     Raises:
@@ -74,7 +74,7 @@ def validate_inputs(predictions, targets, model):
     if len(targets.shape) != 4:
         raise ValueError(f"Targets must have 4 dimensions, got {len(targets.shape)}")
     
-    batch_size, S, _, channels = predictions.shape
+    batch_size, _, S, channels = predictions.shape
     expected_channels = model.B * (5 + model.C)
     
     if channels != expected_channels:
@@ -83,9 +83,9 @@ def validate_inputs(predictions, targets, model):
             f"Check model.B ({model.B}) and model.C ({model.C})"
         )
     
-    if targets.shape != predictions.shape:
+    if targets.shape != (batch_size, S, S, expected_channels):
         raise ValueError(
-            f"Targets shape mismatch. Expected {predictions.shape}, got {targets.shape}"
+            f"Targets shape mismatch. Expected {(batch_size, S, S, expected_channels)}, got {targets.shape}"
         )
 
 
@@ -100,54 +100,61 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     4. Class prediction loss for boxes with objects
     
     Args:
-        predictions: Model predictions [batch, S, S, B*(5 + C)]
-        targets: Ground truth targets [batch, S, S, B*(5 + C)]
+        predictions: Model predictions [batch, B*(5+C), S, S] in NCHW format
+        targets: Ground truth targets [batch, S, S, B*(5+C)] in NHWC format
         model: YOLO model instance
         lambda_coord: Weight for coordinate predictions (default: 5.0)
         lambda_noobj: Weight for no-object confidence predictions (default: 0.5)
         
     Returns:
-        Total loss (scalar), averaged over batch
+        Total loss (scalar), dict of loss components
     """
     # Validate inputs
     validate_inputs(predictions, targets, model)
     
     # Extract dimensions
     batch_size = predictions.shape[0]
-    S = predictions.shape[1]  # Grid size
+    S = model.S  # Grid size
     B = model.B  # Number of boxes per cell
     C = model.C  # Number of classes
     
+    # Convert predictions from NCHW to NHWC format
+    predictions = mx.transpose(predictions, (0, 2, 3, 1))  # [batch, S, S, B*(5+C)]
+    
     # Reshape predictions and targets to [batch, S, S, B, 5 + C]
-    pred = mx.reshape(predictions, (-1, S, S, B, 5 + C))
-    targ = mx.reshape(targets, (-1, S, S, B, 5 + C))
+    predictions = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
+    targets = mx.reshape(targets, (batch_size, S, S, B, 5 + C))
     
-    # Split predictions into components
-    pred_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates [batch, S, S, B, 2]
-    pred_wh = pred[..., 2:4]  # Width/height (raw)
-    pred_conf = mx.sigmoid(pred[..., 4:5])  # Object confidence [batch, S, S, B, 1]
-    pred_class = mx.softmax(pred[..., 5:], axis=-1)  # Class probabilities [batch, S, S, B, C]
+    # Extract components from predictions
+    pred_xy = mx.sigmoid(predictions[..., 0:2])  # Center coordinates (relative to cell)
+    pred_wh = predictions[..., 2:4]  # Width/height (relative to anchors)
+    pred_conf = mx.sigmoid(predictions[..., 4:5])  # Object confidence
+    pred_class = predictions[..., 5:]  # Class predictions
     
-    # Split targets into components
-    targ_xy = targ[..., 0:2]  # Center coordinates [batch, S, S, B, 2]
-    targ_wh = targ[..., 2:4]  # Width/height
-    targ_conf = targ[..., 4:5]  # Object confidence [batch, S, S, B, 1]
-    targ_class = targ[..., 5:]  # Class probabilities [batch, S, S, B, C]
+    # Extract components from targets
+    targ_xy = targets[..., 0:2]  # Center coordinates (relative to cell)
+    targ_wh = targets[..., 2:4]  # Width/height (relative to anchors)
+    targ_conf = targets[..., 4:5]  # Object confidence
+    targ_class = targets[..., 5:]  # Class labels
     
-    # Create grid offsets [1, S, S, 1, 2]
-    grid_x, grid_y = mx.meshgrid(mx.arange(S, dtype=mx.float32), 
-                                mx.arange(S, dtype=mx.float32))
-    grid = mx.stack([grid_x, grid_y], axis=-1)  # [S, S, 2]
-    grid = mx.expand_dims(mx.expand_dims(grid, axis=0), axis=3)  # [1, S, S, 1, 2]
+    # Convert relative coordinates to absolute coordinates
+    anchors = mx.reshape(model.anchors, (1, 1, 1, B, 2))
     
-    # Convert predictions to absolute coordinates
-    pred_xy_abs = (pred_xy + grid) / S  # Add grid offsets and normalize
-    anchors = mx.reshape(model.anchors, (1, 1, 1, B, 2))  # [1, 1, 1, B, 2]
-    pred_wh_abs = mx.exp(pred_wh) * anchors  # Scale by anchors
+    # Convert predicted boxes to absolute coordinates
+    grid_x, grid_y = mx.meshgrid(
+        mx.arange(S, dtype=mx.float32),
+        mx.arange(S, dtype=mx.float32)
+    )
+    grid_xy = mx.stack([grid_x, grid_y], axis=-1)
+    grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
+    
+    # Convert to absolute coordinates
+    pred_xy_abs = (pred_xy + grid_xy) / S
+    pred_wh_abs = mx.exp(pred_wh) * anchors
     pred_boxes = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
     
-    # Convert targets to absolute coordinates
-    targ_xy_abs = (targ_xy + grid) / S
+    # Convert target boxes to absolute coordinates
+    targ_xy_abs = (targ_xy + grid_xy) / S
     targ_wh_abs = targ_wh * anchors
     targ_boxes = mx.concatenate([targ_xy_abs, targ_wh_abs], axis=-1)
     
@@ -194,4 +201,12 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
         class_loss                            # Class prediction loss
     )
     
-    return total_loss
+    # Return loss components for logging
+    loss_components = {
+        'coord': (xy_loss + wh_loss).item(),
+        'conf': obj_loss.item(),
+        'noobj': noobj_loss.item(),
+        'class': class_loss.item()
+    }
+    
+    return total_loss, loss_components

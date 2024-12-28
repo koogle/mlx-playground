@@ -152,6 +152,31 @@ def adjust_learning_rate(optimizer, epoch, initial_lr, num_epochs):
     return optimizer.learning_rate
 
 
+def train_step(model, batch, optimizer):
+    """Single training step"""
+    images, targets = batch
+    
+    # Define loss and gradient function
+    def loss_fn(model, images, targets):
+        predictions = model(images)
+        loss, components = yolo_loss(predictions, targets, model)
+        return loss, components
+    
+    # Get value and grad function
+    loss_and_grad_fn = nn.value_and_grad(loss_fn, has_aux=True)
+    
+    # Compute loss and gradients
+    (loss, components), grads = loss_and_grad_fn(model, images, targets)
+    
+    # Update model parameters
+    optimizer.update(model, grads)
+    
+    # Ensure updates are applied
+    mx.eval(model.parameters(), optimizer.state)
+    
+    return loss, components
+
+
 def train(
     data_dir: str,
     save_dir: str,
@@ -166,24 +191,8 @@ def train(
     max_grad_norm: float = 5.0,
     grid_size: int = 7,
 ):
-    """Train YOLO model
-
-    Args:
-        data_dir: Path to VOC dataset
-        save_dir: Directory to save checkpoints
-        num_epochs: Number of epochs to train
-        batch_size: Batch size
-        accumulation_steps: Number of gradient accumulation steps
-        learning_rate: Learning rate
-        beta1: Beta1 for Adam optimizer
-        beta2: Beta2 for Adam optimizer
-        epsilon: Epsilon for Adam optimizer
-        resume_epoch: Resume training from this epoch
-        max_grad_norm: Maximum gradient norm
-        grid_size: Grid size for YOLO (S x S grid)
-    """
+    """Train YOLO model"""
     # Create model and optimizer
-    print("Creating model...")
     model = YOLO(S=grid_size, B=2, C=len(VOC_CLASSES))  # Use same grid_size for model
 
     optimizer = optim.Adam(
@@ -236,21 +245,9 @@ def train(
         current_lr = adjust_learning_rate(optimizer, epoch, learning_rate, num_epochs)
         print(f"\nEpoch [{epoch+1}/{num_epochs}], Learning Rate: {current_lr:.6f}")
 
-        for images, targets in train_loader:
-            # Forward pass
-            predictions = model(images)
-            loss, loss_components = yolo_loss(predictions, targets, model)
-            
-            # Backward pass
-            model.zero_grad()
-            loss.backward()
-            mx.eval(model.grad_arrays)
-            
-            # Gradient clipping (less aggressive)
-            mx.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
-            
-            optimizer.step()
-            mx.eval(model.arrays)
+        for batch in train_loader:
+            # Training step
+            loss, loss_components = train_step(model, batch, optimizer)
             
             # Update metrics
             epoch_loss += loss.item()

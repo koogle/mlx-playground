@@ -242,13 +242,15 @@ def train(
             loss, loss_components = yolo_loss(predictions, targets, model)
             
             # Backward pass
-            optimizer.zero_grad()
+            model.zero_grad()
             loss.backward()
+            mx.eval(model.grad_arrays)
             
             # Gradient clipping (less aggressive)
             mx.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
             
             optimizer.step()
+            mx.eval(model.arrays)
             
             # Update metrics
             epoch_loss += loss.item()

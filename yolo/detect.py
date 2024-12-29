@@ -17,7 +17,11 @@ def load_model(checkpoint_path):
 
 
 def preprocess_image(image, size=448, args=None):
-    """Preprocess image for YOLO model"""
+    """
+    Preprocess image for YOLO model
+    
+    Returns image in NCHW format
+    """
     if isinstance(image, str):
         # Load image from file
         image = Image.open(image).convert("RGB")
@@ -41,8 +45,11 @@ def preprocess_image(image, size=448, args=None):
     # Convert to float and normalize
     image = image.astype(np.float32) / 255.0
 
+    # Convert to NCHW format
+    image = np.transpose(image, (2, 0, 1))  # HWC -> CHW
+    
     # Add batch dimension
-    image = np.expand_dims(image, axis=0)
+    image = np.expand_dims(image, axis=0)  # CHW -> NCHW
 
     # Convert to MLX array
     image = mx.array(image)
@@ -62,13 +69,23 @@ def decode_predictions(
     nms_threshold=0.4,
     debug=False,
 ):
-    """Decode YOLO predictions to bounding boxes"""
+    """
+    Decode YOLO predictions to bounding boxes
+    
+    Args:
+        predictions: Model predictions [batch, B*(5+C), S, S] in NCHW format
+        confidence_threshold: Minimum confidence score for detection
+        class_threshold: Minimum class probability
+        nms_threshold: IoU threshold for NMS
+        debug: Enable debug printing
+    """
     S = 7  # Grid size
     B = 2  # Boxes per cell
     C = len(VOC_CLASSES)  # Number of classes
 
-    # The predictions are already in shape (batch_size, S, S, B * (5 + C))
-    # For each box: [tx, ty, tw, th, conf] followed by C class probabilities
+    # Convert predictions from NCHW to NHWC format
+    predictions = mx.transpose(predictions, (0, 2, 3, 1))  # [batch, S, S, B*(5+C)]
+    
     boxes = []
     class_ids = []
     scores = []
@@ -80,14 +97,14 @@ def decode_predictions(
         for j in range(S):
             # Get class probabilities (comes after all box predictions)
             class_offset = B * 5
-            cell_class_logits = predictions[0, i, j, class_offset: class_offset + C]
+            cell_class_logits = predictions[0, i, j, class_offset:class_offset + C]
             cell_class_probs = mx.softmax(cell_class_logits)  # Apply softmax to class logits
 
             # For each box
             for b in range(B):
                 # Get box predictions (5 values: tx, ty, tw, th, conf)
                 box_offset = b * 5
-                box = predictions[0, i, j, box_offset: box_offset + 5]
+                box = predictions[0, i, j, box_offset:box_offset + 5]
 
                 # Apply sigmoid to confidence score
                 confidence = mx.sigmoid(box[4])
@@ -129,7 +146,9 @@ def decode_predictions(
                     print(
                         f"  Final score (confidence * class_prob): {float(confidence * class_prob):.4f}"
                     )
-                    print(f"  Box coordinates: x={x:.4f}, y={y:.4f}, w={w:.4f}, h={h:.4f}")
+                    print(
+                        f"  Box coordinates: x={x:.4f}, y={y:.4f}, w={w:.4f}, h={h:.4f}"
+                    )
                     print(f"  Top 3 class probabilities:")
                     top_classes = [
                         int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]
@@ -335,10 +354,10 @@ def main():
     parser.add_argument("--camera-id", type=int, default=0, help="Camera device ID")
     parser.add_argument("--output", help="Path to output image")
     parser.add_argument(
-        "--conf-thresh", type=float, default=0.1, help="Confidence threshold"
+        "--conf-thresh", type=float, default=0.3, help="Confidence threshold"
     )
     parser.add_argument(
-        "--class-thresh", type=float, default=0.1, help="Class probability threshold"
+        "--class-thresh", type=float, default=0.5, help="Class probability threshold"
     )
     parser.add_argument("--nms-thresh", type=float, default=0.4, help="NMS threshold")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")

@@ -43,12 +43,11 @@ def analyze_raw_predictions(predictions, S=7, B=2, C=20):
     """Analyze raw predictions from model."""
     print("\nAnalyzing Raw Predictions:")
     print(f"Shape: {predictions.shape}")
-    print(
-        f"Value range: [{float(mx.min(predictions)):.3f}, {float(mx.max(predictions)):.3f}]"
-    )
+    print(f"Value range: [{float(mx.min(predictions)):.3f}, {float(mx.max(predictions)):.3f}]")
 
     # Reshape to [S, S, B*(5+C)]
     pred = mx.transpose(predictions[0], (1, 2, 0))  # [S, S, B*(5+C)]
+    print(f"Reshaped predictions shape: {pred.shape}")
 
     # For each cell
     for i in range(S):
@@ -57,21 +56,30 @@ def analyze_raw_predictions(predictions, S=7, B=2, C=20):
             class_offset = B * 5
             class_logits = pred[i, j, class_offset : class_offset + C]
             class_probs = mx.softmax(class_logits)
-
+            
             # For each box
             for b in range(B):
+                # Calculate box offset
                 box_offset = b * 5
-
+                box_end = box_offset + 5
+                
                 # Get box predictions
-                box = pred[i, j, box_offset : box_offset + 5]
-                tx, ty = mx.sigmoid(box[0:2])  # Center coordinates
-                tw, th = box[2:4]  # Width/height
-                conf = mx.sigmoid(box[4])  # Confidence
+                box_values = pred[i, j, box_offset:box_end]
+                if len(box_values) < 5:
+                    print(f"Warning: Box values truncated at cell ({i},{j}) box {b}")
+                    continue
+                    
+                # Extract components
+                tx = mx.sigmoid(box_values[0])  # Center x
+                ty = mx.sigmoid(box_values[1])  # Center y
+                tw = box_values[2]  # Width
+                th = box_values[3]  # Height
+                conf = mx.sigmoid(box_values[4])  # Confidence
 
                 # Only print if confidence is significant
                 if conf > 0.1:
                     print(f"\nCell ({i},{j}) Box {b}:")
-                    print(f"  Raw box values: {[float(v) for v in box]}")
+                    print(f"  Raw box values: {[float(v) for v in box_values]}")
                     print(f"  Position: tx={float(tx):.3f}, ty={float(ty):.3f}")
                     print(f"  Size: tw={float(tw):.3f}, th={float(th):.3f}")
                     print(f"  Confidence: {float(conf):.3f}")
@@ -99,7 +107,7 @@ def visualize_predictions(image_path, boxes, scores, class_ids, ground_truth=Non
         y2 = y2 * img.height
 
         draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
-        label = f"{VOC_CLASSES[class_id]} {score:.2f}"
+        label = f"{VOC_CLASSES[int(class_id)]}: {float(score):.2f}"
         draw.text((x1, y1 - 10), label, fill="red")
 
     # Draw ground truth in green
@@ -168,7 +176,7 @@ def main():
     # Print decoded predictions
     print("\nDecoded Predictions:")
     for box, score, class_id in zip(boxes, scores, class_ids):
-        print(f"- {VOC_CLASSES[class_id]}: {score:.3f} at {[float(x) for x in box]}")
+        print(f"- {VOC_CLASSES[int(class_id)]}: {float(score):.3f} at {[float(x) for x in box]}")
 
     # Visualize results
     visualize_predictions(args.image, boxes, scores, class_ids, ground_truth)

@@ -129,7 +129,10 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
     pred_xy = mx.sigmoid(predictions[..., 0:2])  # Center coordinates (relative to cell)
     pred_wh = predictions[..., 2:4]  # Width/height (relative to anchors)
     pred_conf = mx.sigmoid(predictions[..., 4:5])  # Object confidence
-    pred_class = predictions[..., 5:]  # Class predictions
+    pred_class = predictions[..., 5:]  # Class predictions (raw logits)
+    
+    # Apply softmax to class predictions
+    pred_class = mx.softmax(pred_class, axis=-1)  # Convert to probabilities
     
     # Extract components from targets
     targ_xy = targets[..., 0:2]  # Center coordinates (relative to cell)

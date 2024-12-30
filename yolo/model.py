@@ -226,11 +226,7 @@ class YOLO(nn.Module):
         predictions = self.conv_final(conv7)  # [batch, B*(5+C), S, S]
 
         if return_features:
-            features = {
-                "backbone": backbone_features,
-                "conv6": conv6,
-                "conv7": conv7
-            }
+            features = {"backbone": backbone_features, "conv6": conv6, "conv7": conv7}
             return predictions, features
 
         return predictions
@@ -238,12 +234,12 @@ class YOLO(nn.Module):
     def decode_predictions(self, pred, conf_threshold=0.1, nms_threshold=0.4):
         """
         Decode raw predictions to bounding boxes
-        
+
         Args:
             pred: Raw predictions from forward pass [batch, B*(5+C), S, S]
             conf_threshold: Confidence threshold for filtering weak detections
             nms_threshold: IoU threshold for non-maximum suppression
-            
+
         Returns:
             boxes: [batch, num_boxes, 4] - Absolute coordinates (x1, y1, x2, y2)
             scores: [batch, num_boxes] - Confidence scores
@@ -256,22 +252,25 @@ class YOLO(nn.Module):
         pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5 + self.C))
 
         # Split prediction into components and apply activations
-        box_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates (relative to cell) [0,1]
+        box_xy = mx.sigmoid(
+            pred[..., 0:2]
+        )  # Center coordinates (relative to cell) [0,1]
         box_wh = mx.exp(pred[..., 2:4])  # Width/height (relative to anchors)
         conf = mx.sigmoid(pred[..., 4:5])  # Object confidence [0,1]
         prob = mx.softmax(pred[..., 5:], axis=-1)  # Class probabilities
 
         # Convert box coordinates to absolute coordinates
         grid_x, grid_y = mx.meshgrid(
-            mx.arange(self.S, dtype=mx.float32),
-            mx.arange(self.S, dtype=mx.float32)
+            mx.arange(self.S, dtype=mx.float32), mx.arange(self.S, dtype=mx.float32)
         )
         grid_xy = mx.stack([grid_x, grid_y], axis=-1)
         grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
 
         # Convert relative coordinates to absolute coordinates
         box_xy = (box_xy + grid_xy) / self.S  # Add cell offsets and normalize
-        box_wh = box_wh * mx.reshape(self.anchors, (1, 1, self.B, 2))  # Scale by anchors
+        box_wh = box_wh * mx.reshape(
+            self.anchors, (1, 1, self.B, 2)
+        )  # Scale by anchors
 
         # Convert to corner coordinates (x1, y1, x2, y2 format)
         box_mins = box_xy - box_wh / 2.0
@@ -280,7 +279,7 @@ class YOLO(nn.Module):
 
         # Compute class scores and confidence
         class_scores = conf * prob  # [batch, S, S, B, C]
-        
+
         # Get best class and score for each box
         best_scores = mx.max(class_scores, axis=-1)  # [batch, S, S, B]
         best_classes = mx.argmax(class_scores, axis=-1)  # [batch, S, S, B]
@@ -292,8 +291,8 @@ class YOLO(nn.Module):
 
         # Filter by confidence threshold
         mask = scores > conf_threshold
-        
+
         # TODO: Implement NMS here
         # For now, just return all boxes above threshold
-        
+
         return boxes, scores, class_ids

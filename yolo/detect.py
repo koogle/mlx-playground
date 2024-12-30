@@ -19,8 +19,8 @@ def load_model(checkpoint_path):
 def preprocess_image(image, size=448, args=None):
     """
     Preprocess image for YOLO model
-    
-    Returns image in NCHW format
+
+    Returns image in NHWC format
     """
     if isinstance(image, str):
         # Load image from file
@@ -45,11 +45,8 @@ def preprocess_image(image, size=448, args=None):
     # Convert to float and normalize
     image = image.astype(np.float32) / 255.0
 
-    # Convert to NCHW format
-    image = np.transpose(image, (2, 0, 1))  # HWC -> CHW
-    
-    # Add batch dimension
-    image = np.expand_dims(image, axis=0)  # CHW -> NCHW
+    # Add batch dimension (keeping NHWC format)
+    image = np.expand_dims(image, axis=0)  # [1, H, W, C]
 
     # Convert to MLX array
     image = mx.array(image)
@@ -64,129 +61,173 @@ def preprocess_image(image, size=448, args=None):
 
 def decode_predictions(
     predictions,
-    confidence_threshold=0.1,
-    class_threshold=0.1,
-    nms_threshold=0.4,
+    confidence_threshold=0.6,  # Increased further
+    class_threshold=0.5,       # Increased further
+    nms_threshold=0.3,         # Keep strict NMS
     debug=False,
 ):
     """
     Decode YOLO predictions to bounding boxes
     
     Args:
-        predictions: Model predictions [batch, B*(5+C), S, S] in NCHW format
-        confidence_threshold: Minimum confidence score for detection
-        class_threshold: Minimum class probability
-        nms_threshold: IoU threshold for NMS
+        predictions: Model predictions [batch, S, S, B*(5+C)] in NHWC format
+        confidence_threshold: Minimum objectness confidence score (how likely box contains object)
+        class_threshold: Minimum class probability (how confident about specific class)
+        nms_threshold: IoU threshold for NMS (lower = stricter filtering of overlapping boxes)
         debug: Enable debug printing
     """
     S = 7  # Grid size
     B = 2  # Boxes per cell
     C = len(VOC_CLASSES)  # Number of classes
 
-    # Convert predictions from NCHW to NHWC format
-    predictions = mx.transpose(predictions, (0, 2, 3, 1))  # [batch, S, S, B*(5+C)]
-    
     boxes = []
     class_ids = []
     scores = []
-    confidences = []  # Store raw confidences
-    class_probs = []  # Store raw class probabilities
+    confidences = []
+    class_probs = []
 
     # For each cell in the grid
     for i in range(S):
         for j in range(S):
-            # Get class probabilities (comes after all box predictions)
+            # Get class probabilities
             class_offset = B * 5
-            cell_class_logits = predictions[0, i, j, class_offset:class_offset + C]
-            cell_class_probs = mx.softmax(cell_class_logits)  # Apply softmax to class logits
+            class_logits = predictions[0, i, j, class_offset:class_offset + C]
+            class_probs = mx.softmax(class_logits)  # Convert logits to probabilities
 
             # For each box
             for b in range(B):
-                # Get box predictions (5 values: tx, ty, tw, th, conf)
                 box_offset = b * 5
                 box = predictions[0, i, j, box_offset:box_offset + 5]
 
                 # Apply sigmoid to confidence score
                 confidence = mx.sigmoid(box[4])
 
-                # Skip if box confidence is too low
-                if float(confidence) < confidence_threshold:
+                # Skip low confidence predictions early
+                if confidence < confidence_threshold:
                     continue
 
-                # Get class with maximum probability
-                class_id = int(mx.argmax(cell_class_probs))
-                class_prob = float(cell_class_probs[class_id])
+                # Get highest class probability and corresponding class
+                class_prob = mx.max(class_probs)
+                class_id = mx.argmax(class_probs)
 
-                # Skip if class probability is too low
+                # Skip low class probability predictions
                 if class_prob < class_threshold:
+                    if debug:
+                        print(f"  Skipping box with low class probability: {class_prob:.4f}")
                     continue
+
+                # Calculate final score
+                score = float(confidence * class_prob)
 
                 # Convert box coordinates
-                x = float((mx.sigmoid(box[0]) + j) / S)  # Add cell offset and normalize
-                y = float((mx.sigmoid(box[1]) + i) / S)  # Add cell offset and normalize
-                w = float(mx.exp(box[2]))  # exp for positive scaling
-                h = float(mx.exp(box[3]))  # exp for positive scaling
+                tx, ty = mx.sigmoid(box[0:2])  # Center coordinates (relative to cell)
+                tw, th = box[2:4]  # Width and height offsets
 
-                # Store predictions
-                boxes.append(
-                    [x - w / 2, y - h / 2, x + w / 2, y + h / 2]
-                )  # Convert to corners
-                class_ids.append(class_id)
-                scores.append(float(confidence * class_prob))
-                confidences.append(float(confidence))
-                class_probs.append(class_prob)
+                # Convert to absolute coordinates
+                cell_x = j / S
+                cell_y = i / S
+                x = tx + cell_x  # Center x (relative to image)
+                y = ty + cell_y  # Center y (relative to image)
+                w = mx.exp(tw)  # Width (relative to anchor)
+                h = mx.exp(th)  # Height (relative to anchor)
+
+                # Skip boxes with invalid coordinates
+                if x < 0 or x > 1 or y < 0 or y > 1:
+                    if debug:
+                        print(f"Skipping box with invalid center coordinates: x={float(x):.4f}, y={float(y):.4f}")
+                    continue
+
+                # Skip boxes with unreasonable dimensions
+                if w > 2.0 or h > 2.0:  # Box shouldn't be larger than 2x image size
+                    if debug:
+                        print(f"Skipping box with invalid dimensions: w={float(w):.4f}, h={float(h):.4f}")
+                    continue
 
                 if debug:
                     print(f"\nDetection in cell ({i}, {j}):")
                     print(f"  Box: {b}")
                     print(f"  Raw box values: {[float(v) for v in box]}")
-                    print(f"  Class: {VOC_CLASSES[class_id]}")
-                    print(f"  Box confidence: {float(confidence):.4f}")
-                    print(f"  Class probability: {float(class_prob):.4f}")
-                    print(
-                        f"  Final score (confidence * class_prob): {float(confidence * class_prob):.4f}"
-                    )
-                    print(
-                        f"  Box coordinates: x={x:.4f}, y={y:.4f}, w={w:.4f}, h={h:.4f}"
-                    )
-                    print(f"  Top 3 class probabilities:")
-                    top_classes = [
-                        int(idx) for idx in mx.argsort(cell_class_probs)[-3:][::-1]
-                    ]
-                    for c in top_classes:
-                        print(f"    {VOC_CLASSES[c]}: {float(cell_class_probs[c]):.4f}")
+                    print(f"  Class: {VOC_CLASSES[int(class_id)]}")
+                    print(f"  Box confidence: {confidence:.4f}")
+                    print(f"  Class probability: {class_prob:.4f}")
+                    print(f"  Final score (confidence * class_prob): {score:.4f}")
+                    print(f"  Box coordinates: x={float(x):.4f}, y={float(y):.4f}, w={float(w):.4f}, h={float(h):.4f}")
 
-    if not boxes:
-        return [], [], []
+                # Convert to corner coordinates
+                x1 = x - w/2
+                y1 = y - h/2
+                x2 = x + w/2
+                y2 = y + h/2
 
-    # Convert to numpy for NMS
-    boxes = np.array(boxes)
-    scores = np.array(scores)
-    class_ids = np.array(class_ids)
+                # Clip coordinates to image bounds
+                x1 = max(0, min(1, float(x1)))
+                y1 = max(0, min(1, float(y1)))
+                x2 = max(0, min(1, float(x2)))
+                y2 = max(0, min(1, float(y2)))
 
-    # Apply NMS
-    selected_indices = []
-    for class_id in np.unique(class_ids):
-        class_mask = class_ids == class_id
-        class_boxes = boxes[class_mask]
-        class_scores = scores[class_mask]
+                # Store detection
+                boxes.append([x1, y1, x2, y2])
+                class_ids.append(int(class_id))
+                scores.append(score)
 
-        while len(class_boxes) > 0:
-            max_idx = np.argmax(class_scores)
-            selected_indices.append(np.where(class_mask)[0][max_idx])
+                if debug:
+                    # Print top 3 class probabilities
+                    top_indices = mx.argsort(class_probs)[-3:][::-1]
+                    top_probs = class_probs[top_indices]
+                    print("  Top 3 class probabilities:")
+                    for prob, class_idx in zip(top_probs, top_indices):
+                        print(f"    {VOC_CLASSES[int(class_idx)]}: {float(prob):.4f}")
 
-            # Compute IoU with remaining boxes
-            ious = compute_iou_numpy(class_boxes[max_idx], class_boxes)
-            mask = ious <= nms_threshold
+    # Convert to numpy arrays for NMS
+    if boxes:
+        boxes = np.array(boxes)
+        scores = np.array(scores)
+        class_ids = np.array(class_ids)
 
-            class_boxes = class_boxes[mask]
-            class_scores = class_scores[mask]
+        # Apply NMS
+        keep = []
+        for class_id in np.unique(class_ids):
+            mask = class_ids == class_id
+            class_boxes = boxes[mask]
+            class_scores = scores[mask]
 
-    return (
-        boxes[selected_indices],
-        class_ids[selected_indices],
-        scores[selected_indices],
-    )
+            # Compute areas
+            areas = (class_boxes[:, 2] - class_boxes[:, 0]) * (
+                class_boxes[:, 3] - class_boxes[:, 1]
+            )
+
+            # Sort by score
+            order = class_scores.argsort()[::-1]
+
+            while order.size > 0:
+                i = order[0]
+                keep.append(np.where(mask)[0][i])
+
+                if order.size == 1:
+                    break
+
+                # Compute IoU
+                xx1 = np.maximum(class_boxes[i, 0], class_boxes[order[1:], 0])
+                yy1 = np.maximum(class_boxes[i, 1], class_boxes[order[1:], 1])
+                xx2 = np.minimum(class_boxes[i, 2], class_boxes[order[1:], 2])
+                yy2 = np.minimum(class_boxes[i, 3], class_boxes[order[1:], 3])
+
+                w = np.maximum(0.0, xx2 - xx1)
+                h = np.maximum(0.0, yy2 - yy1)
+                inter = w * h
+
+                ovr = inter / (areas[i] + areas[order[1:]] - inter)
+
+                # Keep boxes with IoU less than threshold
+                inds = np.where(ovr <= nms_threshold)[0]
+                order = order[inds + 1]
+
+        # Keep only the selected boxes
+        boxes = boxes[keep]
+        scores = scores[keep]
+        class_ids = class_ids[keep]
+
+    return boxes, class_ids, scores
 
 
 def compute_iou_numpy(box, boxes):
@@ -347,27 +388,39 @@ def debug_show_preprocessed(image):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="YOLO Object Detection")
+    parser = argparse.ArgumentParser(description="YOLO object detection")
     parser.add_argument("--model", required=True, help="Path to model checkpoint")
     parser.add_argument("--image", help="Path to input image")
+    parser.add_argument("--video", help="Path to input video")
     parser.add_argument("--camera", action="store_true", help="Use camera input")
     parser.add_argument("--camera-id", type=int, default=0, help="Camera device ID")
     parser.add_argument("--output", help="Path to output image")
     parser.add_argument(
-        "--conf-thresh", type=float, default=0.3, help="Confidence threshold"
+        "--conf-thresh",
+        type=float,
+        default=0.6,  # Increased further
+        help="Confidence threshold (objectness score)",
     )
     parser.add_argument(
-        "--class-thresh", type=float, default=0.5, help="Class probability threshold"
+        "--class-thresh",
+        type=float,
+        default=0.5,       # Increased further
+        help="Class probability threshold",
     )
-    parser.add_argument("--nms-thresh", type=float, default=0.4, help="NMS threshold")
+    parser.add_argument(
+        "--nms-thresh",
+        type=float,
+        default=0.3,         # Keep strict NMS
+        help="NMS IoU threshold (lower = stricter filtering of overlapping boxes)",
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument(
         "--show-features", action="store_true", help="Show feature map visualizations"
     )
     args = parser.parse_args()
 
-    if not args.image and not args.camera:
-        parser.error("Either --image or --camera must be specified")
+    if not args.image and not args.video and not args.camera:
+        parser.error("Either --image, --video or --camera must be specified")
 
     # Load model
     print("Loading model...")
@@ -385,6 +438,105 @@ def main():
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+        # Create windows
+        cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)
+        if args.show_features:
+            cv2.namedWindow("Feature Maps Conv6", cv2.WINDOW_NORMAL)
+            cv2.namedWindow("Feature Maps Conv7", cv2.WINDOW_NORMAL)
+
+        process_interval = 0.5  # Process every 0.5 seconds
+
+        try:
+            while True:
+                # Wait for 400ms before reading the next frame
+                # This is not correct but good enough
+                time.sleep(process_interval)
+                ret, frame = cap.read()
+                if not ret:
+                    print("Error: Could not read frame")
+                    break
+
+                # Process frame every interval
+                if args.debug:
+                    print("\nProcessing new frame...")
+                    print(f"Frame shape: {frame.shape}")
+
+                # Preprocess frame
+                image, orig_size = preprocess_image(frame, args=args)
+
+                # Run inference with feature extraction
+                predictions, features = model(image, return_features=True)
+
+                # Evaluate all outputs
+                mx.eval(predictions)
+                mx.eval(features["conv6"])
+                mx.eval(features["conv7"])
+
+                print("Input image shape:", image.shape)
+                print("Raw predictions shape:", predictions.shape)
+                print("Max confidence:", float(mx.max(predictions[..., 4:5])))
+                print("Max class prob:", float(mx.max(predictions[..., 10:])))
+                print("Max prediction:", float(mx.max(predictions)))
+
+                if args.debug:
+                    print(
+                        "Feature shapes:",
+                        "conv6:",
+                        features["conv6"].shape,
+                        "conv7:",
+                        features["conv7"].shape,
+                    )
+                    print(
+                        "Feature ranges:",
+                        "conv6:",
+                        float(mx.min(features["conv6"])),
+                        "to",
+                        float(mx.max(features["conv6"])),
+                        "conv7:",
+                        float(mx.min(features["conv7"])),
+                        "to",
+                        float(mx.max(features["conv7"])),
+                    )
+
+                # Visualize feature maps if enabled
+                if args.show_features:
+                    visualize_features(features, orig_size, "Feature Maps")
+
+                # Decode predictions
+                boxes, class_ids, scores = decode_predictions(
+                    predictions,
+                    confidence_threshold=args.conf_thresh,
+                    class_threshold=args.class_thresh,
+                    nms_threshold=args.nms_thresh,
+                    debug=args.debug,
+                )
+
+                # Draw results directly on the frame
+                frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
+
+                # Print detections
+                if len(boxes) > 0:
+                    print(f"\nFound {len(boxes)} detections:")
+                    for cls_id, score in zip(class_ids, scores):
+                        print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
+                elif args.debug:
+                    print("\nNo detections found")
+                # Show the frame with detections
+                cv2.imshow("YOLO Detection", frame)
+
+                # Check for exit
+                if cv2.waitKey(1) & 0xFF == 27:  # ESC
+                    break
+
+        finally:
+            cap.release()
+            cv2.destroyAllWindows()
+    elif args.video:
+        cap = cv2.VideoCapture(args.video)
+        if not cap.isOpened():
+            print("Error: Could not open video")
+            return
 
         # Create windows
         cv2.namedWindow("YOLO Detection", cv2.WINDOW_NORMAL)

@@ -7,7 +7,7 @@ This repository contains machine learning examples implemented using Apple's MLX
 A streamlined implementation of YOLO (You Only Look Once) object detection using MLX, optimized for Apple Silicon.
 
 ### Features
-- YOLO v1 architecture implemented in MLX
+- YOLO v2 architecture implemented in MLX
 - Training on PASCAL VOC dataset
 - Memory-efficient training with gradient accumulation
 - Real-time object detection capabilities
@@ -15,7 +15,7 @@ A streamlined implementation of YOLO (You Only Look Once) object detection using
 
 ### Model Architecture
 - Input resolution: 448x448 pixels
-- Backbone: Custom CNN architecture
+- Backbone: dark net 19
 - Output: 7x7 grid with 2 bounding boxes per cell
 - Classes: 20 PASCAL VOC classes
 - Loss: Multi-part loss function (classification, localization, confidence)

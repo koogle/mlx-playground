@@ -185,20 +185,25 @@ def train_step(model, batch, optimizer):
     """Single training step with proper gradient computation"""
     images, targets = batch
 
-    # Define loss function
+    # Define loss function that only returns the loss value
     def loss_fn():
         predictions = model(images)
-        loss, components = yolo_loss(predictions, targets, model)
-        return loss, components
+        loss, _ = yolo_loss(predictions, targets, model)
+        return loss
 
-    # Compute loss and gradients
-    (loss, components), grads = nn.value_and_grad(loss_fn, has_aux=True)()
+    # Forward pass to get components
+    predictions = model(images)
+    loss, components = yolo_loss(predictions, targets, model)
+    
+    # Compute gradients
+    loss_grad_fn = nn.value_and_grad(loss_fn)
+    loss_value, grads = loss_grad_fn()
 
     # Update model parameters
     optimizer.update(model, grads)
     mx.eval(model.parameters(), optimizer.state)
 
-    return loss, components
+    return loss_value, components
 
 
 def train(

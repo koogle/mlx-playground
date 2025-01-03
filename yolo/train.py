@@ -205,11 +205,24 @@ def train_step(model, batch, optimizer):
     loss_grad_fn = nn.value_and_grad(model, loss_fn)
     loss_value, grads = loss_grad_fn()
     
-    # Clip gradients
+    # Clip gradients - handle nested structure
     max_grad_norm = 1.0
-    grad_norm = mx.sqrt(sum(mx.sum(g ** 2) for g in grads.values()))
+    grad_norm = 0
+    
+    def compute_norm(g):
+        if isinstance(g, dict):
+            return sum(compute_norm(v) for v in g.values())
+        return mx.sum(g * g)
+    
+    grad_norm = mx.sqrt(compute_norm(grads))
     clip_factor = mx.minimum(max_grad_norm / (grad_norm + 1e-6), 1.0)
-    clipped_grads = {k: g * clip_factor for k, g in grads.items()}
+    
+    def clip_grads(g):
+        if isinstance(g, dict):
+            return {k: clip_grads(v) for k, v in g.items()}
+        return g * clip_factor
+    
+    clipped_grads = clip_grads(grads)
 
     # Update model parameters
     optimizer.update(model, clipped_grads)

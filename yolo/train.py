@@ -182,25 +182,20 @@ def cosine_warmup_schedule(epoch, warmup_epochs, total_epochs, initial_lr):
 
 
 def train_step(model, batch, optimizer):
-    """Single training step"""
+    """Single training step with proper gradient computation"""
     images, targets = batch
 
-    # Define loss and gradient function
-    def loss_fn(model, images, targets):
+    # Define loss function
+    def loss_fn():
         predictions = model(images)
         loss, components = yolo_loss(predictions, targets, model)
         return loss, components
 
-    # Get value and grad function
-    loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
-
     # Compute loss and gradients
-    (loss, components), grads = loss_and_grad_fn(model, images, targets)
+    (loss, components), grads = nn.value_and_grad(loss_fn, has_aux=True)()
 
     # Update model parameters
     optimizer.update(model, grads)
-
-    # Ensure updates are applied
     mx.eval(model.parameters(), optimizer.state)
 
     return loss, components
@@ -317,24 +312,17 @@ def train(
             accumulated_iou = 0
 
             for _ in range(accumulation_steps):
-                # Forward pass
-                predictions = model(batch[0])
-                loss, components = yolo_loss(
-                    predictions, 
-                    batch[1], 
-                    model,
-                    lambda_coord=lambda_coord,
-                    lambda_noobj=lambda_noobj,
-                    class_weights=class_weights
-                )
+                # Forward pass and compute gradients
+                loss, components = train_step(model, batch, optimizer)
                 
                 # Calculate IoU for monitoring
+                predictions = model(batch[0])
                 pred_boxes = predictions[..., :4]
                 target_boxes = batch[1][..., :4]
                 iou = compute_box_iou(pred_boxes, target_boxes)
                 mean_iou = mx.mean(iou).item()
                 
-                accumulated_loss += loss / accumulation_steps
+                accumulated_loss += loss.item() / accumulation_steps
                 accumulated_iou += mean_iou / accumulation_steps
                 
                 if accumulated_components is None:
@@ -345,13 +333,8 @@ def train(
                     for k, v in components.items():
                         accumulated_components[k] += v / accumulation_steps
 
-                # Compute and clip gradients
-                grads = mx.grad(model, lambda m: loss)(model)
-                grads = clip_gradients(grads, max_grad_norm)
-                optimizer.update(model, grads)
-
             # Update metrics
-            epoch_metrics['loss'] += accumulated_loss.item()
+            epoch_metrics['loss'] += accumulated_loss
             epoch_metrics['iou'] += accumulated_iou
             for k, v in accumulated_components.items():
                 epoch_metrics[k] += v
@@ -361,7 +344,7 @@ def train(
             if num_batches % 10 == 0:
                 print(
                     f"Batch [{num_batches}], "
-                    f"Loss: {accumulated_loss.item():.4f}, "
+                    f"Loss: {accumulated_loss:.4f}, "
                     f"IoU: {accumulated_iou:.4f}, "
                     f"Coord: {accumulated_components['coord']:.4f}, "
                     f"Conf: {accumulated_components['conf']:.4f}, "

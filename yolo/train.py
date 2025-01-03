@@ -151,6 +151,25 @@ def compute_class_weights(dataset):
     return class_weights
 
 
+def compute_box_iou(pred_boxes, target_boxes):
+    """Compute IoU between predicted and target bounding boxes"""
+    # Calculate intersection area
+    x1 = mx.maximum(pred_boxes[..., 0], target_boxes[..., 0])
+    y1 = mx.maximum(pred_boxes[..., 1], target_boxes[..., 1])
+    x2 = mx.minimum(pred_boxes[..., 2], target_boxes[..., 2])
+    y2 = mx.minimum(pred_boxes[..., 3], target_boxes[..., 3])
+    intersection = mx.maximum(x2 - x1, 0) * mx.maximum(y2 - y1, 0)
+
+    # Calculate union area
+    pred_area = (pred_boxes[..., 2] - pred_boxes[..., 0]) * (pred_boxes[..., 3] - pred_boxes[..., 1])
+    target_area = (target_boxes[..., 2] - target_boxes[..., 0]) * (target_boxes[..., 3] - target_boxes[..., 1])
+    union = pred_area + target_area - intersection
+
+    # Compute IoU
+    iou = intersection / (union + 1e-6)
+    return iou
+
+
 def cosine_warmup_schedule(epoch, warmup_epochs, total_epochs, initial_lr):
     """Learning rate schedule with warmup and cosine decay"""
     if epoch < warmup_epochs:
@@ -202,6 +221,8 @@ def train(
     grid_size: int = 7,
     warmup_epochs: int = 5,
     val_freq: int = 1,
+    lambda_coord: float = 5.0,
+    lambda_noobj: float = 1.0,
 ):
     """Train YOLO model with improved training process"""
     # Create model and optimizer
@@ -255,7 +276,16 @@ def train(
     # Compute class weights from training data
     print("Computing class weights...")
     class_weights = compute_class_weights(train_dataset)
-    print("Class weights:", [f"{VOC_CLASSES[i]}: {w:.2f}" for i, w in enumerate(class_weights)])
+    
+    # Apply additional weighting to common classes
+    class_weights = mx.array(class_weights)
+    for class_name, weight in zip(VOC_CLASSES, class_weights):
+        if class_name in ['person', 'chair', 'car']:
+            class_weights[VOC_CLASSES.index(class_name)] *= 1.5  # Increase weight for common classes
+    
+    # Normalize weights again
+    class_weights = class_weights / mx.sum(class_weights) * len(VOC_CLASSES)
+    print("Adjusted class weights:", [f"{VOC_CLASSES[i]}: {w:.2f}" for i, w in enumerate(class_weights)])
 
     # Training loop
     print("\nStarting training...")
@@ -266,7 +296,8 @@ def train(
             'coord': 0,
             'conf': 0,
             'noobj': 0,
-            'class': 0
+            'class': 0,
+            'iou': 0  # Track IoU as additional metric
         }
         num_batches = 0
         start_time = time.time()
@@ -283,10 +314,28 @@ def train(
             # Training step with gradient accumulation
             accumulated_loss = 0
             accumulated_components = None
+            accumulated_iou = 0
 
             for _ in range(accumulation_steps):
-                loss, components = train_step(model, batch, optimizer)
+                # Forward pass
+                predictions = model(batch[0])
+                loss, components = yolo_loss(
+                    predictions, 
+                    batch[1], 
+                    model,
+                    lambda_coord=lambda_coord,
+                    lambda_noobj=lambda_noobj,
+                    class_weights=class_weights
+                )
+                
+                # Calculate IoU for monitoring
+                pred_boxes = predictions[..., :4]
+                target_boxes = batch[1][..., :4]
+                iou = compute_box_iou(pred_boxes, target_boxes)
+                mean_iou = mx.mean(iou).item()
+                
                 accumulated_loss += loss / accumulation_steps
+                accumulated_iou += mean_iou / accumulation_steps
                 
                 if accumulated_components is None:
                     accumulated_components = {
@@ -296,17 +345,24 @@ def train(
                     for k, v in components.items():
                         accumulated_components[k] += v / accumulation_steps
 
+                # Compute and clip gradients
+                grads = mx.grad(model, lambda m: loss)(model)
+                grads = clip_gradients(grads, max_grad_norm)
+                optimizer.update(model, grads)
+
             # Update metrics
             epoch_metrics['loss'] += accumulated_loss.item()
+            epoch_metrics['iou'] += accumulated_iou
             for k, v in accumulated_components.items():
                 epoch_metrics[k] += v
             num_batches += 1
 
-            # Print batch progress
+            # Print batch progress with IoU
             if num_batches % 10 == 0:
                 print(
                     f"Batch [{num_batches}], "
                     f"Loss: {accumulated_loss.item():.4f}, "
+                    f"IoU: {accumulated_iou:.4f}, "
                     f"Coord: {accumulated_components['coord']:.4f}, "
                     f"Conf: {accumulated_components['conf']:.4f}, "
                     f"Class: {accumulated_components['class']:.4f}, "
@@ -423,6 +479,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--val-freq", type=int, default=1, help="Validation frequency"
     )
+    parser.add_argument(
+        "--lambda-coord", type=float, default=5.0, help="Lambda for coordinate loss"
+    )
+    parser.add_argument(
+        "--lambda-noobj", type=float, default=1.0, help="Lambda for no object loss"
+    )
     args = parser.parse_args()
 
     config = {
@@ -440,6 +502,8 @@ if __name__ == "__main__":
         "grid_size": args.grid_size,
         "warmup_epochs": args.warmup_epochs,
         "val_freq": args.val_freq,
+        "lambda_coord": args.lambda_coord,
+        "lambda_noobj": args.lambda_noobj,
     }
 
     train(**config)

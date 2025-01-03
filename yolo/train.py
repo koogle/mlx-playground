@@ -200,13 +200,19 @@ def train_step(model, batch, optimizer):
     # Forward pass to get components
     predictions = model(images)
     loss, components = yolo_loss(predictions, targets, model)
-
-    # Compute gradients
+    
+    # Compute gradients with clipping
     loss_grad_fn = nn.value_and_grad(model, loss_fn)
     loss_value, grads = loss_grad_fn()
+    
+    # Clip gradients
+    max_grad_norm = 1.0
+    grad_norm = mx.sqrt(sum(mx.sum(g ** 2) for g in grads.values()))
+    clip_factor = mx.minimum(max_grad_norm / (grad_norm + 1e-6), 1.0)
+    clipped_grads = {k: g * clip_factor for k, g in grads.items()}
 
     # Update model parameters
-    optimizer.update(model, grads)
+    optimizer.update(model, clipped_grads)
     mx.eval(model.parameters(), optimizer.state)
 
     return loss_value, components
@@ -218,17 +224,17 @@ def train(
     num_epochs: int = 135,
     batch_size: int = 32,
     accumulation_steps: int = 2,
-    learning_rate: float = 0.001,
+    learning_rate: float = 0.0001,  # Reduced learning rate
     beta1: float = 0.9,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
-    max_grad_norm: float = 5.0,
+    max_grad_norm: float = 1.0,  # Reduced gradient norm
     grid_size: int = 7,
-    warmup_epochs: int = 5,
+    warmup_epochs: int = 10,  # Increased warmup
     val_freq: int = 1,
     lambda_coord: float = 5.0,
-    lambda_noobj: float = 1.0,
+    lambda_noobj: float = 0.5,
 ):
     """Train YOLO model with improved training process"""
     # Create model and optimizer
@@ -442,7 +448,7 @@ if __name__ == "__main__":
         help="Number of gradient accumulation steps",
     )
     parser.add_argument(
-        "--learning-rate", type=float, default=0.001, help="Learning rate"
+        "--learning-rate", type=float, default=0.0001, help="Learning rate"
     )
     parser.add_argument(
         "--beta1", type=float, default=0.9, help="Beta1 for Adam optimizer"
@@ -457,7 +463,7 @@ if __name__ == "__main__":
         "--resume-epoch", type=int, help="Resume training from this epoch"
     )
     parser.add_argument(
-        "--max-grad-norm", type=float, default=5.0, help="Maximum gradient norm"
+        "--max-grad-norm", type=float, default=1.0, help="Maximum gradient norm"
     )
     parser.add_argument(
         "--grid-size",
@@ -466,14 +472,14 @@ if __name__ == "__main__":
         help="Grid size for YOLO (S x S grid)",
     )
     parser.add_argument(
-        "--warmup-epochs", type=int, default=5, help="Number of warmup epochs"
+        "--warmup-epochs", type=int, default=10, help="Number of warmup epochs"
     )
     parser.add_argument("--val-freq", type=int, default=1, help="Validation frequency")
     parser.add_argument(
         "--lambda-coord", type=float, default=5.0, help="Lambda for coordinate loss"
     )
     parser.add_argument(
-        "--lambda-noobj", type=float, default=1.0, help="Lambda for no object loss"
+        "--lambda-noobj", type=float, default=0.5, help="Lambda for no object loss"
     )
     args = parser.parse_args()
 

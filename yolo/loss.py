@@ -15,45 +15,52 @@ import mlx.core as mx
 import math
 
 
-def compute_box_iou(box1, box2):
+def compute_box_iou(pred_boxes, target_boxes):
     """
-    Compute Intersection over Union (IoU) between two sets of bounding boxes.
-    
-    Args:
-        box1: Predicted boxes [batch, S, S, B, 4] or [batch, S, S, 4]
-        box2: Target boxes [batch, S, S, B, 4] or [batch, S, S, 4]
-        Both boxes should be in format: [x_center, y_center, width, height]
-        
-    Returns:
-        IoU scores with shape matching the input broadcast shape
+    Compute IoU between predicted and target boxes.
+    Both inputs should have shape [..., 4] where last dim is (x,y,w,h)
+    Returns IoU values of same shape as inputs except for last dimension
     """
-    # Convert from (x_center, y_center, width, height) to (x1, y1, x2, y2)
-    box1_xy = box1[..., :2]
-    box1_wh = box1[..., 2:4]
-    box1_wh = mx.maximum(box1_wh, 1e-6)  # Prevent negative or zero width/height
-    box1_mins = box1_xy - box1_wh / 2.0  # (x1, y1)
-    box1_maxs = box1_xy + box1_wh / 2.0  # (x2, y2)
+    # Extract coordinates
+    x1 = pred_boxes[..., 0:1]
+    y1 = pred_boxes[..., 1:2]
+    w1 = pred_boxes[..., 2:3]
+    h1 = pred_boxes[..., 3:4]
     
-    box2_xy = box2[..., :2]
-    box2_wh = box2[..., 2:4]
-    box2_wh = mx.maximum(box2_wh, 1e-6)  # Prevent negative or zero width/height
-    box2_mins = box2_xy - box2_wh / 2.0
-    box2_maxs = box2_xy + box2_wh / 2.0
+    x2 = target_boxes[..., 0:1]
+    y2 = target_boxes[..., 1:2]
+    w2 = target_boxes[..., 2:3]
+    h2 = target_boxes[..., 3:4]
+    
+    # Convert to corner coordinates
+    x1_min = x1 - w1/2
+    y1_min = y1 - h1/2
+    x1_max = x1 + w1/2
+    y1_max = y1 + h1/2
+    
+    x2_min = x2 - w2/2
+    y2_min = y2 - h2/2
+    x2_max = x2 + w2/2
+    y2_max = y2 + h2/2
     
     # Calculate intersection area
-    intersect_mins = mx.maximum(box1_mins, box2_mins)
-    intersect_maxs = mx.minimum(box1_maxs, box2_maxs)
-    intersect_wh = mx.maximum(0.0, intersect_maxs - intersect_mins)
-    intersection = intersect_wh[..., 0] * intersect_wh[..., 1]
+    inter_x1 = mx.maximum(x1_min, x2_min)
+    inter_y1 = mx.maximum(y1_min, y2_min)
+    inter_x2 = mx.minimum(x1_max, x2_max)
+    inter_y2 = mx.minimum(y1_max, y2_max)
+    
+    inter_w = mx.maximum(inter_x2 - inter_x1, 0)
+    inter_h = mx.maximum(inter_y2 - inter_y1, 0)
+    intersection = inter_w * inter_h
     
     # Calculate union area
-    box1_area = box1_wh[..., 0] * box1_wh[..., 1]
-    box2_area = box2_wh[..., 0] * box2_wh[..., 1]
-    union = box1_area + box2_area - intersection
+    area1 = w1 * h1
+    area2 = w2 * h2
+    union = area1 + area2 - intersection
     
-    # Add small epsilon to avoid division by zero
+    # Calculate IoU
     iou = intersection / (union + 1e-6)
-    return mx.clip(iou, 0.0, 1.0)  # Ensure IoU is between 0 and 1
+    return mx.squeeze(iou, axis=-1)  # Remove last dimension
 
 
 def focal_loss(pred, target, gamma=2.0, alpha=0.25):
@@ -138,7 +145,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     # Convert relative coordinates to absolute coordinates
     anchors = mx.reshape(model.anchors, (1, 1, 1, B, 2))
     
-    # Convert predicted boxes to absolute coordinates
+    # Convert to absolute coordinates with numerical stability
     grid_x, grid_y = mx.meshgrid(
         mx.arange(S, dtype=mx.float32),
         mx.arange(S, dtype=mx.float32)
@@ -177,7 +184,13 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     ) / num_objects
     
     # 2. Object confidence loss
-    ious = compute_box_iou(pred_boxes, targ_boxes)
+    ious = compute_box_iou(
+        mx.reshape(pred_boxes, (-1, S*S*B, 4)),
+        mx.reshape(targ_boxes, (-1, S*S*B, 4))
+    )
+    ious = mx.reshape(ious, (batch_size, S, S, B))
+    ious = mx.expand_dims(ious, axis=-1)  # Add dimension to match obj_mask shape
+    
     conf_target = mx.clip(ious * obj_mask, 0.0, 1.0)  # Clip IoU values
     obj_loss = mx.sum(
         obj_mask * (pred_conf - conf_target) ** 2

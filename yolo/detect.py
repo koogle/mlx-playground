@@ -61,20 +61,13 @@ def preprocess_image(image, size=448, args=None):
 
 def decode_predictions(
     predictions,
-    confidence_threshold=0.6,  # Increased further
-    class_threshold=0.5,       # Increased further
-    nms_threshold=0.3,         # Keep strict NMS
+    confidence_threshold=0.1,  # Lower threshold to catch more candidates
+    class_threshold=0.1,       # Lower threshold for debugging
+    nms_threshold=0.45,        # Slightly more aggressive NMS
     debug=False,
 ):
     """
     Decode YOLO predictions to bounding boxes
-    
-    Args:
-        predictions: Model predictions [batch, S, S, B*(5+C)] in NHWC format
-        confidence_threshold: Minimum objectness confidence score (how likely box contains object)
-        class_threshold: Minimum class probability (how confident about specific class)
-        nms_threshold: IoU threshold for NMS (lower = stricter filtering of overlapping boxes)
-        debug: Enable debug printing
     """
     S = 7  # Grid size
     B = 2  # Boxes per cell
@@ -83,16 +76,14 @@ def decode_predictions(
     boxes = []
     class_ids = []
     scores = []
-    confidences = []
-    class_probs = []
 
     # For each cell in the grid
     for i in range(S):
         for j in range(S):
-            # Get class probabilities
+            # Get class probabilities for this cell
             class_offset = B * 5
             class_logits = predictions[0, i, j, class_offset:class_offset + C]
-            class_probs = mx.softmax(class_logits)  # Convert logits to probabilities
+            cell_class_probs = mx.softmax(class_logits)  # Convert logits to probabilities
 
             # For each box
             for b in range(B):
@@ -104,43 +95,41 @@ def decode_predictions(
 
                 # Skip low confidence predictions early
                 if confidence < confidence_threshold:
+                    if debug:
+                        print(f"Skipping low confidence box: {float(confidence):.4f}")
                     continue
 
-                # Get highest class probability and corresponding class
-                class_prob = mx.max(class_probs)
-                class_id = mx.argmax(class_probs)
+                # Find best class and its probability
+                max_class_prob = mx.max(cell_class_probs)
+                class_id = mx.argmax(cell_class_probs)
 
                 # Skip low class probability predictions
-                if class_prob < class_threshold:
+                if float(max_class_prob) < class_threshold:
                     if debug:
-                        print(f"  Skipping box with low class probability: {class_prob:.4f}")
+                        print(f"Skipping low class probability: {float(max_class_prob):.4f}")
                     continue
 
                 # Calculate final score
-                score = float(confidence * class_prob)
+                score = float(confidence * max_class_prob)
 
                 # Convert box coordinates
                 tx, ty = mx.sigmoid(box[0:2])  # Center coordinates (relative to cell)
-                tw, th = box[2:4]  # Width and height offsets
+                tw, th = box[2:4]              # Width and height predictions
 
-                # Convert to absolute coordinates
+                # Convert to absolute coordinates (in range [0,1])
                 cell_x = j / S
                 cell_y = i / S
-                x = tx + cell_x  # Center x (relative to image)
-                y = ty + cell_y  # Center y (relative to image)
-                w = mx.exp(tw)  # Width (relative to anchor)
-                h = mx.exp(th)  # Height (relative to anchor)
+                x = (tx + cell_x) / S  # Normalize by grid size
+                y = (ty + cell_y) / S
 
-                # Skip boxes with invalid coordinates
-                if x < 0 or x > 1 or y < 0 or y > 1:
-                    if debug:
-                        print(f"Skipping box with invalid center coordinates: x={float(x):.4f}, y={float(y):.4f}")
-                    continue
+                # Scale width/height using sigmoid to keep them bounded
+                w = mx.sigmoid(tw) / S  # Normalize by grid size
+                h = mx.sigmoid(th) / S
 
-                # Skip boxes with unreasonable dimensions
-                if w > 2.0 or h > 2.0:  # Box shouldn't be larger than 2x image size
+                # Skip boxes that are too small
+                if w < 0.01 or h < 0.01:
                     if debug:
-                        print(f"Skipping box with invalid dimensions: w={float(w):.4f}, h={float(h):.4f}")
+                        print(f"Skipping tiny box: w={float(w):.4f}, h={float(h):.4f}")
                     continue
 
                 if debug:
@@ -148,35 +137,21 @@ def decode_predictions(
                     print(f"  Box: {b}")
                     print(f"  Raw box values: {[float(v) for v in box]}")
                     print(f"  Class: {VOC_CLASSES[int(class_id)]}")
-                    print(f"  Box confidence: {confidence:.4f}")
-                    print(f"  Class probability: {class_prob:.4f}")
-                    print(f"  Final score (confidence * class_prob): {score:.4f}")
+                    print(f"  Box confidence: {float(confidence):.4f}")
+                    print(f"  Class prob: {float(max_class_prob):.4f}")
+                    print(f"  Final score: {score:.4f}")
                     print(f"  Box coordinates: x={float(x):.4f}, y={float(y):.4f}, w={float(w):.4f}, h={float(h):.4f}")
 
                 # Convert to corner coordinates
-                x1 = x - w/2
-                y1 = y - h/2
-                x2 = x + w/2
-                y2 = y + h/2
-
-                # Clip coordinates to image bounds
-                x1 = max(0, min(1, float(x1)))
-                y1 = max(0, min(1, float(y1)))
-                x2 = max(0, min(1, float(x2)))
-                y2 = max(0, min(1, float(y2)))
+                x1 = max(0.0, min(1.0, float(x - w/2)))
+                y1 = max(0.0, min(1.0, float(y - h/2)))
+                x2 = max(0.0, min(1.0, float(x + w/2)))
+                y2 = max(0.0, min(1.0, float(y + h/2)))
 
                 # Store detection
                 boxes.append([x1, y1, x2, y2])
                 class_ids.append(int(class_id))
                 scores.append(score)
-
-                if debug:
-                    # Print top 3 class probabilities
-                    top_indices = mx.argsort(class_probs)[-3:][::-1]
-                    top_probs = class_probs[top_indices]
-                    print("  Top 3 class probabilities:")
-                    for prob, class_idx in zip(top_probs, top_indices):
-                        print(f"    {VOC_CLASSES[int(class_idx)]}: {float(prob):.4f}")
 
     # Convert to numpy arrays for NMS
     if boxes:
@@ -184,50 +159,66 @@ def decode_predictions(
         scores = np.array(scores)
         class_ids = np.array(class_ids)
 
-        # Apply NMS
-        keep = []
-        for class_id in np.unique(class_ids):
-            mask = class_ids == class_id
-            class_boxes = boxes[mask]
-            class_scores = scores[mask]
+        # Apply NMS per class
+        final_boxes = []
+        final_scores = []
+        final_class_ids = []
 
-            # Compute areas
-            areas = (class_boxes[:, 2] - class_boxes[:, 0]) * (
-                class_boxes[:, 3] - class_boxes[:, 1]
-            )
+        # Process each class separately
+        for c in range(C):
+            class_mask = class_ids == c
+            if not np.any(class_mask):
+                continue
 
+            c_boxes = boxes[class_mask]
+            c_scores = scores[class_mask]
+            
+            # Skip if no boxes for this class
+            if len(c_boxes) == 0:
+                continue
+
+            # Calculate areas once
+            areas = (c_boxes[:, 2] - c_boxes[:, 0]) * (c_boxes[:, 3] - c_boxes[:, 1])
+            
             # Sort by score
-            order = class_scores.argsort()[::-1]
+            order = c_scores.argsort()[::-1]
+            keep = []
 
             while order.size > 0:
                 i = order[0]
-                keep.append(np.where(mask)[0][i])
+                keep.append(i)
 
                 if order.size == 1:
                     break
 
-                # Compute IoU
-                xx1 = np.maximum(class_boxes[i, 0], class_boxes[order[1:], 0])
-                yy1 = np.maximum(class_boxes[i, 1], class_boxes[order[1:], 1])
-                xx2 = np.minimum(class_boxes[i, 2], class_boxes[order[1:], 2])
-                yy2 = np.minimum(class_boxes[i, 3], class_boxes[order[1:], 3])
+                # Calculate IoU with rest
+                xx1 = np.maximum(c_boxes[i, 0], c_boxes[order[1:], 0])
+                yy1 = np.maximum(c_boxes[i, 1], c_boxes[order[1:], 1])
+                xx2 = np.minimum(c_boxes[i, 2], c_boxes[order[1:], 2])
+                yy2 = np.minimum(c_boxes[i, 3], c_boxes[order[1:], 3])
 
                 w = np.maximum(0.0, xx2 - xx1)
                 h = np.maximum(0.0, yy2 - yy1)
                 inter = w * h
 
-                ovr = inter / (areas[i] + areas[order[1:]] - inter)
-
-                # Keep boxes with IoU less than threshold
+                # Calculate IoU
+                ovr = inter / (areas[i] + areas[order[1:]] - inter + 1e-10)
+                
+                # Get indices where IoU is less than threshold
                 inds = np.where(ovr <= nms_threshold)[0]
                 order = order[inds + 1]
 
-        # Keep only the selected boxes
-        boxes = boxes[keep]
-        scores = scores[keep]
-        class_ids = class_ids[keep]
+            # Add kept boxes for this class
+            final_boxes.extend(c_boxes[keep])
+            final_scores.extend(c_scores[keep])
+            final_class_ids.extend([c] * len(keep))
 
-    return boxes, class_ids, scores
+        if final_boxes:
+            boxes = np.array(final_boxes)
+            scores = np.array(final_scores)
+            class_ids = np.array(final_class_ids)
+
+    return boxes, scores, class_ids
 
 
 def compute_iou_numpy(box, boxes):
@@ -398,19 +389,19 @@ def main():
     parser.add_argument(
         "--conf-thresh",
         type=float,
-        default=0.6,  # Increased further
+        default=0.2,  # Slightly increased
         help="Confidence threshold (objectness score)",
     )
     parser.add_argument(
         "--class-thresh",
         type=float,
-        default=0.5,       # Increased further
+        default=0.2,       # Slightly increased
         help="Class probability threshold",
     )
     parser.add_argument(
         "--nms-thresh",
         type=float,
-        default=0.3,         # Keep strict NMS
+        default=0.5,         # Relaxed a bit
         help="NMS IoU threshold (lower = stricter filtering of overlapping boxes)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")

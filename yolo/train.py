@@ -128,28 +128,38 @@ def clip_gradients(gradients, max_norm: float = 10.0):
     }
 
 
-def adjust_learning_rate(optimizer, epoch, initial_lr, num_epochs):
-    """
-    Adjust learning rate using warmup and cosine decay
+def compute_class_weights(dataset):
+    """Compute class weights based on class frequency"""
+    class_counts = mx.zeros(len(VOC_CLASSES))
+    total_objects = 0
+    
+    for _, target in dataset:
+        # target shape: [S, S, B*(5+C)]
+        target = mx.reshape(target, (dataset.grid_size, dataset.grid_size, -1, 5 + len(VOC_CLASSES)))
+        obj_mask = target[..., 4:5]  # Object confidence
+        class_labels = target[..., 5:]  # Class labels
+        
+        # Count objects per class
+        for i in range(len(VOC_CLASSES)):
+            class_counts[i] += mx.sum(obj_mask * class_labels[..., i:i+1])
+        total_objects += mx.sum(obj_mask)
+    
+    # Compute weights (inverse frequency)
+    class_weights = total_objects / (class_counts + 1e-6)
+    # Normalize weights
+    class_weights = class_weights / mx.sum(class_weights) * len(VOC_CLASSES)
+    return class_weights
 
-    Args:
-        optimizer: The optimizer instance
-        epoch: Current epoch number
-        initial_lr: Initial learning rate
-        num_epochs: Total number of epochs
 
-    Returns:
-        Current learning rate
-    """
-    warmup_epochs = 5
+def cosine_warmup_schedule(epoch, warmup_epochs, total_epochs, initial_lr):
+    """Learning rate schedule with warmup and cosine decay"""
     if epoch < warmup_epochs:
         # Linear warmup
-        optimizer.learning_rate = initial_lr * ((epoch + 1) / warmup_epochs)
+        return initial_lr * (epoch + 1) / warmup_epochs
     else:
         # Cosine decay
-        progress = (epoch - warmup_epochs) / (num_epochs - warmup_epochs)
-        optimizer.learning_rate = initial_lr * 0.5 * (1 + math.cos(math.pi * progress))
-    return optimizer.learning_rate
+        progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
+        return initial_lr * 0.5 * (1 + math.cos(math.pi * progress))
 
 
 def train_step(model, batch, optimizer):
@@ -190,17 +200,22 @@ def train(
     resume_epoch: int | None = None,
     max_grad_norm: float = 5.0,
     grid_size: int = 7,
+    warmup_epochs: int = 5,
+    val_freq: int = 1,
 ):
-    """Train YOLO model"""
+    """Train YOLO model with improved training process"""
     # Create model and optimizer
-    model = YOLO(S=grid_size, B=2, C=len(VOC_CLASSES))  # Use same grid_size for model
+    model = YOLO(S=grid_size, B=2, C=len(VOC_CLASSES))
 
     optimizer = optim.Adam(
-        learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
+        learning_rate=learning_rate,
+        betas=[beta1, beta2],
+        eps=epsilon
     )
 
     # Resume from checkpoint if specified
     start_epoch = 0
+    best_val_loss = float('inf')
     if resume_epoch is not None:
         print(f"Resuming from epoch {resume_epoch}")
         start_epoch, prev_loss = load_checkpoint(
@@ -213,8 +228,8 @@ def train(
     _ = model(dummy_input)
     print("Model successfully verified with dummy input")
 
-    # Load dataset with augmentation
-    print("Loading dataset...")
+    # Load datasets
+    print("Loading datasets...")
     train_dataset = VOCDataset(
         data_dir=data_dir,
         year="2012",
@@ -222,72 +237,139 @@ def train(
         augment=True,
         grid_size=grid_size,
     )
+    val_dataset = VOCDataset(
+        data_dir=data_dir,
+        year="2012",
+        image_set="val",
+        augment=False,
+        grid_size=grid_size,
+    )
+    
     train_loader = create_data_loader(
         train_dataset, batch_size=batch_size, shuffle=True
     )
+    val_loader = create_data_loader(
+        val_dataset, batch_size=batch_size, shuffle=False
+    )
+
+    # Compute class weights from training data
+    print("Computing class weights...")
+    class_weights = compute_class_weights(train_dataset)
+    print("Class weights:", [f"{VOC_CLASSES[i]}: {w:.2f}" for i, w in enumerate(class_weights)])
 
     # Training loop
     print("\nStarting training...")
     for epoch in range(start_epoch, num_epochs):
         model.train()
-
-        # Initialize metrics
-        epoch_loss = 0
-        coord_loss = 0
-        conf_loss = 0
-        class_loss = 0
-        noobj_loss = 0
+        epoch_metrics = {
+            'loss': 0,
+            'coord': 0,
+            'conf': 0,
+            'noobj': 0,
+            'class': 0
+        }
         num_batches = 0
-
         start_time = time.time()
 
         # Adjust learning rate
-        current_lr = adjust_learning_rate(optimizer, epoch, learning_rate, num_epochs)
+        current_lr = cosine_warmup_schedule(
+            epoch, warmup_epochs, num_epochs, learning_rate
+        )
+        optimizer.learning_rate = current_lr
         print(f"\nEpoch [{epoch+1}/{num_epochs}], Learning Rate: {current_lr:.6f}")
 
+        # Training
         for batch in train_loader:
-            # Training step
-            loss, loss_components = train_step(model, batch, optimizer)
+            # Training step with gradient accumulation
+            accumulated_loss = 0
+            accumulated_components = None
+
+            for _ in range(accumulation_steps):
+                loss, components = train_step(model, batch, optimizer)
+                accumulated_loss += loss / accumulation_steps
+                
+                if accumulated_components is None:
+                    accumulated_components = {
+                        k: v / accumulation_steps for k, v in components.items()
+                    }
+                else:
+                    for k, v in components.items():
+                        accumulated_components[k] += v / accumulation_steps
 
             # Update metrics
-            epoch_loss += loss.item()
-            coord_loss += loss_components["coord"]
-            conf_loss += loss_components["conf"]
-            class_loss += loss_components["class"]
-            noobj_loss += loss_components["noobj"]
+            epoch_metrics['loss'] += accumulated_loss.item()
+            for k, v in accumulated_components.items():
+                epoch_metrics[k] += v
             num_batches += 1
 
             # Print batch progress
             if num_batches % 10 == 0:
                 print(
                     f"Batch [{num_batches}], "
-                    f"Loss: {loss.item():.4f}, "
-                    f"Coord: {loss_components['coord']:.4f}, "
-                    f"Conf: {loss_components['conf']:.4f}, "
-                    f"Class: {loss_components['class']:.4f}, "
-                    f"NoObj: {loss_components['noobj']:.4f}"
+                    f"Loss: {accumulated_loss.item():.4f}, "
+                    f"Coord: {accumulated_components['coord']:.4f}, "
+                    f"Conf: {accumulated_components['conf']:.4f}, "
+                    f"Class: {accumulated_components['class']:.4f}, "
+                    f"NoObj: {accumulated_components['noobj']:.4f}"
                 )
 
         # Calculate epoch metrics
-        epoch_loss /= num_batches
-        coord_loss /= num_batches
-        conf_loss /= num_batches
-        class_loss /= num_batches
-        noobj_loss /= num_batches
+        for k in epoch_metrics:
+            epoch_metrics[k] /= num_batches
+
+        # Validation
+        if (epoch + 1) % val_freq == 0:
+            model.eval()
+            val_metrics = {
+                'loss': 0,
+                'coord': 0,
+                'conf': 0,
+                'noobj': 0,
+                'class': 0
+            }
+            num_val_batches = 0
+
+            print("\nRunning validation...")
+            for val_batch in val_loader:
+                # Forward pass only
+                predictions = model(val_batch[0])
+                val_loss, val_components = yolo_loss(
+                    predictions, val_batch[1], model,
+                    class_weights=class_weights
+                )
+
+                # Update validation metrics
+                val_metrics['loss'] += val_loss.item()
+                for k, v in val_components.items():
+                    val_metrics[k] += v
+                num_val_batches += 1
+
+            # Calculate validation metrics
+            for k in val_metrics:
+                val_metrics[k] /= num_val_batches
+
+            # Save best model
+            if val_metrics['loss'] < best_val_loss:
+                best_val_loss = val_metrics['loss']
+                save_checkpoint(model, optimizer, epoch + 1, val_metrics['loss'], save_dir)
+                print(f"New best model saved! Validation loss: {best_val_loss:.4f}")
 
         # Print epoch summary
         time_taken = time.time() - start_time
         print(f"\nEpoch [{epoch+1}/{num_epochs}] Summary:")
         print(f"Time: {time_taken:.2f}s")
-        print(f"Avg Loss: {epoch_loss:.4f}")
-        print(f"Coord Loss: {coord_loss:.4f}")
-        print(f"Conf Loss: {conf_loss:.4f}")
-        print(f"Class Loss: {class_loss:.4f}")
-        print(f"NoObj Loss: {noobj_loss:.4f}")
+        print("\nTraining Metrics:")
+        for k, v in epoch_metrics.items():
+            print(f"{k.capitalize()}: {v:.4f}")
+        
+        if (epoch + 1) % val_freq == 0:
+            print("\nValidation Metrics:")
+            for k, v in val_metrics.items():
+                print(f"{k.capitalize()}: {v:.4f}")
 
         # Save checkpoint every 5 epochs
-        if (epoch % 5 == 0) or (epoch == num_epochs - 1):
-            save_checkpoint(model, optimizer, epoch + 1, epoch_loss, save_dir)
+        if (epoch + 1) % 5 == 0:
+            save_checkpoint(model, optimizer, epoch + 1, epoch_metrics['loss'], save_dir)
             print(f"Checkpoint saved at epoch {epoch+1}")
 
 
@@ -335,6 +417,12 @@ if __name__ == "__main__":
         default=7,
         help="Grid size for YOLO (S x S grid)",
     )
+    parser.add_argument(
+        "--warmup-epochs", type=int, default=5, help="Number of warmup epochs"
+    )
+    parser.add_argument(
+        "--val-freq", type=int, default=1, help="Validation frequency"
+    )
     args = parser.parse_args()
 
     config = {
@@ -350,6 +438,8 @@ if __name__ == "__main__":
         "resume_epoch": args.resume_epoch,
         "max_grad_norm": args.max_grad_norm,
         "grid_size": args.grid_size,
+        "warmup_epochs": args.warmup_epochs,
+        "val_freq": args.val_freq,
     }
 
     train(**config)

@@ -56,6 +56,15 @@ def compute_box_iou(box1, box2):
     return mx.clip(iou, 0.0, 1.0)  # Ensure IoU is between 0 and 1
 
 
+def focal_loss(pred, target, gamma=2.0, alpha=0.25):
+    """Compute focal loss for better handling of hard examples"""
+    pred = mx.clip(pred, 1e-6, 1.0 - 1e-6)
+    ce_loss = -target * mx.log(pred) - (1 - target) * mx.log(1 - pred)
+    p_t = target * pred + (1 - target) * (1 - pred)
+    alpha_t = target * alpha + (1 - target) * (1 - alpha)
+    return alpha_t * ((1 - p_t) ** gamma) * ce_loss
+
+
 def validate_inputs(predictions, targets, model):
     """
     Validate input shapes and values for the YOLO loss function.
@@ -89,15 +98,15 @@ def validate_inputs(predictions, targets, model):
         )
 
 
-def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
+def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, class_weights=None):
     """
     Compute YOLOv2 loss with anchor boxes.
     
     The loss consists of:
     1. Coordinate loss (x, y, w, h) for boxes with objects
-    2. Confidence loss for boxes with objects
-    3. Confidence loss for boxes without objects
-    4. Class prediction loss for boxes with objects
+    2. Confidence loss for boxes with objects (with focal loss)
+    3. Confidence loss for boxes without objects (with focal loss)
+    4. Class prediction loss for boxes with objects (with class weights)
     
     Args:
         predictions: Model predictions [batch, B*(5+C), S, S] in NCHW format
@@ -105,6 +114,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
         model: YOLO model instance
         lambda_coord: Weight for coordinate predictions (default: 5.0)
         lambda_noobj: Weight for no-object confidence predictions (default: 0.5)
+        class_weights: Optional weights for each class to handle class imbalance
         
     Returns:
         Total loss (scalar), dict of loss components
@@ -174,27 +184,54 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5):
         obj_mask * ((pred_xy - targ_xy) ** 2)
     ) / num_objects
     
-    # WH loss (using anchor-relative coordinates)
+    # WH loss (using anchor-relative coordinates with better scale handling)
     wh_loss = mx.sum(
-        obj_mask * ((pred_wh - mx.log(targ_wh + 1e-6)) ** 2)
+        obj_mask * (
+            (mx.sqrt(pred_wh_abs + 1e-6) - mx.sqrt(targ_wh_abs + 1e-6)) ** 2
+        )
     ) / num_objects
     
-    # 2. Object confidence loss (for cells with objects)
-    # Calculate IoU between predicted and target boxes
-    ious = compute_box_iou(pred_boxes, targ_boxes)  # [batch, S, S, B]
+    # 2. Object confidence loss (with focal loss)
+    ious = compute_box_iou(pred_boxes, targ_boxes)
     obj_loss = mx.sum(
-        obj_mask * (pred_conf - mx.expand_dims(ious, axis=-1)) ** 2  # Add extra dim to match shape
+        focal_loss(
+            pred_conf,
+            mx.expand_dims(ious, axis=-1) * obj_mask,
+            gamma=2.0,
+            alpha=0.25
+        )
     ) / num_objects
     
-    # 3. No-object confidence loss (for cells without objects)
+    # 3. No-object confidence loss (with focal loss)
     noobj_loss = mx.sum(
-        noobj_mask * pred_conf ** 2
+        focal_loss(
+            pred_conf,
+            mx.zeros_like(pred_conf),
+            gamma=2.0,
+            alpha=0.25
+        ) * noobj_mask
     ) / (mx.sum(noobj_mask) + 1e-6)
     
-    # 4. Class prediction loss (only for cells with objects)
-    class_loss = mx.sum(
-        obj_mask * mx.sum((pred_class - targ_class) ** 2, axis=-1, keepdims=True)
-    ) / num_objects
+    # 4. Class prediction loss (with optional class weights)
+    if class_weights is not None:
+        # Apply class weights to the loss
+        class_weights = mx.array(class_weights, dtype=mx.float32)
+        class_weights = mx.reshape(class_weights, (1, 1, 1, 1, -1))
+        class_loss = mx.sum(
+            obj_mask * class_weights * mx.sum(
+                (pred_class - targ_class) ** 2,
+                axis=-1,
+                keepdims=True
+            )
+        ) / num_objects
+    else:
+        class_loss = mx.sum(
+            obj_mask * mx.sum(
+                (pred_class - targ_class) ** 2,
+                axis=-1,
+                keepdims=True
+            )
+        ) / num_objects
     
     # Combine all losses with their respective weights
     total_loss = (

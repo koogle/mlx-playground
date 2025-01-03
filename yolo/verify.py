@@ -46,20 +46,19 @@ def analyze_raw_predictions(predictions, S=7, B=2, C=20):
     print(f"Value range: [{float(mx.min(predictions)):.3f}, {float(mx.max(predictions)):.3f}]")
 
     # Reshape to [S, S, B*(5+C)]
-    pred = mx.transpose(predictions[0], (1, 2, 0))  # [S, S, B*(5+C)]
+    pred = predictions[0]  # [S, S, B*(5+C)]
     print(f"Reshaped predictions shape: {pred.shape}")
 
     # For each cell
     for i in range(S):
         for j in range(S):
-            # Get class predictions first (shared between boxes)
+            # Get class probabilities
             class_offset = B * 5
-            class_logits = pred[i, j, class_offset : class_offset + C]
-            class_probs = mx.softmax(class_logits)
-            
+            class_logits = pred[i, j, class_offset:class_offset + C]
+            cell_class_probs = mx.softmax(class_logits)  # Convert logits to probabilities
+
             # For each box
             for b in range(B):
-                # Calculate box offset
                 box_offset = b * 5
                 box_end = box_offset + 5
                 
@@ -86,7 +85,7 @@ def analyze_raw_predictions(predictions, S=7, B=2, C=20):
 
                     # Print all class probabilities above threshold
                     print("  Class probabilities:")
-                    class_probs_list = [float(p) for p in class_probs]
+                    class_probs_list = [float(p) for p in cell_class_probs]
                     for class_idx, prob in enumerate(class_probs_list):
                         if prob > 0.1:  # Only show significant probabilities
                             print(f"    {VOC_CLASSES[class_idx]}: {prob:.3f}")
@@ -131,7 +130,15 @@ def main():
         "--conf-thresh", type=float, default=0.1, help="Confidence threshold"
     )
     parser.add_argument(
-        "--class-thresh", type=float, default=0.1, help="Class probability threshold"
+        "--class-thresh",
+        type=float,
+        default=0.1,
+        help="Class probability threshold",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug output"
     )
     args = parser.parse_args()
 

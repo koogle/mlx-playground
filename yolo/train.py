@@ -132,18 +132,20 @@ def compute_class_weights(dataset):
     """Compute class weights based on class frequency"""
     class_counts = mx.zeros(len(VOC_CLASSES))
     total_objects = 0
-    
+
     for _, target in dataset:
         # target shape: [S, S, B*(5+C)]
-        target = mx.reshape(target, (dataset.grid_size, dataset.grid_size, -1, 5 + len(VOC_CLASSES)))
+        target = mx.reshape(
+            target, (dataset.grid_size, dataset.grid_size, -1, 5 + len(VOC_CLASSES))
+        )
         obj_mask = target[..., 4:5]  # Object confidence
         class_labels = target[..., 5:]  # Class labels
-        
+
         # Count objects per class
         for i in range(len(VOC_CLASSES)):
-            class_counts[i] += mx.sum(obj_mask * class_labels[..., i:i+1])
+            class_counts[i] += mx.sum(obj_mask * class_labels[..., i : i + 1])
         total_objects += mx.sum(obj_mask)
-    
+
     # Compute weights (inverse frequency)
     class_weights = total_objects / (class_counts + 1e-6)
     # Normalize weights
@@ -161,8 +163,12 @@ def compute_box_iou(pred_boxes, target_boxes):
     intersection = mx.maximum(x2 - x1, 0) * mx.maximum(y2 - y1, 0)
 
     # Calculate union area
-    pred_area = (pred_boxes[..., 2] - pred_boxes[..., 0]) * (pred_boxes[..., 3] - pred_boxes[..., 1])
-    target_area = (target_boxes[..., 2] - target_boxes[..., 0]) * (target_boxes[..., 3] - target_boxes[..., 1])
+    pred_area = (pred_boxes[..., 2] - pred_boxes[..., 0]) * (
+        pred_boxes[..., 3] - pred_boxes[..., 1]
+    )
+    target_area = (target_boxes[..., 2] - target_boxes[..., 0]) * (
+        target_boxes[..., 3] - target_boxes[..., 1]
+    )
     union = pred_area + target_area - intersection
 
     # Compute IoU
@@ -194,9 +200,9 @@ def train_step(model, batch, optimizer):
     # Forward pass to get components
     predictions = model(images)
     loss, components = yolo_loss(predictions, targets, model)
-    
+
     # Compute gradients
-    loss_grad_fn = nn.value_and_grad(loss_fn)
+    loss_grad_fn = nn.value_and_grad(model, loss_fn)
     loss_value, grads = loss_grad_fn()
 
     # Update model parameters
@@ -229,14 +235,12 @@ def train(
     model = YOLO(S=grid_size, B=2, C=len(VOC_CLASSES))
 
     optimizer = optim.Adam(
-        learning_rate=learning_rate,
-        betas=[beta1, beta2],
-        eps=epsilon
+        learning_rate=learning_rate, betas=[beta1, beta2], eps=epsilon
     )
 
     # Resume from checkpoint if specified
     start_epoch = 0
-    best_val_loss = float('inf')
+    best_val_loss = float("inf")
     if resume_epoch is not None:
         print(f"Resuming from epoch {resume_epoch}")
         start_epoch, prev_loss = load_checkpoint(
@@ -265,39 +269,42 @@ def train(
         augment=False,
         grid_size=grid_size,
     )
-    
+
     train_loader = create_data_loader(
         train_dataset, batch_size=batch_size, shuffle=True
     )
-    val_loader = create_data_loader(
-        val_dataset, batch_size=batch_size, shuffle=False
-    )
+    val_loader = create_data_loader(val_dataset, batch_size=batch_size, shuffle=False)
 
     # Compute class weights from training data
     print("Computing class weights...")
     class_weights = compute_class_weights(train_dataset)
-    
+
     # Apply additional weighting to common classes
     class_weights = mx.array(class_weights)
     for class_name, weight in zip(VOC_CLASSES, class_weights):
-        if class_name in ['person', 'chair', 'car']:
-            class_weights[VOC_CLASSES.index(class_name)] *= 1.5  # Increase weight for common classes
-    
+        if class_name in ["person", "chair", "car"]:
+            class_weights[
+                VOC_CLASSES.index(class_name)
+            ] *= 1.5  # Increase weight for common classes
+
     # Normalize weights again
     class_weights = class_weights / mx.sum(class_weights) * len(VOC_CLASSES)
-    print("Adjusted class weights:", [f"{VOC_CLASSES[i]}: {w:.2f}" for i, w in enumerate(class_weights)])
+    print(
+        "Adjusted class weights:",
+        [f"{VOC_CLASSES[i]}: {w:.2f}" for i, w in enumerate(class_weights)],
+    )
 
     # Training loop
     print("\nStarting training...")
     for epoch in range(start_epoch, num_epochs):
         model.train()
         epoch_metrics = {
-            'loss': 0,
-            'coord': 0,
-            'conf': 0,
-            'noobj': 0,
-            'class': 0,
-            'iou': 0  # Track IoU as additional metric
+            "loss": 0,
+            "coord": 0,
+            "conf": 0,
+            "noobj": 0,
+            "class": 0,
+            "iou": 0,  # Track IoU as additional metric
         }
         num_batches = 0
         start_time = time.time()
@@ -319,17 +326,17 @@ def train(
             for _ in range(accumulation_steps):
                 # Forward pass and compute gradients
                 loss, components = train_step(model, batch, optimizer)
-                
+
                 # Calculate IoU for monitoring
                 predictions = model(batch[0])
                 pred_boxes = predictions[..., :4]
                 target_boxes = batch[1][..., :4]
                 iou = compute_box_iou(pred_boxes, target_boxes)
                 mean_iou = mx.mean(iou).item()
-                
+
                 accumulated_loss += loss.item() / accumulation_steps
                 accumulated_iou += mean_iou / accumulation_steps
-                
+
                 if accumulated_components is None:
                     accumulated_components = {
                         k: v / accumulation_steps for k, v in components.items()
@@ -339,8 +346,8 @@ def train(
                         accumulated_components[k] += v / accumulation_steps
 
             # Update metrics
-            epoch_metrics['loss'] += accumulated_loss
-            epoch_metrics['iou'] += accumulated_iou
+            epoch_metrics["loss"] += accumulated_loss
+            epoch_metrics["iou"] += accumulated_iou
             for k, v in accumulated_components.items():
                 epoch_metrics[k] += v
             num_batches += 1
@@ -364,13 +371,7 @@ def train(
         # Validation
         if (epoch + 1) % val_freq == 0:
             model.eval()
-            val_metrics = {
-                'loss': 0,
-                'coord': 0,
-                'conf': 0,
-                'noobj': 0,
-                'class': 0
-            }
+            val_metrics = {"loss": 0, "coord": 0, "conf": 0, "noobj": 0, "class": 0}
             num_val_batches = 0
 
             print("\nRunning validation...")
@@ -378,12 +379,11 @@ def train(
                 # Forward pass only
                 predictions = model(val_batch[0])
                 val_loss, val_components = yolo_loss(
-                    predictions, val_batch[1], model,
-                    class_weights=class_weights
+                    predictions, val_batch[1], model, class_weights=class_weights
                 )
 
                 # Update validation metrics
-                val_metrics['loss'] += val_loss.item()
+                val_metrics["loss"] += val_loss.item()
                 for k, v in val_components.items():
                     val_metrics[k] += v
                 num_val_batches += 1
@@ -393,9 +393,11 @@ def train(
                 val_metrics[k] /= num_val_batches
 
             # Save best model
-            if val_metrics['loss'] < best_val_loss:
-                best_val_loss = val_metrics['loss']
-                save_checkpoint(model, optimizer, epoch + 1, val_metrics['loss'], save_dir)
+            if val_metrics["loss"] < best_val_loss:
+                best_val_loss = val_metrics["loss"]
+                save_checkpoint(
+                    model, optimizer, epoch + 1, val_metrics["loss"], save_dir
+                )
                 print(f"New best model saved! Validation loss: {best_val_loss:.4f}")
 
         # Print epoch summary
@@ -405,7 +407,7 @@ def train(
         print("\nTraining Metrics:")
         for k, v in epoch_metrics.items():
             print(f"{k.capitalize()}: {v:.4f}")
-        
+
         if (epoch + 1) % val_freq == 0:
             print("\nValidation Metrics:")
             for k, v in val_metrics.items():
@@ -413,7 +415,9 @@ def train(
 
         # Save checkpoint every 5 epochs
         if (epoch + 1) % 5 == 0:
-            save_checkpoint(model, optimizer, epoch + 1, epoch_metrics['loss'], save_dir)
+            save_checkpoint(
+                model, optimizer, epoch + 1, epoch_metrics["loss"], save_dir
+            )
             print(f"Checkpoint saved at epoch {epoch+1}")
 
 
@@ -464,9 +468,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--warmup-epochs", type=int, default=5, help="Number of warmup epochs"
     )
-    parser.add_argument(
-        "--val-freq", type=int, default=1, help="Validation frequency"
-    )
+    parser.add_argument("--val-freq", type=int, default=1, help="Validation frequency")
     parser.add_argument(
         "--lambda-coord", type=float, default=5.0, help="Lambda for coordinate loss"
     )

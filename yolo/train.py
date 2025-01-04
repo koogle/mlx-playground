@@ -195,7 +195,7 @@ def train_step(model, batch, optimizer, class_weights=None):
     def loss_fn(params):
         model.update(params)
         predictions = model(images)
-        loss, components = yolo_loss(
+        loss = yolo_loss(
             predictions,
             targets,
             model,
@@ -203,10 +203,21 @@ def train_step(model, batch, optimizer, class_weights=None):
             lambda_noobj=1.0,   # Increased to prevent false positives
             class_weights=class_weights
         )
-        return loss, components
+        return loss
     
     # Forward and backward pass
-    (loss, components), grad = mx.value_and_grad(loss_fn, has_aux=True)(model.parameters())
+    loss_value, grad = mx.value_and_grad(loss_fn)(model.parameters())
+    
+    # Get loss components for logging
+    predictions = model(images)
+    _, components = yolo_loss(
+        predictions,
+        targets,
+        model,
+        lambda_coord=10.0,
+        lambda_noobj=1.0,
+        class_weights=class_weights
+    )
     
     # Gradient clipping
     grad = clip_gradients(grad, max_norm=1.0)  # Increased for better stability
@@ -215,7 +226,7 @@ def train_step(model, batch, optimizer, class_weights=None):
     optimizer.update(model, grad)
     mx.eval(model.parameters(), optimizer.state)
     
-    return loss, components
+    return loss_value, components
 
 
 def train(
@@ -336,16 +347,16 @@ def train(
             loss, components = train_step(model, batch, optimizer, class_weights)
             
             # Accumulate loss components
-            accumulated_loss += loss
+            accumulated_loss += loss.item()
             for k, v in components.items():
                 accumulated_components[k] += v
             num_batches += 1
             
             # Log every 10 batches
             if (batch_idx + 1) % 10 == 0:
-                avg_loss = accumulated_loss / (batch_idx + 1)
+                avg_loss = accumulated_loss / num_batches
                 avg_components = {
-                    k: v / (batch_idx + 1) 
+                    k: v / num_batches 
                     for k, v in accumulated_components.items()
                 }
                 
@@ -362,7 +373,7 @@ def train(
             # Save gradients periodically
             if (batch_idx + 1) % 5 == 0:
                 save_checkpoint(
-                    model, optimizer, epoch + 1, accumulated_loss / (batch_idx + 1), save_dir
+                    model, optimizer, epoch + 1, accumulated_loss / num_batches, save_dir
                 )
                 print(f"Checkpoint saved at epoch {epoch+1}")
         

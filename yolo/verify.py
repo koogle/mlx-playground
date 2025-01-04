@@ -122,6 +122,88 @@ def visualize_predictions(image_path, boxes, scores, class_ids, ground_truth=Non
     print(f"\nVisualization saved to {output_path}")
 
 
+def verify_predictions(predictions, targets, model, iou_threshold=0.5):
+    """
+    Verify model predictions against ground truth targets.
+    Returns IoU scores and detection metrics.
+    """
+    # Convert predictions from NCHW to NHWC format
+    predictions = mx.transpose(predictions, (0, 2, 3, 1))
+    
+    # Extract dimensions
+    batch_size = predictions.shape[0]
+    S = model.S
+    B = model.B
+    C = model.C
+    
+    # Reshape predictions and targets
+    predictions = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
+    targets = mx.reshape(targets, (batch_size, S, S, B, 5 + C))
+    
+    # Extract components from predictions with numerical stability
+    pred_xy = mx.sigmoid(mx.clip(predictions[..., 0:2], -10, 10))
+    pred_wh = mx.clip(predictions[..., 2:4], -10, 10)
+    pred_conf = mx.sigmoid(mx.clip(predictions[..., 4:5], -10, 10))
+    pred_class = predictions[..., 5:]
+    
+    # Apply softmax to class predictions with numerical stability
+    pred_class = pred_class - mx.max(pred_class, axis=-1, keepdims=True)
+    pred_class = mx.exp(pred_class)
+    pred_class = pred_class / (mx.sum(pred_class, axis=-1, keepdims=True) + 1e-10)
+    
+    # Extract components from targets
+    targ_xy = targets[..., 0:2]
+    targ_wh = targets[..., 2:4]
+    targ_conf = targets[..., 4:5]
+    targ_class = targets[..., 5:]
+    
+    # Convert to absolute coordinates
+    grid_x, grid_y = mx.meshgrid(
+        mx.arange(S, dtype=mx.float32),
+        mx.arange(S, dtype=mx.float32)
+    )
+    grid_xy = mx.stack([grid_x, grid_y], axis=-1)
+    grid_xy = mx.expand_dims(grid_xy, axis=2)
+    
+    # Convert predictions to absolute coordinates
+    pred_xy_abs = (pred_xy + grid_xy) / S
+    pred_wh_abs = mx.exp(mx.clip(pred_wh, -10, 10)) * model.anchors
+    pred_boxes = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
+    
+    # Convert targets to absolute coordinates
+    targ_xy_abs = (targ_xy + grid_xy) / S
+    targ_wh_abs = targ_wh * model.anchors
+    targ_boxes = mx.concatenate([targ_xy_abs, targ_wh_abs], axis=-1)
+    
+    # Compute IoU between predicted and target boxes
+    ious = compute_box_iou(
+        mx.reshape(pred_boxes, (-1, S*S*B, 4)),
+        mx.reshape(targ_boxes, (-1, S*S*B, 4))
+    )
+    ious = mx.reshape(ious, (batch_size, S, S, B))
+    
+    # Get predicted and target classes
+    pred_classes = mx.argmax(pred_class, axis=-1)
+    targ_classes = mx.argmax(targ_class, axis=-1)
+    
+    # Compute metrics
+    obj_mask = targ_conf[..., 0] > 0
+    correct_class = (pred_classes == targ_classes) * obj_mask
+    correct_box = (ious > iou_threshold) * obj_mask
+    correct_obj = (pred_conf[..., 0] > 0.5) * obj_mask
+    correct_noobj = (pred_conf[..., 0] <= 0.5) * (1 - obj_mask)
+    
+    metrics = {
+        'mean_iou': mx.mean(ious * obj_mask).item(),
+        'class_accuracy': mx.sum(correct_class).item() / (mx.sum(obj_mask).item() + 1e-6),
+        'box_accuracy': mx.sum(correct_box).item() / (mx.sum(obj_mask).item() + 1e-6),
+        'obj_accuracy': mx.sum(correct_obj).item() / (mx.sum(obj_mask).item() + 1e-6),
+        'noobj_accuracy': mx.sum(correct_noobj).item() / (mx.sum(1 - obj_mask).item() + 1e-6)
+    }
+    
+    return ious, metrics
+
+
 def main():
     parser = argparse.ArgumentParser(description="Verify YOLO model predictions")
     parser.add_argument("--model", required=True, help="Path to model weights")
@@ -184,6 +266,13 @@ def main():
     print("\nDecoded Predictions:")
     for box, score, class_id in zip(boxes, scores, class_ids):
         print(f"- {VOC_CLASSES[int(class_id)]}: {float(score):.3f} at {[float(x) for x in box]}")
+
+    # Verify predictions
+    targets = ...  # Load targets
+    ious, metrics = verify_predictions(predictions, targets, model)
+    print("\nVerification Metrics:")
+    for key, value in metrics.items():
+        print(f"- {key}: {value:.3f}")
 
     # Visualize results
     visualize_predictions(args.image, boxes, scores, class_ids, ground_truth)

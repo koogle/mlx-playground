@@ -59,182 +59,160 @@ def preprocess_image(image, size=448, args=None):
     return image, orig_size
 
 
-def decode_predictions(
-    predictions,
-    confidence_threshold=0.1,  # Lower threshold to catch more candidates
-    class_threshold=0.1,       # Lower threshold for debugging
-    nms_threshold=0.45,        # Slightly more aggressive NMS
-    debug=False,
-):
+def process_predictions(predictions, model, conf_threshold=0.25, nms_threshold=0.45):
     """
-    Decode YOLO predictions to bounding boxes
+    Process raw model predictions to get final detections.
     """
-    S = 7  # Grid size
-    B = 2  # Boxes per cell
-    C = len(VOC_CLASSES)  # Number of classes
-
-    boxes = []
-    class_ids = []
-    scores = []
-
-    # For each cell in the grid
-    for i in range(S):
-        for j in range(S):
-            # Get class probabilities for this cell
-            class_offset = B * 5
-            class_logits = predictions[0, i, j, class_offset:class_offset + C]
-            cell_class_probs = mx.softmax(class_logits)  # Convert logits to probabilities
-
-            # For each box
-            for b in range(B):
-                box_offset = b * 5
-                box = predictions[0, i, j, box_offset:box_offset + 5]
-
-                # Apply sigmoid to confidence score
-                confidence = mx.sigmoid(box[4])
-
-                # Skip low confidence predictions early
-                if confidence < confidence_threshold:
-                    if debug:
-                        print(f"Skipping low confidence box: {float(confidence):.4f}")
-                    continue
-
-                # Find best class and its probability
-                max_class_prob = mx.max(cell_class_probs)
-                class_id = mx.argmax(cell_class_probs)
-
-                # Skip low class probability predictions
-                if float(max_class_prob) < class_threshold:
-                    if debug:
-                        print(f"Skipping low class probability: {float(max_class_prob):.4f}")
-                    continue
-
-                # Calculate final score
-                score = float(confidence * max_class_prob)
-
-                # Convert box coordinates
-                tx, ty = mx.sigmoid(box[0:2])  # Center coordinates (relative to cell)
-                tw, th = box[2:4]              # Width and height predictions
-
-                # Convert to absolute coordinates (in range [0,1])
-                cell_x = j / S
-                cell_y = i / S
-                x = (tx + cell_x) / S  # Normalize by grid size
-                y = (ty + cell_y) / S
-
-                # Scale width/height using sigmoid to keep them bounded
-                w = mx.sigmoid(tw) / S  # Normalize by grid size
-                h = mx.sigmoid(th) / S
-
-                # Skip boxes that are too small
-                if w < 0.01 or h < 0.01:
-                    if debug:
-                        print(f"Skipping tiny box: w={float(w):.4f}, h={float(h):.4f}")
-                    continue
-
-                if debug:
-                    print(f"\nDetection in cell ({i}, {j}):")
-                    print(f"  Box: {b}")
-                    print(f"  Raw box values: {[float(v) for v in box]}")
-                    print(f"  Class: {VOC_CLASSES[int(class_id)]}")
-                    print(f"  Box confidence: {float(confidence):.4f}")
-                    print(f"  Class prob: {float(max_class_prob):.4f}")
-                    print(f"  Final score: {score:.4f}")
-                    print(f"  Box coordinates: x={float(x):.4f}, y={float(y):.4f}, w={float(w):.4f}, h={float(h):.4f}")
-
-                # Convert to corner coordinates
-                x1 = max(0.0, min(1.0, float(x - w/2)))
-                y1 = max(0.0, min(1.0, float(y - h/2)))
-                x2 = max(0.0, min(1.0, float(x + w/2)))
-                y2 = max(0.0, min(1.0, float(y + h/2)))
-
-                # Store detection
-                boxes.append([x1, y1, x2, y2])
-                class_ids.append(int(class_id))
-                scores.append(score)
-
-    # Convert to numpy arrays for NMS
-    if boxes:
-        boxes = np.array(boxes)
-        scores = np.array(scores)
-        class_ids = np.array(class_ids)
-
+    # Convert predictions from NCHW to NHWC format
+    predictions = mx.transpose(predictions, (0, 2, 3, 1))
+    
+    # Extract dimensions
+    batch_size = predictions.shape[0]
+    S = model.S
+    B = model.B
+    C = model.C
+    
+    # Reshape predictions
+    predictions = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
+    
+    # Extract components with numerical stability
+    pred_xy = mx.sigmoid(mx.clip(predictions[..., 0:2], -10, 10))
+    pred_wh = mx.clip(predictions[..., 2:4], -10, 10)
+    pred_conf = mx.sigmoid(mx.clip(predictions[..., 4:5], -10, 10))
+    pred_class = predictions[..., 5:]
+    
+    # Apply softmax to class predictions with numerical stability
+    pred_class = pred_class - mx.max(pred_class, axis=-1, keepdims=True)
+    pred_class = mx.exp(pred_class)
+    pred_class = pred_class / (mx.sum(pred_class, axis=-1, keepdims=True) + 1e-10)
+    
+    # Convert to absolute coordinates
+    grid_x, grid_y = mx.meshgrid(
+        mx.arange(S, dtype=mx.float32),
+        mx.arange(S, dtype=mx.float32)
+    )
+    grid_xy = mx.stack([grid_x, grid_y], axis=-1)
+    grid_xy = mx.expand_dims(grid_xy, axis=2)
+    
+    # Convert predictions to absolute coordinates
+    pred_xy_abs = (pred_xy + grid_xy) / S
+    pred_wh_abs = mx.exp(mx.clip(pred_wh, -10, 10)) * model.anchors
+    
+    # Convert to corner format (x1, y1, x2, y2)
+    pred_mins = pred_xy_abs - pred_wh_abs / 2.0
+    pred_maxs = pred_xy_abs + pred_wh_abs / 2.0
+    pred_boxes = mx.concatenate([pred_mins, pred_maxs], axis=-1)
+    
+    # Get class scores and ids
+    class_scores = mx.max(pred_class, axis=-1)
+    class_ids = mx.argmax(pred_class, axis=-1)
+    
+    # Confidence scores
+    scores = pred_conf[..., 0] * class_scores
+    
+    # Filter by confidence threshold
+    mask = scores > conf_threshold
+    
+    # Collect all detections
+    all_boxes = []
+    all_scores = []
+    all_classes = []
+    
+    for b in range(batch_size):
+        # Get boxes for this image
+        boxes = pred_boxes[b][mask[b]]
+        det_scores = scores[b][mask[b]]
+        det_classes = class_ids[b][mask[b]]
+        
+        if len(boxes) == 0:
+            all_boxes.append(mx.array([]))
+            all_scores.append(mx.array([]))
+            all_classes.append(mx.array([]))
+            continue
+        
         # Apply NMS per class
         final_boxes = []
         final_scores = []
-        final_class_ids = []
-
-        # Process each class separately
-        for c in range(C):
-            class_mask = class_ids == c
-            if not np.any(class_mask):
+        final_classes = []
+        
+        for class_id in range(C):
+            class_mask = det_classes == class_id
+            if not mx.any(class_mask):
                 continue
-
-            c_boxes = boxes[class_mask]
-            c_scores = scores[class_mask]
             
-            # Skip if no boxes for this class
-            if len(c_boxes) == 0:
-                continue
-
-            # Calculate areas once
-            areas = (c_boxes[:, 2] - c_boxes[:, 0]) * (c_boxes[:, 3] - c_boxes[:, 1])
+            c_boxes = boxes[class_mask]
+            c_scores = det_scores[class_mask]
             
             # Sort by score
-            order = c_scores.argsort()[::-1]
+            indices = mx.argsort(c_scores, descending=True)
+            c_boxes = c_boxes[indices]
+            c_scores = c_scores[indices]
+            
+            # Apply NMS
             keep = []
-
-            while order.size > 0:
-                i = order[0]
-                keep.append(i)
-
-                if order.size == 1:
+            while len(c_boxes) > 0:
+                keep.append(0)
+                if len(c_boxes) == 1:
                     break
-
-                # Calculate IoU with rest
-                xx1 = np.maximum(c_boxes[i, 0], c_boxes[order[1:], 0])
-                yy1 = np.maximum(c_boxes[i, 1], c_boxes[order[1:], 1])
-                xx2 = np.minimum(c_boxes[i, 2], c_boxes[order[1:], 2])
-                yy2 = np.minimum(c_boxes[i, 3], c_boxes[order[1:], 3])
-
-                w = np.maximum(0.0, xx2 - xx1)
-                h = np.maximum(0.0, yy2 - yy1)
-                inter = w * h
-
-                # Calculate IoU
-                ovr = inter / (areas[i] + areas[order[1:]] - inter + 1e-10)
+                    
+                # Compute IoU with remaining boxes
+                ious = compute_box_iou(
+                    c_boxes[0:1],
+                    c_boxes[1:]
+                )
                 
-                # Get indices where IoU is less than threshold
-                inds = np.where(ovr <= nms_threshold)[0]
-                order = order[inds + 1]
-
-            # Add kept boxes for this class
+                # Filter boxes with IoU > threshold
+                mask = ious <= nms_threshold
+                c_boxes = mx.concatenate([c_boxes[0:1], c_boxes[1:][mask]])
+                c_scores = mx.concatenate([c_scores[0:1], c_scores[1:][mask]])
+            
             final_boxes.extend(c_boxes[keep])
             final_scores.extend(c_scores[keep])
-            final_class_ids.extend([c] * len(keep))
+            final_classes.extend([class_id] * len(keep))
+        
+        all_boxes.append(mx.stack(final_boxes) if final_boxes else mx.array([]))
+        all_scores.append(mx.stack(final_scores) if final_scores else mx.array([]))
+        all_classes.append(mx.stack(final_classes) if final_classes else mx.array([]))
+    
+    return all_boxes, all_scores, all_classes
 
-        if final_boxes:
-            boxes = np.array(final_boxes)
-            scores = np.array(final_scores)
-            class_ids = np.array(final_class_ids)
 
-    return boxes, scores, class_ids
+def detect_objects(model, image_path, conf_threshold=0.25, nms_threshold=0.45):
+    """
+    Detect objects in an image using the YOLO model.
+    """
+    # Load and preprocess image
+    image = load_image(image_path)
+    input_tensor = preprocess_image(image)
+    
+    # Run model
+    predictions = model(input_tensor)
+    
+    # Process predictions
+    boxes, scores, class_ids = process_predictions(
+        predictions,
+        model,
+        conf_threshold,
+        nms_threshold
+    )
+    
+    return boxes[0], scores[0], class_ids[0]  # Return results for first image
 
 
-def compute_iou_numpy(box, boxes):
-    """Compute IoU between a box and an array of boxes"""
+def compute_box_iou(box1, box2):
+    """Compute IoU between two boxes"""
     # Calculate intersection
-    x1 = np.maximum(box[0], boxes[:, 0])
-    y1 = np.maximum(box[1], boxes[:, 1])
-    x2 = np.minimum(box[2], boxes[:, 2])
-    y2 = np.minimum(box[3], boxes[:, 3])
+    x1 = mx.maximum(box1[:, 0], box2[:, 0])
+    y1 = mx.maximum(box1[:, 1], box2[:, 1])
+    x2 = mx.minimum(box1[:, 2], box2[:, 2])
+    y2 = mx.minimum(box1[:, 3], box2[:, 3])
 
-    intersection = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    intersection = mx.maximum(0, x2 - x1) * mx.maximum(0, y2 - y1)
 
     # Calculate union
-    box_area = (box[2] - box[0]) * (box[3] - box[1])
-    boxes_area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-    union = box_area + boxes_area - intersection
+    box1_area = (box1[:, 2] - box1[:, 0]) * (box1[:, 3] - box1[:, 1])
+    box2_area = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
+    union = box1_area + box2_area - intersection
 
     return intersection / (union + 1e-6)
 
@@ -389,19 +367,19 @@ def main():
     parser.add_argument(
         "--conf-thresh",
         type=float,
-        default=0.2,  # Slightly increased
+        default=0.25,  # Slightly increased
         help="Confidence threshold (objectness score)",
     )
     parser.add_argument(
         "--class-thresh",
         type=float,
-        default=0.2,       # Slightly increased
+        default=0.25,       # Slightly increased
         help="Class probability threshold",
     )
     parser.add_argument(
         "--nms-thresh",
         type=float,
-        default=0.5,         # Relaxed a bit
+        default=0.45,         # Relaxed a bit
         help="NMS IoU threshold (lower = stricter filtering of overlapping boxes)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
@@ -494,22 +472,21 @@ def main():
                 if args.show_features:
                     visualize_features(features, orig_size, "Feature Maps")
 
-                # Decode predictions
-                boxes, class_ids, scores = decode_predictions(
+                # Process predictions
+                boxes, scores, class_ids = process_predictions(
                     predictions,
-                    confidence_threshold=args.conf_thresh,
-                    class_threshold=args.class_thresh,
+                    model,
+                    conf_threshold=args.conf_thresh,
                     nms_threshold=args.nms_thresh,
-                    debug=args.debug,
                 )
 
                 # Draw results directly on the frame
-                frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
+                frame = draw_boxes_cv2(frame, boxes[0], class_ids[0], scores[0])
 
                 # Print detections
-                if len(boxes) > 0:
-                    print(f"\nFound {len(boxes)} detections:")
-                    for cls_id, score in zip(class_ids, scores):
+                if len(boxes[0]) > 0:
+                    print(f"\nFound {len(boxes[0])} detections:")
+                    for cls_id, score in zip(class_ids[0], scores[0]):
                         print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
                 elif args.debug:
                     print("\nNo detections found")
@@ -593,22 +570,21 @@ def main():
                 if args.show_features:
                     visualize_features(features, orig_size, "Feature Maps")
 
-                # Decode predictions
-                boxes, class_ids, scores = decode_predictions(
+                # Process predictions
+                boxes, scores, class_ids = process_predictions(
                     predictions,
-                    confidence_threshold=args.conf_thresh,
-                    class_threshold=args.class_thresh,
+                    model,
+                    conf_threshold=args.conf_thresh,
                     nms_threshold=args.nms_thresh,
-                    debug=args.debug,
                 )
 
                 # Draw results directly on the frame
-                frame = draw_boxes_cv2(frame, boxes, class_ids, scores)
+                frame = draw_boxes_cv2(frame, boxes[0], class_ids[0], scores[0])
 
                 # Print detections
-                if len(boxes) > 0:
-                    print(f"\nFound {len(boxes)} detections:")
-                    for cls_id, score in zip(class_ids, scores):
+                if len(boxes[0]) > 0:
+                    print(f"\nFound {len(boxes[0])} detections:")
+                    for cls_id, score in zip(class_ids[0], scores[0]):
                         print(f"- {VOC_CLASSES[cls_id]}: {score:.2f}")
                 elif args.debug:
                     print("\nNo detections found")
@@ -665,18 +641,17 @@ def main():
         if args.show_features:
             visualize_features(features, orig_size, "Feature Maps")
 
-        # Decode predictions
-        boxes, class_ids, scores = decode_predictions(
+        # Process predictions
+        boxes, scores, class_ids = process_predictions(
             predictions,
-            args.conf_thresh,
-            args.class_thresh,
-            args.nms_thresh,
-            debug=args.debug,
+            model,
+            conf_threshold=args.conf_thresh,
+            nms_threshold=args.nms_thresh,
         )
 
         # Draw results
-        print(f"Found {len(boxes)} objects")
-        draw_boxes(args.image, boxes, class_ids, scores, args.output)
+        print(f"Found {len(boxes[0])} objects")
+        draw_boxes(args.image, boxes[0], class_ids[0], scores[0], args.output)
 
 
 if __name__ == "__main__":

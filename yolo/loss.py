@@ -101,8 +101,8 @@ def validate_inputs(predictions, targets, model):
 def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, class_weights=None):
     """
     Compute YOLO loss
-    predictions: [batch_size, B*(5 + C), S, S] - Output from model in NCHW format
-    targets: [batch_size, S*S*(5 + C)] - Target in flattened format
+    predictions: [batch_size, S, S, B*5 + C] - Output from model in NHWC format
+    targets: [batch_size, S, S, 5 + C] - Target in NHWC format
     """
     batch_size = predictions.shape[0]
     S = model.S  # Grid size
@@ -112,21 +112,17 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     print(f"Shapes - predictions: {predictions.shape}, targets: {targets.shape}")
     print(f"Model params - S: {S}, B: {B}, C: {C}")
     
-    # Reshape predictions from NCHW to NHWC format
-    pred = mx.transpose(predictions, (0, 2, 3, 1))  # [batch, S, S, B*(5 + C)]
-    print(f"After transpose: {pred.shape}")
-    
     # Calculate expected sizes
     box_features = B * 5  # Each box has 5 values (x, y, w, h, conf)
     total_features = box_features + C
     print(f"Expected features: boxes={box_features}, total={total_features}")
     
-    # Split predictions
-    pred_boxes = pred[..., :box_features].reshape(batch_size, S, S, B, 5)  # [batch, S, S, B, 5]
-    pred_classes = pred[..., box_features:]  # [batch, S, S, C]
+    # Split predictions - predictions are already in NHWC format
+    pred_boxes = predictions[..., :box_features].reshape(batch_size, S, S, B, 5)  # [batch, S, S, B, 5]
+    pred_classes = predictions[..., box_features:]  # [batch, S, S, C]
     
-    # Reshape targets
-    target = targets.reshape(batch_size, S, S, 5 + C)  # [batch, S, S, 5 + C]
+    # Reshape targets - targets are already in NHWC format
+    target = targets  # [batch, S, S, 5 + C]
     target_boxes = target[..., :5]  # [batch, S, S, 5]
     target_classes = target[..., 5:]  # [batch, S, S, C]
     

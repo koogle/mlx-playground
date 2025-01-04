@@ -244,6 +244,7 @@ def train(
     grid_size: int = 7,
     warmup_epochs: int = 15,  # Increased warmup
     val_freq: int = 1,
+    save_freq: int = 50,  # Increased to save less frequently
     lambda_coord: float = 10.0,  # Increased coordinate loss weight
     lambda_noobj: float = 1.0,  # Increased to prevent false positives
 ):
@@ -369,13 +370,13 @@ def train(
                     f"Class: {avg_components.get('class', 0):.4f}, "
                     f"NoObj: {avg_components.get('noobj', 0):.4f}"
                 )
-            
-            # Save checkpoint periodically
-            if (batch_idx + 1) % 5 == 0:
-                save_checkpoint(
-                    model, optimizer, epoch + 1, accumulated_loss / num_batches, save_dir
-                )
-                print(f"Checkpoint saved at epoch {epoch+1}")
+        
+        # Save checkpoint at end of epoch
+        if (epoch + 1) % save_freq == 0:
+            save_checkpoint(
+                model, optimizer, epoch + 1, accumulated_loss / num_batches, save_dir
+            )
+            print(f"Checkpoint saved at epoch {epoch+1}")
         
         # Calculate epoch metrics
         epoch_metrics["loss"] = accumulated_loss / num_batches
@@ -475,6 +476,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--val-freq", type=int, default=1, help="Validation frequency")
     parser.add_argument(
+        "--save-freq", type=int, default=50, help="Checkpoint saving frequency"
+    )
+    parser.add_argument(
         "--lambda-coord", type=float, default=10.0, help="Lambda for coordinate loss"
     )
     parser.add_argument(
@@ -497,6 +501,7 @@ if __name__ == "__main__":
         "grid_size": args.grid_size,
         "warmup_epochs": args.warmup_epochs,
         "val_freq": args.val_freq,
+        "save_freq": args.save_freq,
         "lambda_coord": args.lambda_coord,
         "lambda_noobj": args.lambda_noobj,
     }

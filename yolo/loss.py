@@ -94,134 +94,87 @@ def validate_inputs(predictions, targets, model):
         )
 
 
-def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, class_weights=None):
+def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, class_weights=None):
     """
-    Compute YOLOv2 loss with anchor boxes and numerical stability improvements.
+    Compute YOLO loss
+    predictions: [batch_size, S*S*(B*5 + C)]
+    targets: [batch_size, S*S*(5 + C)]
     """
-    # Validate inputs
-    validate_inputs(predictions, targets, model)
-    
-    # Extract dimensions
     batch_size = predictions.shape[0]
-    S = model.S  # Grid size
-    B = model.B  # Number of boxes per cell
-    C = model.C  # Number of classes
+    S = model.grid_size
+    B = model.num_boxes
+    C = model.num_classes
     
-    # Convert predictions from NCHW to NHWC format
-    predictions = mx.transpose(predictions, (0, 2, 3, 1))
+    # Reshape predictions to [batch_size, S, S, B*5 + C]
+    pred = predictions.reshape(-1, S, S, B*5 + C)
     
-    # Reshape predictions and targets
-    predictions = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
-    targets = mx.reshape(targets, (batch_size, S, S, B, 5 + C))
+    # Split predictions
+    pred_boxes = pred[..., :B*5].reshape(-1, S, S, B, 5)  # [x, y, w, h, conf]
+    pred_classes = pred[..., B*5:]  # [class_probs]
     
-    # Extract components from predictions with numerical stability
-    pred_xy = mx.sigmoid(mx.clip(predictions[..., 0:2], -10, 10))
-    pred_wh = mx.clip(predictions[..., 2:4], -10, 10)
-    pred_conf = mx.sigmoid(mx.clip(predictions[..., 4:5], -10, 10))
-    pred_class = predictions[..., 5:]
+    # Get target components
+    target = targets.reshape(-1, S, S, 5 + C)
+    target_boxes = target[..., :5]  # [x, y, w, h, obj]
+    target_classes = target[..., 5:]  # [class_probs]
     
-    # Apply softmax to class predictions with numerical stability
-    pred_class = pred_class - mx.max(pred_class, axis=-1, keepdims=True)
-    pred_class = mx.exp(pred_class)
-    pred_class = pred_class / (mx.sum(pred_class, axis=-1, keepdims=True) + 1e-10)
+    # Compute IoU for each predicted box
+    ious = mx.zeros((batch_size, S, S, B))
+    target_boxes_expanded = mx.expand_dims(target_boxes[..., :4], axis=3)
+    target_boxes_expanded = mx.repeat(target_boxes_expanded, B, axis=3)
     
-    # Extract components from targets
-    targ_xy = targets[..., 0:2]
-    targ_wh = targets[..., 2:4]
-    targ_conf = targets[..., 4:5]
-    targ_class = targets[..., 5:]
-    
-    # Convert to absolute coordinates
-    grid_x, grid_y = mx.meshgrid(
-        mx.arange(S, dtype=mx.float32),
-        mx.arange(S, dtype=mx.float32)
-    )
-    grid_xy = mx.stack([grid_x, grid_y], axis=-1)
-    grid_xy = mx.expand_dims(grid_xy, axis=2)
-    
-    # Convert predictions to absolute coordinates
-    pred_xy_abs = (pred_xy + grid_xy) / S
-    pred_wh_abs = mx.exp(mx.clip(pred_wh, -10, 10)) * model.anchors
-    pred_boxes = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
-    
-    # Convert targets to absolute coordinates
-    targ_xy_abs = (targ_xy + grid_xy) / S
-    targ_wh_abs = targ_wh * model.anchors
-    targ_boxes = mx.concatenate([targ_xy_abs, targ_wh_abs], axis=-1)
-    
-    # Object mask (1 for objects, 0 for no objects)
-    obj_mask = targ_conf
-    noobj_mask = 1.0 - obj_mask
-    
-    # Count number of objects for normalization
-    num_objects = mx.sum(obj_mask) + 1e-6
-    
-    # 1. Coordinate loss with IoU weighting
+    # Compute IoU between predictions and targets
     ious = compute_box_iou(
-        mx.reshape(pred_boxes, (-1, S*S*B, 4)),
-        mx.reshape(targ_boxes, (-1, S*S*B, 4))
+        pred_boxes[..., :4].reshape(-1, S*S*B, 4),
+        target_boxes_expanded.reshape(-1, S*S*B, 4)
+    ).reshape(-1, S, S, B)
+    
+    # Find responsible box (box with highest IoU)
+    best_box_mask = mx.zeros((batch_size, S, S, B))
+    best_ious = mx.argmax(ious, axis=3)
+    best_box_mask = mx.scatter_add(best_box_mask, best_ious, mx.ones_like(best_ious))
+    
+    # Object mask from target
+    obj_mask = target_boxes[..., 4:5]
+    noobj_mask = 1 - obj_mask
+    
+    # Box coordinate loss (only for responsible boxes)
+    box_loss = obj_mask * mx.sum(
+        mx.square(pred_boxes[..., :2] - target_boxes[..., :2]) +  # xy loss
+        mx.square(mx.sqrt(pred_boxes[..., 2:4]) - mx.sqrt(target_boxes[..., 2:4])),  # wh loss
+        axis=-1
     )
-    ious = mx.reshape(ious, (batch_size, S, S, B, 1))
+    box_loss = lambda_coord * mx.sum(box_loss)
     
-    # Scale coordinate loss based on IoU
-    coord_scale = (2.0 - ious) * obj_mask
-    coord_loss = mx.sum(
-        coord_scale * (
-            (pred_xy - targ_xy) ** 2 +
-            (mx.sqrt(pred_wh_abs + 1e-6) - mx.sqrt(targ_wh_abs + 1e-6)) ** 2
-        )
-    ) / num_objects
+    # Confidence loss
+    conf_loss_obj = obj_mask * mx.square(pred_boxes[..., 4] - ious)
+    conf_loss_noobj = noobj_mask * mx.square(pred_boxes[..., 4])
+    conf_loss = mx.sum(conf_loss_obj + lambda_noobj * conf_loss_noobj)
     
-    # 2. Object confidence loss with IoU weighting
-    conf_target = mx.clip(ious, 0.0, 1.0)
-    obj_loss = mx.sum(
-        obj_mask * (pred_conf - conf_target) ** 2
-    ) / num_objects
-    
-    # 3. No-object confidence loss with focal loss style weighting
-    noobj_factor = (1 - pred_conf) ** 2  # Focus more on confident false positives
-    noobj_loss = mx.sum(
-        noobj_mask * noobj_factor * pred_conf ** 2
-    ) / (mx.sum(noobj_mask) + 1e-6)
-    
-    # 4. Class prediction loss with focal loss and optional class weights
+    # Class loss (only for cells with objects)
+    # Apply focal loss for class predictions
+    alpha = 0.25
+    gamma = 2.0
+    class_probs = mx.softmax(pred_classes, axis=-1)
+    focal_weight = mx.power(1 - class_probs, gamma)
+    class_loss = obj_mask * focal_weight * mx.sum(
+        -target_classes * mx.log(class_probs + 1e-6),
+        axis=-1
+    )
     if class_weights is not None:
-        class_weights = mx.array(class_weights, dtype=mx.float32)
-        class_weights = mx.reshape(class_weights, (1, 1, 1, 1, -1))
-        focal_weight = (1 - pred_class) ** 2
-        class_loss = mx.sum(
-            obj_mask * class_weights * focal_weight * mx.sum(
-                (pred_class - targ_class) ** 2,
-                axis=-1,
-                keepdims=True
-            )
-        ) / num_objects
-    else:
-        focal_weight = (1 - pred_class) ** 2
-        class_loss = mx.sum(
-            obj_mask * focal_weight * mx.sum(
-                (pred_class - targ_class) ** 2,
-                axis=-1,
-                keepdims=True
-            )
-        ) / num_objects
+        class_weights = mx.array(class_weights)
+        class_loss = class_loss * mx.sum(target_classes * class_weights, axis=-1, keepdims=True)
+    class_loss = mx.sum(class_loss)
     
-    # Combine all losses with better normalization
-    total_loss = mx.clip(
-        lambda_coord * coord_loss +
-        obj_loss +
-        lambda_noobj * noobj_loss +
-        class_loss,
-        -1, 1  # Clip total loss for stability
-    )
+    # Total loss
+    total_loss = (box_loss + conf_loss + class_loss) / batch_size
     
     # Return loss components for logging
-    loss_components = {
+    components = {
         'iou': mx.mean(ious * obj_mask).item(),
-        'coord': coord_loss.item(),
-        'conf': obj_loss.item(),
-        'noobj': noobj_loss.item(),
-        'class': class_loss.item()
+        'coord': box_loss.item() / batch_size,
+        'conf': conf_loss.item() / batch_size,
+        'class': class_loss.item() / batch_size,
+        'noobj': mx.sum(conf_loss_noobj).item() / batch_size
     }
     
-    return total_loss, loss_components
+    return total_loss, components

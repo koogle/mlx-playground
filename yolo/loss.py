@@ -101,9 +101,9 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     targets: [batch_size, S*S*(5 + C)]
     """
     batch_size = predictions.shape[0]
-    S = model.grid_size
-    B = model.num_boxes
-    C = model.num_classes
+    S = model.S  # Grid size
+    B = model.B  # Number of boxes per cell
+    C = model.C  # Number of classes
     
     # Reshape predictions to [batch_size, S, S, B*5 + C]
     pred = predictions.reshape(-1, S, S, B*5 + C)

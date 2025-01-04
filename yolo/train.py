@@ -195,7 +195,7 @@ def train_step(model, batch, optimizer, class_weights=None):
     def loss_fn(params):
         model.update(params)
         predictions = model(images)
-        loss = yolo_loss(
+        total_loss, _ = yolo_loss(
             predictions,
             targets,
             model,
@@ -203,7 +203,7 @@ def train_step(model, batch, optimizer, class_weights=None):
             lambda_noobj=1.0,   # Increased to prevent false positives
             class_weights=class_weights
         )
-        return loss
+        return total_loss
     
     # Forward and backward pass
     loss_value, grad = mx.value_and_grad(loss_fn)(model.parameters())
@@ -347,7 +347,7 @@ def train(
             loss, components = train_step(model, batch, optimizer, class_weights)
             
             # Accumulate loss components
-            accumulated_loss += loss.item()
+            accumulated_loss += float(loss)  # Convert to float for accumulation
             for k, v in components.items():
                 accumulated_components[k] += v
             num_batches += 1
@@ -370,7 +370,7 @@ def train(
                     f"NoObj: {avg_components.get('noobj', 0):.4f}"
                 )
             
-            # Save gradients periodically
+            # Save checkpoint periodically
             if (batch_idx + 1) % 5 == 0:
                 save_checkpoint(
                     model, optimizer, epoch + 1, accumulated_loss / num_batches, save_dir

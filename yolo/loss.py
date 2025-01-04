@@ -42,9 +42,9 @@ def compute_box_iou(boxes1, boxes2):
     inter_h = mx.maximum(0, inter_y2 - inter_y1)
     intersection = inter_w * inter_h
     
-    # Union area
-    boxes1_area = (boxes1[..., 2] * boxes1[..., 3])
-    boxes2_area = (boxes2[..., 2] * boxes2[..., 3])
+    # Union area - keep dimensions consistent
+    boxes1_area = (boxes1[..., 2:3] * boxes1[..., 3:4])
+    boxes2_area = (boxes2[..., 2:3] * boxes2[..., 3:4])
     union = boxes1_area + boxes2_area - intersection
     
     # IoU

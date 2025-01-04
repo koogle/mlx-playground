@@ -192,7 +192,8 @@ def train_step(model, batch, optimizer, class_weights=None):
     """Single training step"""
     images, targets = batch
     
-    def loss_fn(model, images, targets):
+    def loss_fn(params):
+        model.update(params)
         predictions = model(images)
         loss, components = yolo_loss(
             predictions,
@@ -205,15 +206,16 @@ def train_step(model, batch, optimizer, class_weights=None):
         return loss, components
     
     # Forward and backward pass
-    loss, grad = mx.value_and_grad(loss_fn)(model, images, targets)
+    (loss, components), grad = mx.value_and_grad(loss_fn, has_aux=True)(model.parameters())
     
     # Gradient clipping
     grad = clip_gradients(grad, max_norm=1.0)  # Increased for better stability
     
     # Update parameters
     optimizer.update(model, grad)
+    mx.eval(model.parameters(), optimizer.state)
     
-    return loss
+    return loss, components
 
 
 def train(
@@ -331,19 +333,30 @@ def train(
         # Training
         for batch_idx, batch in enumerate(train_loader):
             # Training step with gradient accumulation
-            loss = train_step(model, batch, optimizer, class_weights)
+            loss, components = train_step(model, batch, optimizer, class_weights)
             
             # Accumulate loss components
             accumulated_loss += loss
+            for k, v in components.items():
+                accumulated_components[k] += v
             num_batches += 1
             
             # Log every 10 batches
             if (batch_idx + 1) % 10 == 0:
                 avg_loss = accumulated_loss / (batch_idx + 1)
+                avg_components = {
+                    k: v / (batch_idx + 1) 
+                    for k, v in accumulated_components.items()
+                }
                 
                 print(
                     f"Batch [{batch_idx+1}], "
-                    f"Loss: {avg_loss:.4f}"
+                    f"Loss: {avg_loss:.4f}, "
+                    f"IoU: {avg_components.get('iou', 0):.4f}, "
+                    f"Coord: {avg_components.get('coord', 0):.4f}, "
+                    f"Conf: {avg_components.get('conf', 0):.4f}, "
+                    f"Class: {avg_components.get('class', 0):.4f}, "
+                    f"NoObj: {avg_components.get('noobj', 0):.4f}"
                 )
             
             # Save gradients periodically

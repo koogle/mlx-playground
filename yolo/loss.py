@@ -109,12 +109,21 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     B = model.B  # Number of boxes per cell
     C = model.C  # Number of classes
     
+    print(f"Shapes - predictions: {predictions.shape}, targets: {targets.shape}")
+    print(f"Model params - S: {S}, B: {B}, C: {C}")
+    
     # Reshape predictions from NCHW to NHWC format
     pred = mx.transpose(predictions, (0, 2, 3, 1))  # [batch, S, S, B*(5 + C)]
+    print(f"After transpose: {pred.shape}")
+    
+    # Calculate expected sizes
+    box_features = B * 5  # Each box has 5 values (x, y, w, h, conf)
+    total_features = box_features + C
+    print(f"Expected features: boxes={box_features}, total={total_features}")
     
     # Split predictions
-    pred_boxes = pred[..., :B*5].reshape(batch_size, S, S, B, 5)  # [batch, S, S, B, 5]
-    pred_classes = pred[..., B*5:]  # [batch, S, S, C]
+    pred_boxes = pred[..., :box_features].reshape(batch_size, S, S, B, 5)  # [batch, S, S, B, 5]
+    pred_classes = pred[..., box_features:]  # [batch, S, S, C]
     
     # Reshape targets
     target = targets.reshape(batch_size, S, S, 5 + C)  # [batch, S, S, 5 + C]

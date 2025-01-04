@@ -97,23 +97,23 @@ def validate_inputs(predictions, targets, model):
 def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, class_weights=None):
     """
     Compute YOLO loss
-    predictions: [batch_size, S*S*(B*5 + C)]
-    targets: [batch_size, S*S*(5 + C)]
+    predictions: [batch_size, B*(5 + C), S, S] - Output from model in NCHW format
+    targets: [batch_size, S*S*(5 + C)] - Target in flattened format
     """
     batch_size = predictions.shape[0]
     S = model.S  # Grid size
     B = model.B  # Number of boxes per cell
     C = model.C  # Number of classes
     
-    # Reshape predictions to [batch_size, S, S, B*5 + C]
-    pred = predictions.reshape(-1, S, S, B*5 + C)
+    # Reshape predictions from NCHW to NHWC format
+    pred = mx.transpose(predictions, (0, 2, 3, 1))  # [batch, S, S, B*(5 + C)]
     
     # Split predictions
     pred_boxes = pred[..., :B*5].reshape(-1, S, S, B, 5)  # [x, y, w, h, conf]
     pred_classes = pred[..., B*5:]  # [class_probs]
     
-    # Get target components
-    target = targets.reshape(-1, S, S, 5 + C)
+    # Reshape targets
+    target = targets.reshape(-1, S, S, 5 + C)  # [batch, S, S, 5 + C]
     target_boxes = target[..., :5]  # [x, y, w, h, obj]
     target_classes = target[..., 5:]  # [class_probs]
     

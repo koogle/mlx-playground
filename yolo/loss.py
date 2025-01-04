@@ -132,7 +132,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     pred_class = predictions[..., 5:]  # Class predictions (raw logits)
     
     # Apply softmax to class predictions with numerical stability
-    pred_class = pred_class - mx.max(pred_class, axis=-1, keepdims=True)  # For numerical stability
+    pred_class = pred_class - mx.max(pred_class, axis=-1, keepdims=True)
     pred_class = mx.exp(pred_class)
     pred_class = pred_class / (mx.sum(pred_class, axis=-1, keepdims=True) + 1e-10)
     
@@ -145,7 +145,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     # Convert relative coordinates to absolute coordinates
     anchors = mx.reshape(model.anchors, (1, 1, 1, B, 2))
     
-    # Convert to absolute coordinates with numerical stability
+    # Create grid
     grid_x, grid_y = mx.meshgrid(
         mx.arange(S, dtype=mx.float32),
         mx.arange(S, dtype=mx.float32)
@@ -153,12 +153,11 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     grid_xy = mx.stack([grid_x, grid_y], axis=-1)
     grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
     
-    # Convert to absolute coordinates with numerical stability
+    # Convert to absolute coordinates
     pred_xy_abs = (pred_xy + grid_xy) / S
-    pred_wh_abs = mx.exp(mx.clip(pred_wh, -10, 10)) * anchors  # Clip exponential
+    pred_wh_abs = mx.exp(mx.clip(pred_wh, -10, 10)) * anchors
     pred_boxes = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
     
-    # Convert target boxes to absolute coordinates
     targ_xy_abs = (targ_xy + grid_xy) / S
     targ_wh_abs = targ_wh * anchors
     targ_boxes = mx.concatenate([targ_xy_abs, targ_wh_abs], axis=-1)
@@ -171,53 +170,59 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     num_objects = mx.sum(obj_mask) + 1e-6
     
     # 1. Coordinate loss (only for cells with objects)
-    # XY loss (using grid-relative coordinates)
+    # XY loss with better scale handling
+    xy_scale = 2.0 - targ_wh_abs[..., 0:1] * targ_wh_abs[..., 1:2]  # Scale based on box size
     xy_loss = mx.sum(
-        obj_mask * ((pred_xy - targ_xy) ** 2)
+        obj_mask * xy_scale * ((pred_xy - targ_xy) ** 2)
     ) / num_objects
     
-    # WH loss (using anchor-relative coordinates with better scale handling)
+    # WH loss with better scale handling
+    wh_scale = 2.0 - targ_wh_abs[..., 0:1] * targ_wh_abs[..., 1:2]  # Scale based on box size
     wh_loss = mx.sum(
-        obj_mask * (
+        obj_mask * wh_scale * (
             (mx.sqrt(pred_wh_abs + 1e-6) - mx.sqrt(targ_wh_abs + 1e-6)) ** 2
         )
     ) / num_objects
     
-    # 2. Object confidence loss
+    # 2. Object confidence loss with IoU weighting
     ious = compute_box_iou(
         mx.reshape(pred_boxes, (-1, S*S*B, 4)),
         mx.reshape(targ_boxes, (-1, S*S*B, 4))
     )
     ious = mx.reshape(ious, (batch_size, S, S, B))
-    ious = mx.expand_dims(ious, axis=-1)  # Add dimension to match obj_mask shape
+    ious = mx.expand_dims(ious, axis=-1)
     
-    conf_target = mx.clip(ious * obj_mask, 0.0, 1.0)  # Clip IoU values
+    # Use IoU-aware confidence loss
+    conf_target = mx.clip(ious, 0.0, 1.0)
+    conf_scale = 2.0 - obj_mask  # Focus more on objects
     obj_loss = mx.sum(
-        obj_mask * (pred_conf - conf_target) ** 2
+        obj_mask * conf_scale * (pred_conf - conf_target) ** 2
     ) / num_objects
     
     # 3. No-object confidence loss with focal loss style weighting
     noobj_factor = (1 - pred_conf) ** 2  # Focus more on confident false positives
+    noobj_scale = mx.ones_like(noobj_mask)  # Base scale for no-object predictions
     noobj_loss = mx.sum(
-        noobj_mask * noobj_factor * pred_conf ** 2
+        noobj_mask * noobj_factor * noobj_scale * pred_conf ** 2
     ) / (mx.sum(noobj_mask) + 1e-6)
     
-    # 4. Class prediction loss with optional class weights
+    # 4. Class prediction loss with optional class weights and focal loss
     if class_weights is not None:
-        # Apply class weights to the loss
         class_weights = mx.array(class_weights, dtype=mx.float32)
         class_weights = mx.reshape(class_weights, (1, 1, 1, 1, -1))
+        focal_weight = (1 - pred_class) ** 2  # Focal loss weight
         class_loss = mx.sum(
-            obj_mask * class_weights * mx.sum(
-                mx.clip((pred_class - targ_class) ** 2, 0, 100),  # Clip squared error
+            obj_mask * class_weights * focal_weight * mx.sum(
+                mx.clip((pred_class - targ_class) ** 2, 0, 100),
                 axis=-1,
                 keepdims=True
             )
         ) / num_objects
     else:
+        focal_weight = (1 - pred_class) ** 2  # Focal loss weight
         class_loss = mx.sum(
-            obj_mask * mx.sum(
-                mx.clip((pred_class - targ_class) ** 2, 0, 100),  # Clip squared error
+            obj_mask * focal_weight * mx.sum(
+                mx.clip((pred_class - targ_class) ** 2, 0, 100),
                 axis=-1,
                 keepdims=True
             )
@@ -227,12 +232,12 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     coord_loss = lambda_coord * (xy_loss + wh_loss)
     conf_loss = obj_loss + lambda_noobj * noobj_loss
     
-    # Combine all losses with their respective weights and clip for stability
+    # Combine all losses with their respective weights
     total_loss = mx.clip(
-        coord_loss +  # Coordinate loss
-        conf_loss +   # Confidence loss
-        class_loss,   # Class prediction loss
-        -100, 100     # Clip total loss
+        coord_loss +
+        conf_loss +
+        class_loss,
+        -100, 100
     )
     
     # Return loss components for logging

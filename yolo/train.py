@@ -237,16 +237,16 @@ def train(
     num_epochs: int = 135,
     batch_size: int = 32,
     accumulation_steps: int = 2,
-    learning_rate: float = 0.0001,  # Reduced learning rate
+    learning_rate: float = 0.00005,  # Further reduced learning rate
     beta1: float = 0.9,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
-    max_grad_norm: float = 1.0,  # Reduced gradient norm
+    max_grad_norm: float = 0.5,  # Further reduced gradient norm
     grid_size: int = 7,
-    warmup_epochs: int = 10,  # Increased warmup
+    warmup_epochs: int = 15,  # Increased warmup
     val_freq: int = 1,
-    lambda_coord: float = 5.0,
+    lambda_coord: float = 10.0,  # Increased coordinate loss weight
     lambda_noobj: float = 0.5,
 ):
     """Train YOLO model with improved training process"""
@@ -461,7 +461,7 @@ if __name__ == "__main__":
         help="Number of gradient accumulation steps",
     )
     parser.add_argument(
-        "--learning-rate", type=float, default=0.0001, help="Learning rate"
+        "--learning-rate", type=float, default=0.00005, help="Learning rate"
     )
     parser.add_argument(
         "--beta1", type=float, default=0.9, help="Beta1 for Adam optimizer"
@@ -476,7 +476,7 @@ if __name__ == "__main__":
         "--resume-epoch", type=int, help="Resume training from this epoch"
     )
     parser.add_argument(
-        "--max-grad-norm", type=float, default=1.0, help="Maximum gradient norm"
+        "--max-grad-norm", type=float, default=0.5, help="Maximum gradient norm"
     )
     parser.add_argument(
         "--grid-size",
@@ -485,11 +485,11 @@ if __name__ == "__main__":
         help="Grid size for YOLO (S x S grid)",
     )
     parser.add_argument(
-        "--warmup-epochs", type=int, default=10, help="Number of warmup epochs"
+        "--warmup-epochs", type=int, default=15, help="Number of warmup epochs"
     )
     parser.add_argument("--val-freq", type=int, default=1, help="Validation frequency")
     parser.add_argument(
-        "--lambda-coord", type=float, default=5.0, help="Lambda for coordinate loss"
+        "--lambda-coord", type=float, default=10.0, help="Lambda for coordinate loss"
     )
     parser.add_argument(
         "--lambda-noobj", type=float, default=0.5, help="Lambda for no object loss"

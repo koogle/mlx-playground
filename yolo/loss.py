@@ -15,52 +15,41 @@ import mlx.core as mx
 import math
 
 
-def compute_box_iou(pred_boxes, target_boxes):
+def compute_box_iou(boxes1, boxes2):
     """
-    Compute IoU between predicted and target boxes.
-    Both inputs should have shape [..., 4] where last dim is (x,y,w,h)
-    Returns IoU values of same shape as inputs except for last dimension
+    Compute IoU between two sets of boxes.
+    boxes1, boxes2: [batch, num_boxes, 4] where each box is [x, y, w, h]
     """
-    # Extract coordinates
-    x1 = pred_boxes[..., 0:1]
-    y1 = pred_boxes[..., 1:2]
-    w1 = pred_boxes[..., 2:3]
-    h1 = pred_boxes[..., 3:4]
+    # Convert from center format to corner format
+    boxes1_x1 = boxes1[..., 0:1] - boxes1[..., 2:3] / 2
+    boxes1_y1 = boxes1[..., 1:2] - boxes1[..., 3:4] / 2
+    boxes1_x2 = boxes1[..., 0:1] + boxes1[..., 2:3] / 2
+    boxes1_y2 = boxes1[..., 1:2] + boxes1[..., 3:4] / 2
     
-    x2 = target_boxes[..., 0:1]
-    y2 = target_boxes[..., 1:2]
-    w2 = target_boxes[..., 2:3]
-    h2 = target_boxes[..., 3:4]
+    boxes2_x1 = boxes2[..., 0:1] - boxes2[..., 2:3] / 2
+    boxes2_y1 = boxes2[..., 1:2] - boxes2[..., 3:4] / 2
+    boxes2_x2 = boxes2[..., 0:1] + boxes2[..., 2:3] / 2
+    boxes2_y2 = boxes2[..., 1:2] + boxes2[..., 3:4] / 2
     
-    # Convert to corner coordinates
-    x1_min = x1 - w1/2
-    y1_min = y1 - h1/2
-    x1_max = x1 + w1/2
-    y1_max = y1 + h1/2
+    # Intersection coordinates
+    inter_x1 = mx.maximum(boxes1_x1, boxes2_x1)
+    inter_y1 = mx.maximum(boxes1_y1, boxes2_y1)
+    inter_x2 = mx.minimum(boxes1_x2, boxes2_x2)
+    inter_y2 = mx.minimum(boxes1_y2, boxes2_y2)
     
-    x2_min = x2 - w2/2
-    y2_min = y2 - h2/2
-    x2_max = x2 + w2/2
-    y2_max = y2 + h2/2
-    
-    # Calculate intersection area
-    inter_x1 = mx.maximum(x1_min, x2_min)
-    inter_y1 = mx.maximum(y1_min, y2_min)
-    inter_x2 = mx.minimum(x1_max, x2_max)
-    inter_y2 = mx.minimum(y1_max, y2_max)
-    
-    inter_w = mx.maximum(inter_x2 - inter_x1, 0)
-    inter_h = mx.maximum(inter_y2 - inter_y1, 0)
+    # Intersection area
+    inter_w = mx.maximum(0, inter_x2 - inter_x1)
+    inter_h = mx.maximum(0, inter_y2 - inter_y1)
     intersection = inter_w * inter_h
     
-    # Calculate union area
-    area1 = w1 * h1
-    area2 = w2 * h2
-    union = area1 + area2 - intersection
+    # Union area
+    boxes1_area = (boxes1[..., 2] * boxes1[..., 3])
+    boxes2_area = (boxes2[..., 2] * boxes2[..., 3])
+    union = boxes1_area + boxes2_area - intersection
     
-    # Calculate IoU
+    # IoU
     iou = intersection / (union + 1e-6)
-    return mx.squeeze(iou, axis=-1)  # Remove last dimension
+    return mx.clip(iou, 0, 1)
 
 
 def focal_loss(pred, target, gamma=2.0, alpha=0.25):
@@ -142,10 +131,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     targ_conf = targets[..., 4:5]
     targ_class = targets[..., 5:]
     
-    # Convert relative coordinates to absolute coordinates
-    anchors = mx.reshape(model.anchors, (1, 1, 1, B, 2))
-    
-    # Create grid
+    # Convert to absolute coordinates
     grid_x, grid_y = mx.meshgrid(
         mx.arange(S, dtype=mx.float32),
         mx.arange(S, dtype=mx.float32)
@@ -153,13 +139,14 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     grid_xy = mx.stack([grid_x, grid_y], axis=-1)
     grid_xy = mx.expand_dims(grid_xy, axis=2)
     
-    # Convert to absolute coordinates
+    # Convert predictions to absolute coordinates
     pred_xy_abs = (pred_xy + grid_xy) / S
-    pred_wh_abs = mx.exp(mx.clip(pred_wh, -10, 10)) * anchors
+    pred_wh_abs = mx.exp(mx.clip(pred_wh, -10, 10)) * model.anchors
     pred_boxes = mx.concatenate([pred_xy_abs, pred_wh_abs], axis=-1)
     
+    # Convert targets to absolute coordinates
     targ_xy_abs = (targ_xy + grid_xy) / S
-    targ_wh_abs = targ_wh * anchors
+    targ_wh_abs = targ_wh * model.anchors
     targ_boxes = mx.concatenate([targ_xy_abs, targ_wh_abs], axis=-1)
     
     # Object mask (1 for objects, 0 for no objects)
@@ -169,53 +156,42 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
     # Count number of objects for normalization
     num_objects = mx.sum(obj_mask) + 1e-6
     
-    # 1. Coordinate loss (only for cells with objects)
-    # XY loss with scale based on relative size
-    box_scale = 2.0 - (targ_wh[..., 0:1] * targ_wh[..., 1:2])  # Scale based on relative box size
-    box_scale = mx.clip(box_scale, 0.1, 2.0)  # Limit the scale factor
-    
-    xy_loss = mx.sum(
-        obj_mask * box_scale * ((pred_xy - targ_xy) ** 2)
-    ) / num_objects
-    
-    # WH loss using relative coordinates
-    wh_loss = mx.sum(
-        obj_mask * box_scale * (
-            (mx.log(pred_wh_abs + 1e-6) - mx.log(targ_wh_abs + 1e-6)) ** 2
-        )
-    ) / num_objects
-    
-    # 2. Object confidence loss with IoU weighting
+    # 1. Coordinate loss with IoU weighting
     ious = compute_box_iou(
         mx.reshape(pred_boxes, (-1, S*S*B, 4)),
         mx.reshape(targ_boxes, (-1, S*S*B, 4))
     )
-    ious = mx.reshape(ious, (batch_size, S, S, B))
-    ious = mx.expand_dims(ious, axis=-1)
+    ious = mx.reshape(ious, (batch_size, S, S, B, 1))
     
-    # Use IoU-aware confidence loss
+    # Scale coordinate loss based on IoU
+    coord_scale = (2.0 - ious) * obj_mask
+    coord_loss = mx.sum(
+        coord_scale * (
+            (pred_xy - targ_xy) ** 2 +
+            (mx.sqrt(pred_wh_abs + 1e-6) - mx.sqrt(targ_wh_abs + 1e-6)) ** 2
+        )
+    ) / num_objects
+    
+    # 2. Object confidence loss with IoU weighting
     conf_target = mx.clip(ious, 0.0, 1.0)
-    conf_scale = mx.clip(2.0 - obj_mask, 0.1, 2.0)  # Limit the scale factor
-    
     obj_loss = mx.sum(
-        obj_mask * conf_scale * (pred_conf - conf_target) ** 2
+        obj_mask * (pred_conf - conf_target) ** 2
     ) / num_objects
     
     # 3. No-object confidence loss with focal loss style weighting
     noobj_factor = (1 - pred_conf) ** 2  # Focus more on confident false positives
-    noobj_scale = mx.ones_like(noobj_mask)
     noobj_loss = mx.sum(
-        noobj_mask * noobj_factor * noobj_scale * pred_conf ** 2
+        noobj_mask * noobj_factor * pred_conf ** 2
     ) / (mx.sum(noobj_mask) + 1e-6)
     
-    # 4. Class prediction loss with focal loss
+    # 4. Class prediction loss with focal loss and optional class weights
     if class_weights is not None:
         class_weights = mx.array(class_weights, dtype=mx.float32)
         class_weights = mx.reshape(class_weights, (1, 1, 1, 1, -1))
         focal_weight = (1 - pred_class) ** 2
         class_loss = mx.sum(
             obj_mask * class_weights * focal_weight * mx.sum(
-                mx.clip((pred_class - targ_class) ** 2, 0, 1),  # Clip to [0,1]
+                (pred_class - targ_class) ** 2,
                 axis=-1,
                 keepdims=True
             )
@@ -224,28 +200,26 @@ def yolo_loss(predictions, targets, model, lambda_coord=5.0, lambda_noobj=0.5, c
         focal_weight = (1 - pred_class) ** 2
         class_loss = mx.sum(
             obj_mask * focal_weight * mx.sum(
-                mx.clip((pred_class - targ_class) ** 2, 0, 1),  # Clip to [0,1]
+                (pred_class - targ_class) ** 2,
                 axis=-1,
                 keepdims=True
             )
         ) / num_objects
     
-    # Scale and normalize losses
-    coord_loss = lambda_coord * (xy_loss + wh_loss)
-    conf_loss = obj_loss + lambda_noobj * noobj_loss
-    
     # Combine all losses with better normalization
     total_loss = mx.clip(
-        coord_loss / (lambda_coord + 1e-6) +  # Normalize by lambda
-        conf_loss +
+        lambda_coord * coord_loss +
+        obj_loss +
+        lambda_noobj * noobj_loss +
         class_loss,
-        -1, 1  # Tighter clipping range
+        -1, 1  # Clip total loss for stability
     )
     
     # Return loss components for logging
     loss_components = {
-        'coord': coord_loss.item() / (lambda_coord + 1e-6),  # Normalize for logging
-        'conf': conf_loss.item(),
+        'iou': mx.mean(ious * obj_mask).item(),
+        'coord': coord_loss.item(),
+        'conf': obj_loss.item(),
         'noobj': noobj_loss.item(),
         'class': class_loss.item()
     }

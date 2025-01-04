@@ -8,6 +8,7 @@ from loss import yolo_loss
 from data.voc import VOCDataset, create_data_loader, VOC_CLASSES
 import json
 import math
+from collections import defaultdict
 
 
 def save_checkpoint(model: YOLO, optimizer, epoch, loss, save_dir):
@@ -108,7 +109,7 @@ def load_checkpoint(model: YOLO, optimizer, checkpoint_dir, epoch):
         raise
 
 
-def clip_gradients(gradients, max_norm: float = 10.0):
+def clip_gradients(gradients, max_norm: float = 1.0):
     """Clip gradients by global norm"""
     # Compute total norm across all gradient values in the dictionary
     total_norm_sq = 0.0
@@ -187,48 +188,32 @@ def cosine_warmup_schedule(epoch, warmup_epochs, total_epochs, initial_lr):
         return initial_lr * 0.5 * (1 + math.cos(math.pi * progress))
 
 
-def train_step(model, batch, optimizer):
-    """Single training step with proper gradient computation"""
+def train_step(model, batch, optimizer, class_weights=None):
+    """Single training step"""
     images, targets = batch
-
-    # Define loss function that only returns the loss value
-    def loss_fn():
+    
+    def loss_fn(model, images, targets):
         predictions = model(images)
-        loss, _ = yolo_loss(predictions, targets, model)
-        return loss
-
-    # Forward pass to get components
-    predictions = model(images)
-    loss, components = yolo_loss(predictions, targets, model)
+        loss, components = yolo_loss(
+            predictions,
+            targets,
+            model,
+            lambda_coord=10.0,  # Increased to focus more on localization
+            lambda_noobj=1.0,   # Increased to prevent false positives
+            class_weights=class_weights
+        )
+        return loss, components
     
-    # Compute gradients with clipping
-    loss_grad_fn = nn.value_and_grad(model, loss_fn)
-    loss_value, grads = loss_grad_fn()
+    # Forward and backward pass
+    loss, grad = mx.value_and_grad(loss_fn)(model, images, targets)
     
-    # Clip gradients - handle nested structure
-    max_grad_norm = 1.0
-    grad_norm = 0
+    # Gradient clipping
+    grad = clip_gradients(grad, max_norm=1.0)  # Increased for better stability
     
-    def compute_norm(g):
-        if isinstance(g, dict):
-            return sum(compute_norm(v) for v in g.values())
-        return mx.sum(g * g)
+    # Update parameters
+    optimizer.update(model, grad)
     
-    grad_norm = mx.sqrt(compute_norm(grads))
-    clip_factor = mx.minimum(max_grad_norm / (grad_norm + 1e-6), 1.0)
-    
-    def clip_grads(g):
-        if isinstance(g, dict):
-            return {k: clip_grads(v) for k, v in g.items()}
-        return g * clip_factor
-    
-    clipped_grads = clip_grads(grads)
-
-    # Update model parameters
-    optimizer.update(model, clipped_grads)
-    mx.eval(model.parameters(), optimizer.state)
-
-    return loss_value, components
+    return loss
 
 
 def train(
@@ -242,12 +227,12 @@ def train(
     beta2: float = 0.999,
     epsilon: float = 1e-8,
     resume_epoch: int | None = None,
-    max_grad_norm: float = 0.5,  # Further reduced gradient norm
+    max_grad_norm: float = 1.0,  # Increased for better stability
     grid_size: int = 7,
     warmup_epochs: int = 15,  # Increased warmup
     val_freq: int = 1,
     lambda_coord: float = 10.0,  # Increased coordinate loss weight
-    lambda_noobj: float = 0.5,
+    lambda_noobj: float = 1.0,  # Increased to prevent false positives
 ):
     """Train YOLO model with improved training process"""
     # Create model and optimizer
@@ -329,63 +314,47 @@ def train(
         start_time = time.time()
 
         # Adjust learning rate
-        current_lr = cosine_warmup_schedule(
-            epoch, warmup_epochs, num_epochs, learning_rate
-        )
+        if epoch < warmup_epochs:
+            current_lr = learning_rate * (epoch + 1) / warmup_epochs
+        else:
+            # Cosine decay after warmup
+            progress = (epoch - warmup_epochs) / (num_epochs - warmup_epochs)
+            current_lr = learning_rate * 0.5 * (1 + math.cos(math.pi * progress))
+        
         optimizer.learning_rate = current_lr
         print(f"\nEpoch [{epoch+1}/{num_epochs}], Learning Rate: {current_lr:.6f}")
 
+        # Initialize accumulated gradients
+        accumulated_loss = 0
+        accumulated_components = defaultdict(float)
+        
         # Training
-        for batch in train_loader:
+        for batch_idx, batch in enumerate(train_loader):
             # Training step with gradient accumulation
-            accumulated_loss = 0
-            accumulated_components = None
-            accumulated_iou = 0
-
-            for _ in range(accumulation_steps):
-                # Forward pass and compute gradients
-                loss, components = train_step(model, batch, optimizer)
-
-                # Calculate IoU for monitoring
-                predictions = model(batch[0])
-                pred_boxes = predictions[..., :4]
-                target_boxes = batch[1][..., :4]
-                iou = compute_box_iou(pred_boxes, target_boxes)
-                mean_iou = mx.mean(iou).item()
-
-                accumulated_loss += loss.item() / accumulation_steps
-                accumulated_iou += mean_iou / accumulation_steps
-
-                if accumulated_components is None:
-                    accumulated_components = {
-                        k: v / accumulation_steps for k, v in components.items()
-                    }
-                else:
-                    for k, v in components.items():
-                        accumulated_components[k] += v / accumulation_steps
-
-            # Update metrics
-            epoch_metrics["loss"] += accumulated_loss
-            epoch_metrics["iou"] += accumulated_iou
-            for k, v in accumulated_components.items():
-                epoch_metrics[k] += v
+            loss = train_step(model, batch, optimizer, class_weights)
+            
+            # Accumulate loss components
+            accumulated_loss += loss
             num_batches += 1
-
-            # Print batch progress with IoU
-            if num_batches % 10 == 0:
+            
+            # Log every 10 batches
+            if (batch_idx + 1) % 10 == 0:
+                avg_loss = accumulated_loss / (batch_idx + 1)
+                
                 print(
-                    f"Batch [{num_batches}], "
-                    f"Loss: {accumulated_loss:.4f}, "
-                    f"IoU: {accumulated_iou:.4f}, "
-                    f"Coord: {accumulated_components['coord']:.4f}, "
-                    f"Conf: {accumulated_components['conf']:.4f}, "
-                    f"Class: {accumulated_components['class']:.4f}, "
-                    f"NoObj: {accumulated_components['noobj']:.4f}"
+                    f"Batch [{batch_idx+1}], "
+                    f"Loss: {avg_loss:.4f}"
                 )
-
+            
+            # Save gradients periodically
+            if (batch_idx + 1) % 5 == 0:
+                save_checkpoint(
+                    model, optimizer, epoch + 1, accumulated_loss / (batch_idx + 1), save_dir
+                )
+                print(f"Checkpoint saved at epoch {epoch+1}")
+        
         # Calculate epoch metrics
-        for k in epoch_metrics:
-            epoch_metrics[k] /= num_batches
+        epoch_metrics["loss"] = accumulated_loss / num_batches
 
         # Validation
         if (epoch + 1) % val_freq == 0:
@@ -432,13 +401,6 @@ def train(
             for k, v in val_metrics.items():
                 print(f"{k.capitalize()}: {v:.4f}")
 
-        # Save checkpoint every 5 epochs
-        if (epoch + 1) % 5 == 0:
-            save_checkpoint(
-                model, optimizer, epoch + 1, epoch_metrics["loss"], save_dir
-            )
-            print(f"Checkpoint saved at epoch {epoch+1}")
-
 
 if __name__ == "__main__":
     import argparse
@@ -476,7 +438,7 @@ if __name__ == "__main__":
         "--resume-epoch", type=int, help="Resume training from this epoch"
     )
     parser.add_argument(
-        "--max-grad-norm", type=float, default=0.5, help="Maximum gradient norm"
+        "--max-grad-norm", type=float, default=1.0, help="Maximum gradient norm"
     )
     parser.add_argument(
         "--grid-size",
@@ -492,7 +454,7 @@ if __name__ == "__main__":
         "--lambda-coord", type=float, default=10.0, help="Lambda for coordinate loss"
     )
     parser.add_argument(
-        "--lambda-noobj", type=float, default=0.5, help="Lambda for no object loss"
+        "--lambda-noobj", type=float, default=1.0, help="Lambda for no object loss"
     )
     args = parser.parse_args()
 

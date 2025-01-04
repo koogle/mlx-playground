@@ -138,25 +138,17 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     ious = ious.reshape(batch_size, S, S, B)  # [batch, S, S, B]
     
     # Find responsible box (box with highest IoU)
-    # Instead of scatter_add, we'll use one-hot encoding
+    # Instead of using array indexing, we'll use one-hot encoding with max
     best_ious_idx = mx.argmax(ious, axis=3)  # [batch, S, S]
     best_box_mask = mx.zeros((batch_size, S, S, B))
     
-    # Create indices for the batch and spatial dimensions
-    batch_idx = mx.arange(batch_size)[:, None, None]
-    y_idx = mx.arange(S)[None, :, None]
-    x_idx = mx.arange(S)[None, None, :]
-    
-    # Expand dimensions to match
-    batch_idx = mx.broadcast_to(batch_idx, (batch_size, S, S))
-    y_idx = mx.broadcast_to(y_idx, (batch_size, S, S))
-    x_idx = mx.broadcast_to(x_idx, (batch_size, S, S))
-    
-    # Create one-hot encoding for best box
-    best_box_mask = mx.zeros((batch_size, S, S, B))
+    # Create one-hot encoding for best box using comparison
     for b in range(B):
-        mask = (best_ious_idx == b)
-        best_box_mask = best_box_mask.at[batch_idx, y_idx, x_idx, b].set(mask)
+        best_box_mask = mx.where(
+            mx.expand_dims(best_ious_idx == b, axis=-1),
+            mx.ones_like(best_box_mask),
+            best_box_mask
+        )
     
     # Object mask from target
     obj_mask = target_boxes[..., 4:5]  # [batch, S, S, 1]

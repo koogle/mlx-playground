@@ -126,12 +126,14 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     target_boxes = target[..., :5]  # [batch, S, S, 5]
     target_classes = target[..., 5:]  # [batch, S, S, C]
     
+    # Expand target boxes to match prediction shape
+    target_boxes = mx.expand_dims(target_boxes, axis=3)  # [batch, S, S, 1, 5]
+    target_boxes = mx.repeat(target_boxes, B, axis=3)    # [batch, S, S, B, 5]
+    
     # Compute IoU for each predicted box
     # Reshape boxes for IoU computation
     pred_boxes_reshaped = pred_boxes[..., :4].reshape(batch_size, S*S*B, 4)
-    target_boxes_reshaped = mx.expand_dims(target_boxes[..., :4], axis=2)  # [batch, S*S, 1, 4]
-    target_boxes_reshaped = mx.repeat(target_boxes_reshaped, B, axis=2)  # [batch, S*S, B, 4]
-    target_boxes_reshaped = target_boxes_reshaped.reshape(batch_size, S*S*B, 4)
+    target_boxes_reshaped = target_boxes[..., :4].reshape(batch_size, S*S*B, 4)
     
     # Compute IoU between predictions and targets
     ious = compute_box_iou(pred_boxes_reshaped, target_boxes_reshaped)  # [batch, S*S*B]
@@ -151,7 +153,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
         )
     
     # Object mask from target
-    obj_mask = target_boxes[..., 4:5]  # [batch, S, S, 1]
+    obj_mask = mx.expand_dims(target_boxes[..., 4], axis=-1)  # [batch, S, S, B, 1]
     noobj_mask = 1 - obj_mask
     
     # Box coordinate loss (only for responsible boxes)
@@ -163,8 +165,8 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     box_loss = lambda_coord * mx.sum(box_loss)
     
     # Confidence loss
-    conf_loss_obj = obj_mask * mx.square(pred_boxes[..., 4] - ious)
-    conf_loss_noobj = noobj_mask * mx.square(pred_boxes[..., 4])
+    conf_loss_obj = obj_mask * mx.square(pred_boxes[..., 4:5] - mx.expand_dims(ious, axis=-1))
+    conf_loss_noobj = noobj_mask * mx.square(pred_boxes[..., 4:5])
     conf_loss = mx.sum(conf_loss_obj + lambda_noobj * conf_loss_noobj)
     
     # Class loss (only for cells with objects)
@@ -173,9 +175,15 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     gamma = 2.0
     class_probs = mx.softmax(pred_classes, axis=-1)
     focal_weight = mx.power(1 - class_probs + 1e-6, gamma)
-    class_loss = obj_mask * focal_weight * mx.sum(
+    
+    # Reshape obj_mask for class loss
+    obj_mask_class = mx.squeeze(target_boxes[..., 4:5], axis=-1)  # [batch, S, S, B]
+    obj_mask_class = mx.max(obj_mask_class, axis=-1, keepdims=True)  # [batch, S, S, 1]
+    
+    class_loss = obj_mask_class * focal_weight * mx.sum(
         -target_classes * mx.log(class_probs + 1e-6),
-        axis=-1
+        axis=-1,
+        keepdims=True
     )
     if class_weights is not None:
         class_weights = mx.array(class_weights)
@@ -187,7 +195,7 @@ def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, 
     
     # Return loss components for logging
     components = {
-        'iou': mx.mean(ious * obj_mask).item(),
+        'iou': mx.mean(ious * mx.squeeze(obj_mask, axis=-1)).item(),
         'coord': box_loss.item() / batch_size,
         'conf': conf_loss.item() / batch_size,
         'class': class_loss.item() / batch_size,

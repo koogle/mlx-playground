@@ -121,7 +121,9 @@ def main():
     try:
         model.load_weights(str(args.model))
         print("Model weights loaded successfully")
-        print(f"Model parameters: {model.parameters().keys()}")
+        print("Model parameters:")
+        for name, param in model.parameters().items():
+            print(f"  {name}: {param.shape}")
     except Exception as e:
         print(f"Error loading model weights: {e}")
         return
@@ -153,10 +155,19 @@ def main():
                 try:
                     # Preprocess frame
                     input_tensor = preprocess_frame(frame)
-                    print(f"Input shape: {input_tensor.shape}")
+                    print(f"\nInput shape: {input_tensor.shape}")
 
-                    # Run inference and ensure all computations are complete
-                    predictions = model(input_tensor)
+                    # Run inference with debug info
+                    try:
+                        predictions = model(input_tensor)
+                        print("Forward pass completed")
+                    except Exception as e:
+                        print(f"Error in model forward pass: {e}")
+                        print("Model state:")
+                        for name, param in model.parameters().items():
+                            print(f"  {name}: {param.shape}")
+                        continue
+
                     if predictions is None:
                         print("Error: Model returned None predictions")
                         continue
@@ -185,6 +196,9 @@ def main():
                     last_inference_time = current_time
                 except Exception as e:
                     print(f"Error during inference: {e}")
+                    import traceback
+
+                    traceback.print_exc()
                     continue
 
             # Show the frame

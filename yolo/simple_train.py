@@ -5,6 +5,7 @@ import mlx.optimizers as optim
 from model import YOLO
 from data.voc import VOCDataset, create_data_loader
 import time
+from tabulate import tabulate
 
 
 def bbox_loss(predictions, targets, model):
@@ -133,11 +134,11 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
 def main():
     # Training settings
     batch_size = 4
-    num_epochs = 20
-    learning_rate = 1e-4  # Slightly increased for coordinate-only training
+    num_epochs = 100  # Increased epochs
+    learning_rate = 1e-4
     val_frequency = 1
 
-    # Create a very small subset of data for testing
+    # Create a small subset of data for testing
     train_dataset = VOCDataset(
         data_dir="./VOCdevkit/VOC2012",
         year="2012",
@@ -145,8 +146,8 @@ def main():
         augment=False,
     )
 
-    # Use only 50 images for initial testing
-    train_dataset.image_ids = train_dataset.image_ids[:50]
+    # Use 100 images for longer training
+    train_dataset.image_ids = train_dataset.image_ids[:100]
 
     val_dataset = VOCDataset(
         data_dir="./VOCdevkit/VOC2012",
@@ -154,7 +155,7 @@ def main():
         image_set="val",
         augment=False,
     )
-    val_dataset.image_ids = val_dataset.image_ids[:10]
+    val_dataset.image_ids = val_dataset.image_ids[:20]
 
     train_loader = create_data_loader(train_dataset, batch_size=batch_size)
     val_loader = create_data_loader(val_dataset, batch_size=batch_size)
@@ -169,6 +170,10 @@ def main():
     print("Focus: Bounding box coordinate regression only")
     best_val_loss = float("inf")
 
+    # Table headers
+    headers = ["Epoch", "Loss", "XY Loss", "WH Loss", "Val Loss", "Time(s)", "Best"]
+    table = []
+
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0
@@ -177,8 +182,6 @@ def main():
         num_batches = 0
         start_time = time.time()
 
-        print(f"\nEpoch {epoch + 1}/{num_epochs}", end="\r")
-
         for batch_idx, batch in enumerate(train_loader):
             # Training step
             loss, components = train_step(model, batch, optimizer)
@@ -186,8 +189,6 @@ def main():
             epoch_xy_loss += components["xy"]
             epoch_wh_loss += components["wh"]
             num_batches += 1
-            # Print minimal progress
-            # print(f"Batch {batch_idx + 1}/{len(train_loader)}, Loss: {loss.item():.4f}")
 
         # Calculate epoch metrics
         avg_loss = epoch_loss / num_batches
@@ -195,22 +196,30 @@ def main():
         avg_wh_loss = epoch_wh_loss / num_batches
         epoch_time = time.time() - start_time
 
-        # print(f"\nEpoch {epoch + 1} Summary:")
-        print(f"\nAverage Loss: {avg_loss:.4f}")
-        print(f"Average XY Loss: {avg_xy_loss:.4f}")
-        print(f"Average WH Loss: {avg_wh_loss:.4f}")
-        print(f"Time: {epoch_time:.2f}s")
-
         # Validation
-        if (epoch + 1) % val_frequency == 0:
-            val_loss = validate(model, val_loader)
-            print(f"Validation Loss: {val_loss:.4f}")
+        val_loss = validate(model, val_loader)
+        is_best = val_loss < best_val_loss
 
-            # Save if best model
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                print("New best model! Saving checkpoint...")
-                save_checkpoint(model, optimizer, epoch + 1, val_loss, "checkpoints")
+        # Add row to table
+        row = [
+            f"{epoch + 1}/{num_epochs}",
+            f"{avg_loss:.4f}",
+            f"{avg_xy_loss:.4f}",
+            f"{avg_wh_loss:.4f}",
+            f"{val_loss:.4f}",
+            f"{epoch_time:.2f}",
+            "*" if is_best else "",
+        ]
+        table.append(row)
+
+        # Clear screen and print updated table
+        print("\033[H\033[J")  # Clear screen
+        print(tabulate(table, headers=headers, tablefmt="grid"))
+
+        # Save if best model
+        if is_best:
+            best_val_loss = val_loss
+            save_checkpoint(model, optimizer, epoch + 1, val_loss, "checkpoints")
 
 
 if __name__ == "__main__":

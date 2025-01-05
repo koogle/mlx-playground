@@ -12,56 +12,40 @@ from pathlib import Path
 
 
 def bbox_loss(predictions, targets, model):
-    """
-    Simplified loss focusing only on bounding box coordinate regression.
-    Only computes coordinate loss (x, y, w, h) without confidence scores.
-    """
+    """Simplified loss focusing only on bounding box coordinate regression."""
     batch_size = predictions.shape[0]
-    S = model.S  # Grid size
-    B = model.B  # Number of boxes per cell
+    S = model.S
+    B = model.B
 
     # Reshape predictions and targets
     pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
     targ = mx.reshape(targets[..., :4], (batch_size, S, S, 1, 4))
-    targ = mx.repeat(targ, B, axis=3)  # Repeat for each predicted box
+    targ = mx.repeat(targ, B, axis=3)
 
     # Extract coordinates
-    pred_xy = pred[..., :2]  # Center coordinates
-    pred_wh = pred[..., 2:4]  # Width and height
+    pred_xy = mx.sigmoid(pred[..., :2])  # Sigmoid for relative cell position
+    pred_wh = mx.sigmoid(pred[..., 2:4])  # Sigmoid for relative image size
     targ_xy = targ[..., :2]
     targ_wh = targ[..., 2:4]
 
-    # Get object mask from the original targets
-    obj_mask = mx.squeeze(
-        mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1
-    )  # Shape: [batch, S, S]
-    obj_mask = mx.repeat(
-        mx.expand_dims(obj_mask, axis=-1), B, axis=-1
-    )  # Shape: [batch, S, S, B]
+    # Get object mask
+    obj_mask = mx.squeeze(mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1)
+    obj_mask = mx.repeat(mx.expand_dims(obj_mask, axis=-1), B, axis=-1)
 
-    # Position loss (normalized by cell size)
-    xy_loss = mx.sum(mx.square(pred_xy - targ_xy), axis=-1) / (S * S)
+    # Position loss (MSE)
+    xy_loss = mx.sum(mx.square(pred_xy - targ_xy), axis=-1)
 
-    # Size loss (using relative scale)
-    wh_loss = mx.sum(
-        mx.square(
-            mx.sqrt(mx.maximum(pred_wh, 1e-6)) - mx.sqrt(mx.maximum(targ_wh, 1e-6))
-        ),
-        axis=-1,
-    )
+    # Size loss (MSE)
+    wh_loss = mx.sum(mx.square(pred_wh - targ_wh), axis=-1)
 
     # Only compute loss for cells that contain objects
-    coord_loss = obj_mask * (xy_loss + 0.5 * wh_loss)  # Reduce weight of size loss
+    coord_loss = obj_mask * (xy_loss + wh_loss)
 
-    # Normalize by number of objects and add small lambda
+    # Normalize by number of objects
     num_objects = mx.sum(obj_mask) + 1e-6
-    total_loss = 2.0 * mx.sum(coord_loss) / num_objects  # Reduced coordinate weight
+    total_loss = mx.sum(coord_loss) / num_objects
 
-    # Return raw values for monitoring
-    xy_total = mx.sum(obj_mask * xy_loss)
-    wh_total = mx.sum(obj_mask * wh_loss)
-
-    return total_loss, (xy_total, wh_total, num_objects)
+    return total_loss, (xy_loss, wh_loss, num_objects)
 
 
 def train_step(model, batch, optimizer):
@@ -87,12 +71,12 @@ def train_step(model, batch, optimizer):
         optimizer.update(model, grads)
         return loss, components
 
-    loss, (xy_total, wh_total, num_objects) = compiled_step()
+    loss, (xy_loss, wh_loss, num_objects) = compiled_step()
 
-    # Calculate components after compilation
+    # Calculate mean loss components
     components = {
-        "xy": xy_total.item() / num_objects.item(),
-        "wh": wh_total.item() / num_objects.item(),
+        "xy": mx.mean(xy_loss).item(),
+        "wh": mx.mean(wh_loss).item(),
     }
 
     return loss, components
@@ -215,20 +199,34 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Fixed set of image IDs for development
+    dev_image_ids = [
+        "2008_000008",  # Simple image with a single object
+        "2008_000015",  # Multiple objects, good for testing
+        "2008_000023",  # Different object sizes
+        "2008_000028",  # Interesting composition
+        "2008_000033",  # Multiple object classes
+        "2008_000036",  # Clear object boundaries
+        "2008_000042",  # Good lighting conditions
+        "2008_000045",  # Multiple objects with overlap
+        "2008_000052",  # Different scales
+        "2008_000064",  # Good variety of objects
+    ]
+
     # Training settings based on mode
     if args.mode == "dev":
-        # Development settings
-        batch_size = args.batch_size or 4
-        num_epochs = args.epochs or 100
-        val_frequency = 20
-        train_size = 100
-        val_size = 20
+        # Development settings - use fixed image set
+        batch_size = args.batch_size or 2
+        num_epochs = args.epochs or 200
+        val_frequency = 10
+        train_size = len(dev_image_ids)  # Use all dev images
+        val_size = 2  # Use 2 images for validation
     else:
         # Full training settings
         batch_size = args.batch_size or 16
         num_epochs = args.epochs or 125
         val_frequency = 50
-        train_size = None  # Use full dataset
+        train_size = None
         val_size = None
 
     learning_rate = 1e-4
@@ -238,13 +236,17 @@ def main():
         data_dir=args.data_dir,
         year="2012",
         image_set="train",
-        augment=args.mode == "full",  # Enable augmentation for full training
+        augment=args.mode == "full",
     )
 
-    if train_size:
+    if args.mode == "dev":
+        # Override image_ids with our fixed dev set
+        train_dataset.image_ids = dev_image_ids
+        print("\nDevelopment mode using fixed image set:")
+        for img_id in dev_image_ids:
+            print(f"  {img_id}")
+    elif train_size:
         train_dataset.image_ids = train_dataset.image_ids[:train_size]
-        # Print two image names for dev mode
-        print("Sample images in dev mode:", train_dataset.image_ids[:2])
 
     val_dataset = VOCDataset(
         data_dir=args.data_dir,
@@ -254,7 +256,9 @@ def main():
     )
 
     if val_size:
-        val_dataset.image_ids = val_dataset.image_ids[:val_size]
+        val_dataset.image_ids = dev_image_ids[
+            :val_size
+        ]  # Use first two dev images for validation
 
     print(f"\nTraining Configuration:")
     print(f"Mode: {args.mode}")

@@ -31,34 +31,45 @@ def parse_args():
     parser.add_argument(
         "--image",
         type=Path,
-        help="Path to an image file for inference",
+        help="Image ID or path for inference (e.g., '2008_000008' or full path)",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default="./VOCdevkit/VOC2012",
+        help="Path to VOC dataset directory",
     )
     return parser.parse_args()
 
 
 def preprocess_frame(frame, target_size=448):
     """Preprocess frame for model input"""
+    print("\nPreprocessing:")
+    print(f"Input frame shape: {frame.shape}")
+
     # Convert BGR to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     # Resize frame
     resized = cv2.resize(rgb_frame, (target_size, target_size))
+    print(f"Resized shape: {resized.shape}")
 
     # Normalize to [0, 1]
     normalized = resized.astype(np.float32) / 255.0
+    print(f"Value range: [{normalized.min():.3f}, {normalized.max():.3f}]")
 
     # Add batch dimension
     batched = np.expand_dims(normalized, axis=0)
+    print(f"Final input shape: {batched.shape}")
 
-    # Convert to MLX array
     return mx.array(batched)
 
 
 def decode_predictions(predictions, model, conf_threshold=0.25):
-    """
-    Decode raw predictions to bounding boxes.
-    Returns boxes in (x1, y1, x2, y2) format and confidence scores.
-    """
+    """Decode raw predictions to bounding boxes."""
+    print("\nDecoding predictions:")
+    print(f"Raw predictions shape: {predictions.shape}")
+
     batch_size = predictions.shape[0]
     S = model.S  # Grid size
     B = model.B  # Number of boxes per cell
@@ -68,10 +79,17 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     mx.eval(pred)
 
     # Extract coordinates and confidence
-    pred_xy = pred[..., :2]  # Center coordinates relative to cell
-    pred_wh = pred[..., 2:4]  # Width and height relative to image
+    pred_xy = mx.sigmoid(pred[..., :2])  # Sigmoid for relative cell position [0,1]
+    pred_wh = pred[..., 2:4]  # Raw width/height
     pred_conf = mx.sigmoid(pred[..., 4])  # Confidence score
-    mx.eval(pred_conf)
+    mx.eval(pred_xy, pred_wh, pred_conf)
+
+    print("\nAfter sigmoid:")
+    print(f"XY range: [{pred_xy.min().item():.3f}, {pred_xy.max().item():.3f}]")
+    print(f"WH range: [{pred_wh.min().item():.3f}, {pred_wh.max().item():.3f}]")
+    print(
+        f"Confidence range: [{pred_conf.min().item():.3f}, {pred_conf.max().item():.3f}]"
+    )
 
     # Create grid
     grid_x, grid_y = mx.meshgrid(
@@ -84,25 +102,35 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     # Convert predictions to absolute coordinates
     cell_size = 1.0 / S
     pred_xy = (pred_xy + grid_xy) * cell_size  # Add cell offset and scale
-    pred_wh = mx.clip(pred_wh, 0.01, 1.0)  # Ensure reasonable size
+    pred_wh = mx.sigmoid(pred_wh)  # Sigmoid for relative image size [0,1]
     mx.eval(pred_xy, pred_wh)
+
+    print("\nAfter grid transformation:")
+    print(f"XY range: [{pred_xy.min().item():.3f}, {pred_xy.max().item():.3f}]")
+    print(f"WH range: [{pred_wh.min().item():.3f}, {pred_wh.max().item():.3f}]")
 
     # Convert to corner format (x1, y1, x2, y2)
     pred_x1y1 = pred_xy - pred_wh / 2
     pred_x2y2 = pred_xy + pred_wh / 2
     boxes = mx.concatenate([pred_x1y1, pred_x2y2], axis=-1)
-    mx.eval(boxes)
 
-    # Reshape boxes and confidence scores
+    # Clip to [0,1]
+    boxes = mx.clip(boxes, 0.0, 1.0)
+
+    # Reshape to [batch, S*S*B, 4]
     boxes = mx.reshape(boxes, (batch_size, S * S * B, 4))
     confidences = mx.reshape(pred_conf, (batch_size, S * S * B))
     mx.eval(boxes, confidences)
 
+    print("\nFinal shapes:")
+    print(f"Boxes: {boxes.shape}")
+    print(f"Confidences: {confidences.shape}")
+
     return boxes, confidences
 
 
-def draw_boxes(frame, boxes, confidences=None, thickness=2):
-    """Draw bounding boxes on frame with color based on confidence"""
+def draw_boxes(frame, boxes, confidences=None, color=None, thickness=2, labels=None):
+    """Draw bounding boxes on frame with optional confidence scores and labels"""
     height, width = frame.shape[:2]
 
     for i, box in enumerate(boxes):
@@ -112,30 +140,34 @@ def draw_boxes(frame, boxes, confidences=None, thickness=2):
         x2 = int(box[2] * width)
         y2 = int(box[3] * height)
 
-        # Color based on confidence (red->yellow->green)
-        if confidences is not None:
+        # Use provided color or confidence-based color
+        if color is not None:
+            box_color = color
+        elif confidences is not None:
             conf = confidences[i]
             # Red channel decreases with confidence
             r = int(255 * (1 - conf))
             # Green channel increases with confidence
             g = int(255 * conf)
-            color = (0, g, r)  # BGR format
+            box_color = (0, g, r)  # BGR format
         else:
-            color = (0, 255, 0)  # Default green
+            box_color = (0, 255, 0)  # Default green
 
         # Draw rectangle
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, thickness)
 
-        # Add confidence text if available
-        if confidences is not None:
-            conf_text = f"{conf:.2f}"
+        # Add label if provided
+        if labels is not None and i < len(labels):
+            label = f"{labels[i]}"
+            if confidences is not None:
+                label += f" {confidences[i]:.2f}"
             cv2.putText(
                 frame,
-                conf_text,
+                label,
                 (x1, y1 - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
-                color,
+                box_color,
                 2,
             )
 
@@ -251,6 +283,142 @@ def visualize_activations(frame, predictions, model):
     return output
 
 
+def load_ground_truth(image_id, data_dir="./VOCdevkit/VOC2012"):
+    """Load ground truth boxes for an image"""
+    from xml.etree import ElementTree as ET
+
+    # Load annotation
+    anno_path = os.path.join(data_dir, "Annotations", f"{image_id}.xml")
+    tree = ET.parse(anno_path)
+    root = tree.getroot()
+
+    # Get image size
+    size = root.find("size")
+    width = float(size.find("width").text)
+    height = float(size.find("height").text)
+
+    # Extract boxes
+    boxes = []
+    classes = []
+    for obj in root.findall("object"):
+        bbox = obj.find("bndbox")
+        # Convert to normalized coordinates
+        x1 = float(bbox.find("xmin").text) / width
+        y1 = float(bbox.find("ymin").text) / height
+        x2 = float(bbox.find("xmax").text) / width
+        y2 = float(bbox.find("ymax").text) / height
+        boxes.append([x1, y1, x2, y2])
+        classes.append(obj.find("name").text)
+
+    return np.array(boxes), classes
+
+
+def analyze_single_image(args, model, image_id):
+    """Analyze a single image and show predictions vs ground truth"""
+    image_path = os.path.join(args.data_dir, "JPEGImages", f"{image_id}.jpg")
+    frame = cv2.imread(str(image_path))
+    if frame is None:
+        raise RuntimeError(f"Failed to load image: {image_path}")
+
+    # Load ground truth
+    gt_boxes, gt_classes = load_ground_truth(image_id, args.data_dir)
+    print(f"\nGround truth for {image_id}:")
+    for box, cls in zip(gt_boxes, gt_classes):
+        print(f"  {cls}: {box}")
+
+    # Run inference
+    input_tensor = preprocess_frame(frame)
+    predictions = model(input_tensor)
+
+    print("\nRaw predictions shape:", predictions.shape)
+    print("First few values:", predictions[0, :10])  # Show first few values
+
+    if predictions is not None:
+        mx.eval(predictions)
+        boxes, confidences = decode_predictions(predictions, model)
+        mx.eval(boxes, confidences)
+
+        # Convert to numpy
+        boxes_np = np.array([b.tolist() for b in boxes])
+        confidences_np = np.array([c.tolist() for c in confidences])
+        boxes_np = boxes_np[0]  # Get first batch
+        confidences_np = confidences_np[0]  # Get first batch
+
+        print("\nDecoded boxes shape:", boxes_np.shape)
+        print("Confidence scores shape:", confidences_np.shape)
+
+        # Filter boxes
+        valid_boxes, valid_confidences = filter_boxes(
+            boxes_np.tolist(),
+            confidences_np=(
+                confidences_np.tolist() if confidences_np is not None else None
+            ),
+        )
+
+        print("\nAfter filtering:")
+        print(f"Number of valid boxes: {len(valid_boxes)}")
+        for i, (box, conf) in enumerate(zip(valid_boxes, valid_confidences)):
+            print(f"  Box {i}: {box}, confidence: {conf:.3f}")
+
+        # Create visualization
+        output_frame = frame.copy()
+
+        # Draw ground truth in blue
+        output_frame = draw_boxes(
+            output_frame, gt_boxes, color=(255, 0, 0), labels=gt_classes  # Blue
+        )
+
+        # Draw predictions in confidence-based colors
+        output_frame = draw_boxes(
+            output_frame, valid_boxes, confidences=valid_confidences
+        )
+
+        # Add legend
+        cv2.putText(
+            output_frame,
+            "Blue: Ground Truth, Color: Predictions (Red->Green = Low->High Confidence)",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+
+        # Show the image
+        cv2.imshow("YOLO Detection", output_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+        # Calculate IoU with ground truth
+        print("\nIoU with ground truth:")
+        for i, pred_box in enumerate(valid_boxes):
+            for j, gt_box in enumerate(gt_boxes):
+                iou = calculate_iou(pred_box, gt_box)
+                print(f"  Pred {i} vs GT {j} ({gt_classes[j]}): {iou:.3f}")
+
+
+def calculate_iou(box1, box2):
+    """Calculate Intersection over Union between two boxes"""
+    # Convert to (x1, y1, x2, y2) format if needed
+    box1 = np.array(box1)
+    box2 = np.array(box2)
+
+    # Calculate intersection
+    x1 = max(box1[0], box2[0])
+    y1 = max(box1[1], box2[1])
+    x2 = min(box1[2], box2[2])
+    y2 = min(box1[3], box2[3])
+
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+
+    # Calculate union
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    union = area1 + area2 - intersection
+
+    return intersection / (union + 1e-6)
+
+
 def main():
     args = parse_args()
 
@@ -267,7 +435,6 @@ def main():
         params = model.parameters()
         if not params:
             print("  Warning: No parameters loaded")
-
     except Exception as e:
         print(f"Error loading model weights: {e}")
         import traceback
@@ -279,38 +446,9 @@ def main():
     print(f"Loaded model from {args.model}")
 
     if args.image:
-        # Perform inference on a single image
-        if not args.image.exists():
-            raise FileNotFoundError(f"Image not found: {args.image}")
-
-        frame = cv2.imread(str(args.image))
-        if frame is None:
-            raise RuntimeError(f"Failed to load image: {args.image}")
-
-        input_tensor = preprocess_frame(frame)
-        predictions = model(input_tensor)
-        if predictions is not None:
-            mx.eval(predictions)
-            boxes, confidences = decode_predictions(predictions, model)
-            mx.eval(boxes, confidences)
-
-            # Convert to numpy array for OpenCV
-            boxes_np = np.array([b.tolist() for b in boxes])
-            boxes_np = boxes_np[0]  # Get first batch
-
-            # Filter and draw boxes
-            valid_boxes, valid_confidences = filter_boxes(
-                boxes_np.tolist(),
-                confidences_np=(
-                    confidences[0].tolist() if confidences is not None else None
-                ),
-            )
-            output_frame = draw_boxes(frame, valid_boxes, confidences=valid_confidences)
-
-            # Show the image with detections
-            cv2.imshow("YOLO Detection", output_frame)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+        # Extract image ID from path if full path provided
+        image_id = args.image.stem
+        analyze_single_image(args, model, image_id)
         return
 
     # Initialize camera
@@ -416,6 +554,11 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
     max_size = 0.9  # Maximum 90% of image size
     max_boxes = 5  # Maximum number of boxes to show
 
+    print("\nFiltering boxes:")
+    print(f"Input boxes shape: {boxes_np}")
+    if confidences_np is not None:
+        print(f"Input confidences shape: {confidences_np}")
+
     # Convert MLX arrays to numpy if needed
     if not isinstance(boxes_np, np.ndarray):
         boxes_np = np.array(boxes_np)
@@ -426,6 +569,11 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
     widths = boxes_np[:, 2] - boxes_np[:, 0]
     heights = boxes_np[:, 3] - boxes_np[:, 1]
     aspect_ratios = np.maximum(widths, heights) / (np.minimum(widths, heights) + 1e-6)
+
+    print("\nBox statistics:")
+    print(f"Width range: [{widths.min():.3f}, {widths.max():.3f}]")
+    print(f"Height range: [{heights.min():.3f}, {heights.max():.3f}]")
+    print(f"Aspect ratio range: [{aspect_ratios.min():.3f}, {aspect_ratios.max():.3f}]")
 
     # Create mask for valid boxes
     valid_mask = (
@@ -445,6 +593,8 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
         confidences_np[valid_mask] if confidences_np is not None else None
     )
 
+    print(f"\nValid boxes after filtering: {len(valid_boxes)}")
+
     if len(valid_boxes) > 0:
         # Sort by confidence if available, otherwise by area
         if valid_confidences is not None:
@@ -459,6 +609,10 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
         valid_confidences = (
             valid_confidences[sorted_indices] if valid_confidences is not None else None
         )
+
+        print("\nFinal boxes:")
+        for i, (box, conf) in enumerate(zip(valid_boxes, valid_confidences)):
+            print(f"Box {i}: {box}, confidence: {conf:.3f}")
 
     return valid_boxes, valid_confidences
 

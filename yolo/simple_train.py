@@ -134,9 +134,9 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
 def main():
     # Training settings
     batch_size = 4
-    num_epochs = 100  # Increased epochs
+    num_epochs = 100
     learning_rate = 1e-4
-    val_frequency = 1
+    val_frequency = 20  # Only validate every 20 epochs
 
     # Create a small subset of data for testing
     train_dataset = VOCDataset(
@@ -160,19 +160,24 @@ def main():
     train_loader = create_data_loader(train_dataset, batch_size=batch_size)
     val_loader = create_data_loader(val_dataset, batch_size=batch_size)
 
-    # Create model and optimizer
+    # Training loop
     print("Initializing model...")
     model = YOLO()
     optimizer = optim.Adam(learning_rate=learning_rate)
 
-    # Training loop
-    print("\nStarting training...")
-    print("Focus: Bounding box coordinate regression only")
-    best_val_loss = float("inf")
-
-    # Table headers
+    # Table setup
     headers = ["Epoch", "Loss", "XY Loss", "WH Loss", "Val Loss", "Time(s)", "Best"]
     table = []
+
+    # Print fixed header
+    print("\033[H\033[J")  # Clear screen
+    print("\033[s")  # Save cursor position
+    print(tabulate([], headers=headers, tablefmt="grid"))
+    header_lines = len(headers) + 2  # Account for grid lines
+    print(f"\033[{header_lines}A")  # Move cursor up to prepare for data
+
+    best_val_loss = float("inf")
+    last_val_loss = "N/A"  # Store last validation loss
 
     for epoch in range(num_epochs):
         model.train()
@@ -183,7 +188,6 @@ def main():
         start_time = time.time()
 
         for batch_idx, batch in enumerate(train_loader):
-            # Training step
             loss, components = train_step(model, batch, optimizer)
             epoch_loss += loss.item()
             epoch_xy_loss += components["xy"]
@@ -196,9 +200,17 @@ def main():
         avg_wh_loss = epoch_wh_loss / num_batches
         epoch_time = time.time() - start_time
 
-        # Validation
-        val_loss = validate(model, val_loader)
-        is_best = val_loss < best_val_loss
+        # Only run validation at specified frequency
+        if (epoch + 1) % val_frequency == 0:
+            val_loss = validate(model, val_loader)
+            last_val_loss = f"{val_loss:.4f}"
+            is_best = val_loss < best_val_loss
+
+            if is_best:
+                best_val_loss = val_loss
+                save_checkpoint(model, optimizer, epoch + 1, val_loss, "checkpoints")
+        else:
+            is_best = False
 
         # Add row to table
         row = [
@@ -206,20 +218,16 @@ def main():
             f"{avg_loss:.4f}",
             f"{avg_xy_loss:.4f}",
             f"{avg_wh_loss:.4f}",
-            f"{val_loss:.4f}",
+            last_val_loss,
             f"{epoch_time:.2f}",
             "*" if is_best else "",
         ]
         table.append(row)
 
-        # Clear screen and print updated table
-        print("\033[H\033[J")  # Clear screen
+        # Update table display
+        print("\033[u")  # Restore cursor to header position
+        print("\033[J")  # Clear screen below cursor
         print(tabulate(table, headers=headers, tablefmt="grid"))
-
-        # Save if best model
-        if is_best:
-            best_val_loss = val_loss
-            save_checkpoint(model, optimizer, epoch + 1, val_loss, "checkpoints")
 
 
 if __name__ == "__main__":

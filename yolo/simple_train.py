@@ -148,11 +148,21 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
 
 def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
     """Load model checkpoint"""
-    # Check in the "latest" folder
+    # Check in the "best" folder first
     model_path = os.path.join(
-        checkpoint_dir, "latest", f"model_epoch_{epoch}.safetensors"
+        checkpoint_dir, "best", f"model_epoch_{epoch}.safetensors"
     )
-    info_path = os.path.join(checkpoint_dir, "latest", f"info_epoch_{epoch}.npz")
+    info_path = os.path.join(checkpoint_dir, "best", f"info_epoch_{epoch}.npz")
+
+    if not os.path.exists(model_path) or not os.path.exists(info_path):
+        # Fallback to "latest" folder if "best" is not available
+        model_path = os.path.join(
+            checkpoint_dir, "latest", f"model_epoch_{epoch}.safetensors"
+        )
+        info_path = os.path.join(checkpoint_dir, "latest", f"info_epoch_{epoch}.npz")
+
+    if not os.path.exists(model_path) or not os.path.exists(info_path):
+        raise FileNotFoundError(f"Checkpoint not found for epoch {epoch}")
 
     # Load model weights
     model.load_weights(model_path)

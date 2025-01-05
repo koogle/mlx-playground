@@ -28,6 +28,11 @@ def parse_args():
         default=0,
         help="Camera device index",
     )
+    parser.add_argument(
+        "--image",
+        type=Path,
+        help="Path to an image file for inference",
+    )
     return parser.parse_args()
 
 
@@ -265,6 +270,36 @@ def main():
     model.eval()
     print(f"Loaded model from {args.model}")
 
+    if args.image:
+        # Perform inference on a single image
+        if not args.image.exists():
+            raise FileNotFoundError(f"Image not found: {args.image}")
+
+        frame = cv2.imread(str(args.image))
+        if frame is None:
+            raise RuntimeError(f"Failed to load image: {args.image}")
+
+        input_tensor = preprocess_frame(frame)
+        predictions = model(input_tensor)
+        if predictions is not None:
+            mx.eval(predictions)
+            boxes = decode_predictions(predictions, model)
+            mx.eval(boxes)
+
+            # Convert to numpy array for OpenCV
+            boxes_np = np.array([b.tolist() for b in boxes])
+            boxes_np = boxes_np[0]  # Get first batch
+
+            # Filter and draw boxes
+            valid_boxes = filter_boxes(boxes_np)
+            output_frame = draw_boxes(frame, valid_boxes)
+
+            # Show the image with detections
+            cv2.imshow("YOLO Detection", output_frame)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        return
+
     # Initialize camera
     print("Initializing camera...")
     cap = cv2.VideoCapture(args.camera)
@@ -368,6 +403,33 @@ def main():
     finally:
         cap.release()
         cv2.destroyAllWindows()
+
+
+def filter_boxes(boxes_np):
+    # Filter boxes based on size and aspect ratio
+    min_size = 0.05  # Minimum 5% of image size
+    max_size = 0.9  # Maximum 90% of image size
+    max_boxes = 5  # Maximum number of boxes to show
+    valid_boxes = []
+
+    for box in boxes_np:
+        w = float(box[2] - box[0])  # width
+        h = float(box[3] - box[1])  # height
+
+        if float(min_size) < w < float(max_size) and float(min_size) < h < float(
+            max_size
+        ):
+            aspect_ratio = max(w, h) / (min(w, h) + 1e-6)
+            if float(aspect_ratio) < 3:  # Aspect ratio less than 3:1
+                valid_boxes.append(box)
+
+    if valid_boxes:
+        areas = [float((b[2] - b[0]) * (b[3] - b[1])) for b in valid_boxes]
+        valid_boxes = [
+            b for _, b in sorted(zip(areas, valid_boxes), reverse=True)[:max_boxes]
+        ]
+
+    return np.array(valid_boxes)
 
 
 if __name__ == "__main__":

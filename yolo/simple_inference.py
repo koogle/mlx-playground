@@ -60,7 +60,7 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
 
     # Reshape predictions to [batch, S, S, B, 4]
     pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
-    pred = mx.eval(pred)
+    mx.eval(pred)  # Ensure computation is complete
 
     # Extract coordinates
     pred_xy = pred[..., :2]  # Center coordinates relative to cell
@@ -72,21 +72,23 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     )
     grid_xy = mx.stack([grid_x, grid_y], axis=-1)
     grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
-    grid_xy = mx.eval(grid_xy)
+    mx.eval(grid_xy)  # Ensure computation is complete
 
     # Convert predictions to absolute coordinates
     cell_size = 1.0 / S
-    pred_xy = mx.eval((pred_xy + grid_xy) * cell_size)  # Add cell offset and scale
-    pred_wh = mx.eval(mx.clip(pred_wh, 0, 1))  # Ensure positive width/height
+    pred_xy = (pred_xy + grid_xy) * cell_size  # Add cell offset and scale
+    pred_wh = mx.clip(pred_wh, 0, 1)  # Ensure positive width/height
+    mx.eval(pred_xy, pred_wh)  # Ensure computations are complete
 
     # Convert to corner format (x1, y1, x2, y2)
-    pred_x1y1 = mx.eval(pred_xy - pred_wh / 2)
-    pred_x2y2 = mx.eval(pred_xy + pred_wh / 2)
-    boxes = mx.eval(mx.concatenate([pred_x1y1, pred_x2y2], axis=-1))
+    pred_x1y1 = pred_xy - pred_wh / 2
+    pred_x2y2 = pred_xy + pred_wh / 2
+    boxes = mx.concatenate([pred_x1y1, pred_x2y2], axis=-1)
+    mx.eval(boxes)  # Ensure computation is complete
 
     # Reshape to [batch, S*S*B, 4]
     boxes = mx.reshape(boxes, (batch_size, S * S * B, 4))
-    boxes = mx.eval(boxes)
+    mx.eval(boxes)  # Ensure computation is complete
 
     return boxes
 
@@ -121,11 +123,31 @@ def main():
     try:
         model.load_weights(str(args.model))
         print("Model weights loaded successfully")
-        print("Model parameters:")
-        for name, param in model.parameters().items():
-            print(f"  {name}: {param.shape}")
+        print("\nModel parameters:")
+        params = model.parameters()
+        if not params:
+            print("  Warning: No parameters loaded")
+        else:
+            for name, param in params.items():
+                if isinstance(param, dict):
+                    print(f"  {name}:")
+                    for k, v in param.items():
+                        print(
+                            f"    {k}: {v.shape if hasattr(v, 'shape') else 'no shape'}"
+                        )
+                else:
+                    print(
+                        f"  {name}: {param.shape if hasattr(param, 'shape') else 'no shape'}"
+                    )
+
+        # Print model structure
+        print("\nModel structure:")
+        print(model)
     except Exception as e:
         print(f"Error loading model weights: {e}")
+        import traceback
+
+        traceback.print_exc()
         return
 
     model.eval()
@@ -172,16 +194,18 @@ def main():
                         print("Error: Model returned None predictions")
                         continue
 
-                    predictions = mx.eval(predictions)
+                    # Ensure predictions are evaluated
+                    mx.eval(predictions)
                     print(f"Predictions shape: {predictions.shape}")
 
-                    # Decode predictions and ensure computations are complete
+                    # Decode predictions
                     boxes = decode_predictions(predictions, model)
                     if boxes is None:
                         print("Error: Failed to decode predictions")
                         continue
 
-                    boxes = mx.eval(boxes)
+                    # Ensure boxes are evaluated
+                    mx.eval(boxes)
                     print(f"Boxes shape: {boxes.shape}")
 
                     # Convert to numpy array for OpenCV
@@ -194,6 +218,7 @@ def main():
 
                     # Update inference time
                     last_inference_time = current_time
+
                 except Exception as e:
                     print(f"Error during inference: {e}")
                     import traceback

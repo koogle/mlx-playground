@@ -194,42 +194,27 @@ class YOLO(nn.Module):
             ]
         )
 
-    def __call__(self, x, return_features=False):
-        """
-        Forward pass
+    def __call__(self, x):
+        print(f"Input shape: {x.shape}")
 
-        Args:
-            x: Input tensor of shape (batch_size, 3, H, W) in NCHW format
-            return_features: If True, returns intermediate feature maps
+        # Backbone
+        x = self.backbone(x)
+        print(f"After backbone: {x.shape if x is not None else 'None'}")
 
-        Returns:
-            If return_features is False:
-                Output tensor of shape (batch_size, B*(5 + C), S, S)
-                For each box:
-                - tx, ty: Raw box center offsets (apply sigmoid to get [0,1])
-                - tw, th: Raw box size offsets (apply exp to get scaling factors)
-                - to: Raw objectness score (apply sigmoid to get confidence)
-                - tc1...tcC: Raw class scores (apply softmax to get probabilities)
-            If return_features is True:
-                Tuple of (predictions, features_dict)
-        """
-        batch_size = x.shape[0]
+        # Detection layers
+        x = self.detect1(x)
+        x = self.bn_detect1(x)
+        print(f"After detect1: {x.shape if x is not None else 'None'}")
 
-        # Backbone (NCHW format)
-        backbone_features = self.backbone(x)  # [batch, 1024, S, S]
+        x = self.detect2(x)
+        x = self.bn_detect2(x)
+        print(f"After detect2: {x.shape if x is not None else 'None'}")
 
-        # Detection head
-        conv6 = self.relu(self.bn_detect1(self.detect1(backbone_features)))
-        conv7 = self.relu(self.bn_detect2(self.detect2(conv6)))
+        # Final convolution
+        x = self.conv_final(x)
+        print(f"After conv_final: {x.shape if x is not None else 'None'}")
 
-        # Final detection layer (raw predictions)
-        predictions = self.conv_final(conv7)  # [batch, B*(5+C), S, S]
-
-        if return_features:
-            features = {"backbone": backbone_features, "conv6": conv6, "conv7": conv7}
-            return predictions, features
-
-        return predictions
+        return x
 
     def decode_predictions(self, pred, conf_threshold=0.1, nms_threshold=0.4):
         """

@@ -120,7 +120,19 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
 
     # Save model weights using safetensors
     model_path = os.path.join(save_dir, f"model_epoch_{epoch}.safetensors")
+    print(f"\nSaving model to {model_path}")
+    print("Model parameters before saving:")
+    for name, param in model.parameters().items():
+        print(f"  {name}: {param.shape if hasattr(param, 'shape') else 'no shape'}")
+
     model.save_weights(model_path)
+
+    # Verify saved weights
+    print("\nVerifying saved weights:")
+    temp_model = YOLO()
+    temp_model.load_weights(model_path)
+    for name, param in temp_model.parameters().items():
+        print(f"  {name}: {param.shape if hasattr(param, 'shape') else 'no shape'}")
 
     # Save training info (without optimizer state)
     info = {

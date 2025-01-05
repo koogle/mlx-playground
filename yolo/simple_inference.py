@@ -118,6 +118,32 @@ def draw_boxes(frame, boxes, color=(0, 255, 0), thickness=2):
     return frame
 
 
+def visualize_activations(frame, predictions, model):
+    """Visualize activations from the final layer"""
+    batch_size, channels, grid_size, _ = predictions.shape
+
+    # Sum activations across channels to get activation strength per grid cell
+    activations = mx.sum(mx.abs(predictions), axis=1)  # Shape: [batch, S, S]
+    activations = activations[0]  # Take first batch
+    mx.eval(activations)
+
+    # Convert to numpy and normalize to [0, 1]
+    act_np = activations.tolist()
+    act_np = np.array(act_np)
+    act_np = (act_np - act_np.min()) / (act_np.max() - act_np.min() + 1e-6)
+
+    # Resize to frame size
+    height, width = frame.shape[:2]
+    act_resized = cv2.resize(act_np, (width, height), interpolation=cv2.INTER_LINEAR)
+
+    # Convert to heatmap
+    heatmap = cv2.applyColorMap((act_resized * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+    # Blend with original frame
+    alpha = 0.7
+    return cv2.addWeighted(frame, 1 - alpha, heatmap, alpha, 0)
+
+
 def main():
     args = parse_args()
 
@@ -169,9 +195,11 @@ def main():
 
     last_inference_time = 0
     inference_interval = args.interval
-    last_boxes = None  # Store last valid boxes
+    last_boxes = None
+    last_predictions = None  # Store last predictions for visualization
+    show_activations = False  # Toggle for visualization mode
 
-    print("Starting inference. Press 'q' to quit.")
+    print("Starting inference. Press 'q' to quit, TAB to toggle activation view")
 
     try:
         while True:
@@ -184,15 +212,14 @@ def main():
             # Run inference every interval
             if current_time - last_inference_time >= inference_interval:
                 try:
-                    # Preprocess frame
                     input_tensor = preprocess_frame(frame)
-
-                    # Run inference
                     predictions = model(input_tensor)
                     if predictions is None:
                         continue
 
                     mx.eval(predictions)
+                    last_predictions = predictions  # Store for visualization
+
                     boxes = decode_predictions(predictions, model)
                     mx.eval(boxes)
 
@@ -239,16 +266,26 @@ def main():
                     print(f"Error during inference: {e}")
                     continue
 
-            # Draw boxes (using last valid boxes)
-            if last_boxes is not None and len(last_boxes) > 0:  # Python list check
-                frame = draw_boxes(frame, last_boxes)
+            # Create output frame based on visualization mode
+            output_frame = frame.copy()
+
+            if show_activations and last_predictions is not None:
+                output_frame = visualize_activations(
+                    output_frame, last_predictions, model
+                )
+            elif last_boxes is not None and len(last_boxes) > 0:
+                output_frame = draw_boxes(output_frame, last_boxes)
 
             # Show the frame
-            cv2.imshow("YOLO Detection", frame)
+            cv2.imshow("YOLO Detection", output_frame)
 
-            # Check for exit
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            # Handle key presses
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 break
+            elif key == ord("\t"):  # TAB key
+                show_activations = not show_activations
+                print(f"Showing {'activations' if show_activations else 'boxes'}")
 
     finally:
         cap.release()

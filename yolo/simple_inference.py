@@ -57,19 +57,21 @@ def preprocess_frame(frame, target_size=448):
 def decode_predictions(predictions, model, conf_threshold=0.25):
     """
     Decode raw predictions to bounding boxes.
-    Returns boxes in (x1, y1, x2, y2) format.
+    Returns boxes in (x1, y1, x2, y2) format and confidence scores.
     """
     batch_size = predictions.shape[0]
     S = model.S  # Grid size
     B = model.B  # Number of boxes per cell
 
-    # Reshape predictions to [batch, S, S, B, 4]
-    pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
+    # Reshape predictions to [batch, S, S, B, 5]
+    pred = mx.reshape(predictions[..., : B * 5], (batch_size, S, S, B, 5))
     mx.eval(pred)
 
-    # Extract coordinates
+    # Extract coordinates and confidence
     pred_xy = pred[..., :2]  # Center coordinates relative to cell
     pred_wh = pred[..., 2:4]  # Width and height relative to image
+    pred_conf = mx.sigmoid(pred[..., 4])  # Confidence score
+    mx.eval(pred_conf)
 
     # Create grid
     grid_x, grid_y = mx.meshgrid(
@@ -82,11 +84,7 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     # Convert predictions to absolute coordinates
     cell_size = 1.0 / S
     pred_xy = (pred_xy + grid_xy) * cell_size  # Add cell offset and scale
-
-    # Clip and threshold width/height predictions
-    min_size = 0.05  # Increased minimum size to 5%
-    max_size = 0.9  # Maximum 90% of image size
-    pred_wh = mx.clip(pred_wh, min_size, max_size)  # Ensure reasonable size
+    pred_wh = mx.clip(pred_wh, 0.01, 1.0)  # Ensure reasonable size
     mx.eval(pred_xy, pred_wh)
 
     # Convert to corner format (x1, y1, x2, y2)
@@ -95,30 +93,51 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     boxes = mx.concatenate([pred_x1y1, pred_x2y2], axis=-1)
     mx.eval(boxes)
 
-    # Clip boxes to image boundaries
-    boxes = mx.clip(boxes, 0.0, 1.0)
-    mx.eval(boxes)
-
-    # Reshape to [batch, S*S*B, 4]
+    # Reshape boxes and confidence scores
     boxes = mx.reshape(boxes, (batch_size, S * S * B, 4))
-    mx.eval(boxes)
+    confidences = mx.reshape(pred_conf, (batch_size, S * S * B))
+    mx.eval(boxes, confidences)
 
-    return boxes
+    return boxes, confidences
 
 
-def draw_boxes(frame, boxes, color=(0, 255, 0), thickness=2):
-    """Draw bounding boxes on frame"""
+def draw_boxes(frame, boxes, confidences=None, thickness=2):
+    """Draw bounding boxes on frame with color based on confidence"""
     height, width = frame.shape[:2]
 
-    for box in boxes:
+    for i, box in enumerate(boxes):
         # Convert normalized coordinates to pixel coordinates
         x1 = int(box[0] * width)
         y1 = int(box[1] * height)
         x2 = int(box[2] * width)
         y2 = int(box[3] * height)
 
+        # Color based on confidence (red->yellow->green)
+        if confidences is not None:
+            conf = confidences[i]
+            # Red channel decreases with confidence
+            r = int(255 * (1 - conf))
+            # Green channel increases with confidence
+            g = int(255 * conf)
+            color = (0, g, r)  # BGR format
+        else:
+            color = (0, 255, 0)  # Default green
+
         # Draw rectangle
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+
+        # Add confidence text if available
+        if confidences is not None:
+            conf_text = f"{conf:.2f}"
+            cv2.putText(
+                frame,
+                conf_text,
+                (x1, y1 - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                2,
+            )
 
     return frame
 
@@ -245,26 +264,10 @@ def main():
     try:
         model.load_weights(str(args.model))
         print("Model weights loaded successfully")
-        print("\nModel parameters:")
         params = model.parameters()
         if not params:
             print("  Warning: No parameters loaded")
-        else:
-            for name, param in params.items():
-                if isinstance(param, dict):
-                    print(f"  {name}:")
-                    for k, v in param.items():
-                        print(
-                            f"    {k}: {v.shape if hasattr(v, 'shape') else 'no shape'}"
-                        )
-                else:
-                    print(
-                        f"  {name}: {param.shape if hasattr(param, 'shape') else 'no shape'}"
-                    )
 
-        # Print model structure
-        print("\nModel structure:")
-        print(model)
     except Exception as e:
         print(f"Error loading model weights: {e}")
         import traceback
@@ -288,16 +291,21 @@ def main():
         predictions = model(input_tensor)
         if predictions is not None:
             mx.eval(predictions)
-            boxes = decode_predictions(predictions, model)
-            mx.eval(boxes)
+            boxes, confidences = decode_predictions(predictions, model)
+            mx.eval(boxes, confidences)
 
             # Convert to numpy array for OpenCV
             boxes_np = np.array([b.tolist() for b in boxes])
             boxes_np = boxes_np[0]  # Get first batch
 
             # Filter and draw boxes
-            valid_boxes = filter_boxes(boxes_np)
-            output_frame = draw_boxes(frame, valid_boxes)
+            valid_boxes, valid_confidences = filter_boxes(
+                boxes_np.tolist(),
+                confidences_np=(
+                    confidences[0].tolist() if confidences is not None else None
+                ),
+            )
+            output_frame = draw_boxes(frame, valid_boxes, confidences=valid_confidences)
 
             # Show the image with detections
             cv2.imshow("YOLO Detection", output_frame)
@@ -338,18 +346,28 @@ def main():
                         mx.eval(predictions)
                         last_predictions = predictions  # Store for visualization
 
-                        boxes = decode_predictions(predictions, model)
-                        mx.eval(boxes)
+                        boxes, confidences = decode_predictions(predictions, model)
+                        mx.eval(boxes, confidences)
 
                         # Convert to numpy array for OpenCV
                         boxes_np = np.array([b.tolist() for b in boxes])
+                        confidences_np = np.array([c.tolist() for c in confidences])
                         boxes_np = boxes_np[0]  # Get first batch
+                        confidences_np = confidences_np[0]  # Get first batch
 
                         # Filter boxes using numpy array
-                        valid_boxes = filter_boxes(boxes_np)
+                        valid_boxes, valid_confidences = filter_boxes(
+                            boxes_np.tolist(),
+                            confidences_np=(
+                                confidences_np.tolist()
+                                if confidences_np is not None
+                                else None
+                            ),
+                        )
 
                         if len(valid_boxes) > 0:
                             last_boxes = valid_boxes
+                            last_confidences = valid_confidences
 
                         # Update inference time
                         last_inference_time = current_time
@@ -374,7 +392,7 @@ def main():
                     output_frame, last_predictions, model
                 )
             elif last_boxes is not None and len(last_boxes) > 0:
-                output_frame = draw_boxes(output_frame, last_boxes)
+                output_frame = draw_boxes(output_frame, last_boxes, last_confidences)
 
             # Show the frame
             cv2.imshow("YOLO Detection", output_frame)
@@ -392,21 +410,21 @@ def main():
         cv2.destroyAllWindows()
 
 
-def filter_boxes(boxes_np):
+def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
     """Filter boxes using numpy operations"""
     min_size = 0.05  # Minimum 5% of image size
     max_size = 0.9  # Maximum 90% of image size
     max_boxes = 5  # Maximum number of boxes to show
-    valid_boxes = []
 
-    # Convert all values to numpy for consistent comparison
-    boxes_np = np.array(boxes_np)
+    # Convert MLX arrays to numpy if needed
+    if not isinstance(boxes_np, np.ndarray):
+        boxes_np = np.array(boxes_np.tolist())
+    if confidences_np is not None and not isinstance(confidences_np, np.ndarray):
+        confidences_np = np.array(confidences_np.tolist())
 
     # Calculate widths and heights
     widths = boxes_np[:, 2] - boxes_np[:, 0]
     heights = boxes_np[:, 3] - boxes_np[:, 1]
-
-    # Calculate aspect ratios
     aspect_ratios = np.maximum(widths, heights) / (np.minimum(widths, heights) + 1e-6)
 
     # Create mask for valid boxes
@@ -418,19 +436,31 @@ def filter_boxes(boxes_np):
         & (aspect_ratios < 3)
     )
 
-    # Get valid boxes
+    if confidences_np is not None:
+        valid_mask = valid_mask & (confidences_np > conf_threshold)
+
+    # Get valid boxes and confidences
     valid_boxes = boxes_np[valid_mask]
+    valid_confidences = (
+        confidences_np[valid_mask] if confidences_np is not None else None
+    )
 
     if len(valid_boxes) > 0:
-        # Calculate areas
-        areas = (valid_boxes[:, 2] - valid_boxes[:, 0]) * (
-            valid_boxes[:, 3] - valid_boxes[:, 1]
-        )
-        # Sort by area
-        sorted_indices = np.argsort(areas)[::-1][:max_boxes]
-        valid_boxes = valid_boxes[sorted_indices]
+        # Sort by confidence if available, otherwise by area
+        if valid_confidences is not None:
+            sorted_indices = np.argsort(valid_confidences)[::-1][:max_boxes]
+        else:
+            areas = (valid_boxes[:, 2] - valid_boxes[:, 0]) * (
+                valid_boxes[:, 3] - valid_boxes[:, 1]
+            )
+            sorted_indices = np.argsort(areas)[::-1][:max_boxes]
 
-    return valid_boxes
+        valid_boxes = valid_boxes[sorted_indices]
+        valid_confidences = (
+            valid_confidences[sorted_indices] if valid_confidences is not None else None
+        )
+
+    return valid_boxes, valid_confidences
 
 
 if __name__ == "__main__":

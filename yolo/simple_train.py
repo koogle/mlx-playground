@@ -286,13 +286,6 @@ def main():
     headers = ["Epoch", "Loss", "XY Loss", "WH Loss", "Val Loss", "Time(s)", "Best"]
     table = []
 
-    # Print fixed header
-    print("\033[H\033[J")  # Clear screen
-    print("\033[s")  # Save cursor position
-    print(tabulate([], headers=headers, tablefmt="grid"))
-    header_lines = len(headers) + 2  # Account for grid lines
-    print(f"\033[{header_lines}A")  # Move cursor up to prepare for data
-
     best_val_loss = float("inf")
     last_val_loss = "N/A"  # Store last validation loss
 
@@ -362,9 +355,7 @@ def main():
         ]
         table.append(row)
 
-        # Update table display
-        print("\033[u")  # Restore cursor to header position
-        print("\033[J")  # Clear screen below cursor
+        # Print the table in a standard way
         print(tabulate(table, headers=headers, tablefmt="grid"))
 
 

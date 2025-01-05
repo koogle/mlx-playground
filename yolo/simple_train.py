@@ -12,21 +12,24 @@ from pathlib import Path
 
 
 def bbox_loss(predictions, targets, model):
-    """YOLO loss following v2 paper approach with anchor boxes and normalized losses"""
+    """YOLO loss focusing on box regression using IoU"""
     batch_size = predictions.shape[0]
     S = model.S  # Grid size (e.g., 7x7)
-    B = model.B
+    B = model.B  # Number of boxes per cell
     anchors = model.anchors  # Shape: (B, 2)
 
     # Reshape predictions and targets
     pred_boxes = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
-    pred_conf = mx.sigmoid(predictions[..., B * 4 : (B * 5)])  # Confidence scores
+    pred_conf = mx.sigmoid(predictions[..., B * 4 : (B * 5)])
     pred_conf = mx.reshape(pred_conf, (batch_size, S, S, B))
 
+    # Get target boxes and object mask
     targ = mx.reshape(targets[..., :4], (batch_size, S, S, 1, 4))
-    targ = mx.repeat(targ, B, axis=3)
+    targ = mx.repeat(targ, B, axis=3)  # Repeat target for each predictor
+    obj_mask = mx.reshape(targets[..., 4:5], (batch_size, S, S, 1))
+    obj_mask = mx.repeat(obj_mask, B, axis=3)
 
-    # Create grid cell offsets
+    # Create anchor points grid
     grid_x, grid_y = mx.meshgrid(
         mx.arange(S, dtype=mx.float32), mx.arange(S, dtype=mx.float32)
     )
@@ -34,66 +37,51 @@ def bbox_loss(predictions, targets, model):
     grid_xy = mx.expand_dims(grid_xy, axis=2)  # [S,S,1,2]
     grid_xy = mx.broadcast_to(grid_xy, (batch_size, S, S, B, 2))  # [batch,S,S,B,2]
 
-    # Get target cell indices and offsets
-    cell_x = mx.floor(targ[..., 0:1] * S)  # Which cell contains this target
-    cell_y = mx.floor(targ[..., 1:2] * S)
-    cell_xy = mx.concatenate([cell_x, cell_y], axis=-1)
+    # Get predicted box coordinates
+    pred_xy = grid_xy / S  # Anchor points in [0,1] space
+    pred_wh = pred_boxes[..., 2:4]  # Direct width/height prediction
 
-    # Convert targets to cell-relative coordinates
-    targ_xy_rel = targ[..., :2] * S - cell_xy  # Relative coordinates within cell [0,1]
-    targ_wh = targ[..., 2:4]  # Keep width/height in global coordinates
+    # Combine into final boxes
+    pred_boxes_global = mx.concatenate([pred_xy, pred_wh], axis=-1)
 
-    # Transform predictions
-    pred_xy_rel = mx.sigmoid(pred_boxes[..., :2])  # Relative to cell [0,1]
+    # Calculate IoU between predictions and targets
+    ious = calculate_iou(pred_boxes_global, targ)
 
-    # For IoU calculation and loss, convert predictions to global coordinates
-    pred_xy_global = (pred_xy_rel + grid_xy) / S
+    # Find best predictor for each object
+    best_ious = mx.max(ious, axis=-1, keepdims=True)
+    best_box_mask = (ious == best_ious) * obj_mask
 
-    # WH predictions with anchor scaling
-    anchors_wh = mx.reshape(anchors, (1, 1, 1, B, 2))
-    anchors_wh = mx.broadcast_to(anchors_wh, (batch_size, S, S, B, 2))
-    pred_wh = anchors_wh * mx.exp(mx.clip(pred_boxes[..., 2:4], -4.0, 4.0)) / S
-
-    # Calculate IoU for responsible predictor selection
-    pred_boxes_iou = mx.concatenate([pred_xy_global, pred_wh], axis=-1)
-    iou_scores = calculate_iou(pred_boxes_iou, targ)
-
-    # Get object mask and responsible predictor
-    obj_mask = mx.squeeze(mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1)
-    obj_mask = mx.repeat(mx.expand_dims(obj_mask, axis=-1), B, axis=-1)  # [batch,S,S,B]
-    obj_mask = mx.expand_dims(obj_mask, axis=-1)  # [batch,S,S,B,1]
-
-    best_iou_mask = (
-        iou_scores == mx.max(iou_scores, axis=-1, keepdims=True)
-    ) * mx.squeeze(obj_mask, axis=-1)
-    best_iou_mask = mx.expand_dims(best_iou_mask, axis=-1)
-
-    # Coordinate losses
-    xy_scale = 5.0  # Increase coordinate loss weight
-    wh_scale = 5.0
-
-    xy_loss = xy_scale * mx.sum(best_iou_mask * mx.square(pred_xy_rel - targ_xy_rel))
-    wh_loss = wh_scale * mx.sum(
-        best_iou_mask * mx.square(mx.log(pred_wh + 1e-6) - mx.log(targ_wh + 1e-6))
-    )
-
-    # Confidence losses with adjusted scales
-    conf_scale = 1.0
-    noobj_scale = 0.5
-
-    best_iou_mask_conf = mx.squeeze(best_iou_mask, axis=-1)
-    conf_loss_obj = conf_scale * mx.sum(
-        best_iou_mask_conf * mx.square(pred_conf - iou_scores)
-    )
-    conf_loss_noobj = noobj_scale * mx.sum(
-        (1 - mx.squeeze(obj_mask, axis=-1)) * mx.square(pred_conf)
-    )
-
-    # Total loss with better normalization
+    # Compute losses only for cells with objects
     num_objects = mx.sum(obj_mask) + 1e-6
-    total_loss = (xy_loss + wh_loss + conf_loss_obj + conf_loss_noobj) / num_objects
 
-    return total_loss, (xy_loss, wh_loss, mx.sum(obj_mask))
+    # Box regression loss using IoU
+    loc_loss = mx.sum(best_box_mask * (1 - ious)) / num_objects
+
+    # Confidence loss
+    conf_loss_obj = mx.sum(best_box_mask * mx.square(pred_conf - ious)) / num_objects
+    conf_loss_noobj = mx.sum((1 - obj_mask) * mx.square(pred_conf)) / (
+        batch_size * S * S * B - num_objects + 1e-6
+    )
+
+    # Total loss with weighted components
+    total_loss = loc_loss + conf_loss_obj + 0.1 * conf_loss_noobj
+
+    if True:  # Debug prints
+        print(f"Loc Loss: {loc_loss.item():.4f}")
+        print(f"Conf Obj Loss: {conf_loss_obj.item():.4f}")
+        print(f"Conf NoObj Loss: {conf_loss_noobj.item():.4f}")
+        print(f"Num Objects: {num_objects.item()}")
+
+        # Print some prediction details
+        obj_indices = mx.where(obj_mask > 0)
+        if len(obj_indices[0]) > 0:
+            b, i, j, k = [x[0] for x in obj_indices]
+            print("\nExample prediction:")
+            print(f"Target box: {targ[b,i,j,k].tolist()}")
+            print(f"Pred box: {pred_boxes_global[b,i,j,k].tolist()}")
+            print(f"IoU: {ious[b,i,j,k].item():.4f}")
+
+    return total_loss, (loc_loss, conf_loss_obj, num_objects)
 
 
 def calculate_iou(boxes1, boxes2):
@@ -128,37 +116,45 @@ def calculate_iou(boxes1, boxes2):
 
 
 def train_step(model, batch, optimizer):
-    """Single training step with coordinate-only loss"""
     images, targets = batch
 
     def loss_fn(params, inputs, targets):
         model.update(params)
         predictions = model(inputs)
-        loss, _ = bbox_loss(predictions, targets, model)
+        loss, components = bbox_loss(predictions, targets, model)
+        print(f"Loss in loss_fn: {loss.item():.4f}")
         return loss
 
     # Compute loss and gradients
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
 
-    # Clip gradients to prevent explosion
+    # Debug gradients
+    grad_norms = {}
+    for k, g in grads.items():
+        if isinstance(g, mx.array):
+            grad_norms[k] = mx.sqrt(mx.sum(mx.square(g))).item()
+    print("Gradient norms:", grad_norms)
+
+    # Clip gradients
     max_grad_norm = 10.0
     for k, g in grads.items():
         if isinstance(g, mx.array):
             norm = mx.sqrt(mx.sum(mx.square(g)))
             if norm > max_grad_norm:
                 grads[k] = g * (max_grad_norm / norm)
+                print(f"Clipped gradient for {k}: {norm.item()} -> {max_grad_norm}")
 
     # Update model parameters
     optimizer.update(model, grads)
 
-    # Compute loss components for logging
+    # Compute final loss components for logging
     _, components = bbox_loss(model(images), targets, model)
-    components = {
-        "xy": mx.mean(components[0]).item(),
-        "wh": mx.mean(components[1]).item(),
-    }
 
-    return loss, components
+    return loss, {
+        "xy": components[0].item(),
+        "wh": components[1].item(),
+        "num_objects": components[2].item(),
+    }
 
 
 def validate(model, val_loader):
@@ -435,7 +431,8 @@ def main():
         start_time = time.time()
 
         if show_batches:
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
+            print(".")
+            # print(f"Epoch {epoch + 1}/{num_epochs}")
 
         for batch_idx, batch in enumerate(train_loader):
             # Training step

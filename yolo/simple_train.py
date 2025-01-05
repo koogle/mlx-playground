@@ -151,10 +151,10 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
 
 def main():
     # Training settings
-    batch_size = 4
+    batch_size = 4  # Keep batch size small for local development
     num_epochs = 100
     learning_rate = 1e-4
-    val_frequency = 20  # Only validate every 20 epochs
+    val_frequency = 20
 
     # Create a small subset of data for testing
     train_dataset = VOCDataset(
@@ -205,21 +205,22 @@ def main():
         num_batches = 0
         start_time = time.time()
 
-        losses_and_states = []  # Collect all losses and states
         for batch_idx, batch in enumerate(train_loader):
+            # Training step
             loss, components = train_step(model, batch, optimizer)
-            losses_and_states.append(
-                (loss, components, model.parameters(), optimizer.state)
-            )
 
-        # Evaluate everything at once at the end of epoch
-        losses, components_list, model_states, opt_states = zip(*losses_and_states)
-        mx.eval(losses, components_list, model_states, opt_states)
+            # Evaluate immediately to free memory
+            mx.eval(loss, components)
 
-        # Calculate metrics
-        epoch_loss = sum(l.item() for l in losses) / len(losses)
-        epoch_xy_loss = sum(c["xy"] for c in components_list) / len(components_list)
-        epoch_wh_loss = sum(c["wh"] for c in components_list) / len(components_list)
+            epoch_loss += loss.item()
+            epoch_xy_loss += components["xy"]
+            epoch_wh_loss += components["wh"]
+            num_batches += 1
+
+        # Calculate epoch metrics
+        avg_loss = epoch_loss / num_batches
+        avg_xy_loss = epoch_xy_loss / num_batches
+        avg_wh_loss = epoch_wh_loss / num_batches
         epoch_time = time.time() - start_time
 
         # Only run validation at specified frequency
@@ -230,7 +231,6 @@ def main():
 
             if is_best:
                 best_val_loss = val_loss
-                # Save best model
                 save_checkpoint(
                     model,
                     optimizer,
@@ -246,16 +246,16 @@ def main():
             model,
             optimizer,
             epoch + 1,
-            epoch_loss,
+            avg_loss,
             os.path.join("checkpoints", "latest"),
         )
 
         # Add row to table
         row = [
             f"{epoch + 1}/{num_epochs}",
-            f"{epoch_loss:.4f}",
-            f"{epoch_xy_loss:.4f}",
-            f"{epoch_wh_loss:.4f}",
+            f"{avg_loss:.4f}",
+            f"{avg_xy_loss:.4f}",
+            f"{avg_wh_loss:.4f}",
             last_val_loss,
             f"{epoch_time:.2f}",
             "*" if is_best else "",

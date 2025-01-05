@@ -7,6 +7,8 @@ from data.voc import VOCDataset, create_data_loader
 import time
 from tabulate import tabulate
 from functools import partial
+import argparse
+from pathlib import Path
 
 
 def bbox_loss(predictions, targets, model):
@@ -149,31 +151,85 @@ def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
     return epoch, loss
 
 
-def main():
-    # Training settings
-    batch_size = 4  # Keep batch size small for local development
-    num_epochs = 100
-    learning_rate = 1e-4
-    val_frequency = 20
+def parse_args():
+    parser = argparse.ArgumentParser(description="YOLO Training")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="dev",
+        choices=["dev", "full"],
+        help="Training mode: dev (local development) or full (full training)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Override default batch size",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help="Override default number of epochs",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default="./VOCdevkit/VOC2012",
+        help="Path to VOC dataset",
+    )
+    return parser.parse_args()
 
-    # Create a small subset of data for testing
+
+def main():
+    args = parse_args()
+
+    # Training settings based on mode
+    if args.mode == "dev":
+        # Development settings
+        batch_size = args.batch_size or 4
+        num_epochs = args.epochs or 100
+        val_frequency = 20
+        train_size = 100
+        val_size = 20
+    else:
+        # Full training settings
+        batch_size = args.batch_size or 32
+        num_epochs = args.epochs or 1000
+        val_frequency = 50
+        train_size = None  # Use full dataset
+        val_size = None
+
+    learning_rate = 1e-4
+
+    # Create datasets
     train_dataset = VOCDataset(
-        data_dir="./VOCdevkit/VOC2012",
+        data_dir=args.data_dir,
         year="2012",
         image_set="train",
-        augment=False,
+        augment=args.mode == "full",  # Enable augmentation for full training
     )
 
-    # Use 100 images for longer training
-    train_dataset.image_ids = train_dataset.image_ids[:100]
+    if train_size:
+        train_dataset.image_ids = train_dataset.image_ids[:train_size]
 
     val_dataset = VOCDataset(
-        data_dir="./VOCdevkit/VOC2012",
+        data_dir=args.data_dir,
         year="2012",
         image_set="val",
         augment=False,
     )
-    val_dataset.image_ids = val_dataset.image_ids[:20]
+
+    if val_size:
+        val_dataset.image_ids = val_dataset.image_ids[:val_size]
+
+    print(f"\nTraining Configuration:")
+    print(f"Mode: {args.mode}")
+    print(f"Batch Size: {batch_size}")
+    print(f"Epochs: {num_epochs}")
+    print(f"Training Images: {len(train_dataset)}")
+    print(f"Validation Images: {len(val_dataset)}")
+    print(f"Data Augmentation: {args.mode == 'full'}\n")
 
     train_loader = create_data_loader(train_dataset, batch_size=batch_size)
     val_loader = create_data_loader(val_dataset, batch_size=batch_size)

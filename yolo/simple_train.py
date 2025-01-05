@@ -12,41 +12,106 @@ from pathlib import Path
 
 
 def bbox_loss(predictions, targets, model):
-    """Simplified loss focusing only on bounding box coordinate regression."""
+    """YOLO loss following v2 paper approach with anchor boxes and normalized losses"""
     batch_size = predictions.shape[0]
-    S = model.S
+    S = model.S  # Grid size (e.g., 7x7)
     B = model.B
+    anchors = model.anchors  # Shape: (B, 2)
 
     # Reshape predictions and targets
-    pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
+    pred_boxes = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
+    pred_conf = mx.sigmoid(predictions[..., B * 4 : (B * 5)])  # Confidence scores
+    pred_conf = mx.reshape(pred_conf, (batch_size, S, S, B))
+
     targ = mx.reshape(targets[..., :4], (batch_size, S, S, 1, 4))
     targ = mx.repeat(targ, B, axis=3)
 
     # Extract coordinates
-    pred_xy = mx.sigmoid(pred[..., :2])  # Center coordinates [0,1]
-    pred_wh = mx.sigmoid(pred[..., 2:4])  # Width/height [0,1]
+    pred_xy = mx.sigmoid(pred_boxes[..., :2])  # Center coordinates [0,1] within cell
+
+    # Reshape anchors to match prediction shape
+    anchors_wh = mx.reshape(anchors, (1, 1, 1, B, 2))  # Add batch, grid, grid dims
+    anchors_wh = mx.broadcast_to(anchors_wh, (batch_size, S, S, B, 2))
+
+    # Width and height predictions
+    pred_wh_raw = mx.clip(pred_boxes[..., 2:4], -4.0, 4.0)
+    pred_wh = anchors_wh * mx.exp(pred_wh_raw) / S  # Scale relative to grid size
+
+    # Target width/height are already in [0,1] range for whole image
+    # Convert to grid-relative coordinates
+    targ_wh = targ[..., 2:4] * S
+
+    # Target coordinates (already in [0,1] range within cell)
     targ_xy = targ[..., :2]
-    targ_wh = targ[..., 2:4]
 
     # Get object mask
     obj_mask = mx.squeeze(mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1)
     obj_mask = mx.repeat(mx.expand_dims(obj_mask, axis=-1), B, axis=-1)
+    num_objects = mx.sum(obj_mask) + 1e-6
 
-    # Position loss (MSE with coordinate scaling)
-    xy_scale = 2.0  # Increase weight for coordinate prediction
-    xy_loss = xy_scale * mx.sum(mx.square(pred_xy - targ_xy), axis=-1)
+    # Calculate IoU between predictions and targets
+    pred_boxes_iou = mx.concatenate([pred_xy, pred_wh], axis=-1)
+    iou_scores = calculate_iou(pred_boxes_iou, targ)
 
-    # Size loss (MSE with relative scale)
-    wh_scale = 2.0  # Increase weight for size prediction
-    wh_loss = wh_scale * mx.sum(mx.square(pred_wh - targ_wh), axis=-1)
+    # Find responsible predictor (highest IoU)
+    best_iou_mask = (
+        iou_scores == mx.max(iou_scores, axis=-1, keepdims=True)
+    ) * obj_mask
 
-    # Only compute loss for cells that contain objects
-    coord_loss = obj_mask * (xy_loss + wh_loss)
+    # Loss components with scaling factors
+    coord_scale = 5.0
+    noobj_scale = 0.5
 
-    # Normalize by batch size and grid size
-    total_loss = mx.sum(coord_loss) / (batch_size * S * S)
+    # Coordinate losses normalized to [0,1]
+    xy_loss = (
+        coord_scale * mx.sum(mx.square(pred_xy - targ_xy), axis=-1) / 2
+    )  # Normalize by max possible squared difference
+
+    wh_loss = (
+        coord_scale * mx.sum(mx.square(pred_wh - targ_wh), axis=-1) / (S * S)
+    )  # Normalize by grid area
+
+    coord_loss = mx.sum(best_iou_mask * (xy_loss + wh_loss))
+
+    # Confidence losses (already in [0,1] range due to sigmoid)
+    conf_loss_obj = mx.sum(best_iou_mask * mx.square(pred_conf - iou_scores))
+    conf_loss_noobj = noobj_scale * mx.sum((1 - obj_mask) * mx.square(pred_conf))
+
+    # Total loss (normalized by number of objects)
+    total_loss = (coord_loss + conf_loss_obj + conf_loss_noobj) / num_objects
 
     return total_loss, (xy_loss, wh_loss, mx.sum(obj_mask))
+
+
+def calculate_iou(boxes1, boxes2):
+    """Calculate IoU between two sets of boxes"""
+    # Convert to corners format
+    boxes1_x1 = boxes1[..., 0] - boxes1[..., 2] / 2
+    boxes1_y1 = boxes1[..., 1] - boxes1[..., 3] / 2
+    boxes1_x2 = boxes1[..., 0] + boxes1[..., 2] / 2
+    boxes1_y2 = boxes1[..., 1] + boxes1[..., 3] / 2
+
+    boxes2_x1 = boxes2[..., 0] - boxes2[..., 2] / 2
+    boxes2_y1 = boxes2[..., 1] - boxes2[..., 3] / 2
+    boxes2_x2 = boxes2[..., 0] + boxes2[..., 2] / 2
+    boxes2_y2 = boxes2[..., 1] + boxes2[..., 3] / 2
+
+    # Calculate intersection
+    intersect_x1 = mx.maximum(boxes1_x1, boxes2_x1)
+    intersect_y1 = mx.maximum(boxes1_y1, boxes2_y1)
+    intersect_x2 = mx.minimum(boxes1_x2, boxes2_x2)
+    intersect_y2 = mx.minimum(boxes1_y2, boxes2_y2)
+
+    intersect_w = mx.maximum(intersect_x2 - intersect_x1, 0)
+    intersect_h = mx.maximum(intersect_y2 - intersect_y1, 0)
+    intersection = intersect_w * intersect_h
+
+    # Calculate union
+    boxes1_area = (boxes1_x2 - boxes1_x1) * (boxes1_y2 - boxes1_y1)
+    boxes2_area = (boxes2_x2 - boxes2_x1) * (boxes2_y2 - boxes2_y1)
+    union = boxes1_area + boxes2_area - intersection
+
+    return intersection / (union + 1e-6)
 
 
 def train_step(model, batch, optimizer):
@@ -56,24 +121,47 @@ def train_step(model, batch, optimizer):
     def loss_fn(params, inputs, targets):
         model.update(params)
         predictions = model(inputs)
-        loss, components = bbox_loss(predictions, targets, model)
+        loss, _ = bbox_loss(predictions, targets, model)
         return loss
 
     # Compute loss and gradients directly without compilation
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
 
-    # Print debug info
-    print("\nRaw gradients:")
-    for name, g in grads.items():
+    # Monitor gradients before update
+    grad_stats = {}
+
+    def process_grad(name, g):
+        if g is None:
+            return
         if isinstance(g, dict):
-            print(f"{name}: (nested dict)")
-        elif g is None:
-            print(f"{name}: None")
+            # Handle nested gradients (e.g. BatchNorm)
+            for k, v in g.items():
+                process_grad(f"{name}.{k}", v)
         else:
             try:
-                print(f"{name}: shape={g.shape}, mean={mx.mean(g).item():.2e}")
+                g_abs = mx.abs(g)
+                grad_stats[name] = {
+                    "mean": mx.mean(g).item(),
+                    "std": mx.std(g).item(),
+                    "min": mx.min(g_abs).item(),
+                    "max": mx.max(g_abs).item(),
+                }
             except:
-                print(f"{name}: (failed to process)")
+                pass
+
+    # Process all gradients
+    for name, g in grads.items():
+        process_grad(name, g)
+
+    if False:
+        # Print gradient statistics
+        print("\nGradient Statistics:")
+        for name, stats in grad_stats.items():
+            print(f"{name}:")
+            print(f"  Mean: {stats['mean']:.2e}")
+            print(f"  Std:  {stats['std']:.2e}")
+            print(f"  Min:  {stats['min']:.2e}")
+            print(f"  Max:  {stats['max']:.2e}")
 
     # Update model parameters
     optimizer.update(model, grads)
@@ -348,6 +436,11 @@ def main():
     best_val_loss = float("inf")
     last_val_loss = "N/A"  # Store last validation loss
 
+    if show_batches:
+        print("Training on fixed dev set:")
+        for img_id in dev_image_ids:
+            print(f"  {img_id}")
+
     for epoch in range(epoch, num_epochs):
         model.train()
         epoch_loss = 0
@@ -358,9 +451,6 @@ def main():
 
         if show_batches:
             print(f"\nEpoch {epoch + 1}/{num_epochs}")
-            print("Training on fixed dev set:")
-            for img_id in dev_image_ids:
-                print(f"  {img_id}")
 
         for batch_idx, batch in enumerate(train_loader):
             # Training step

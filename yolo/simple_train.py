@@ -297,14 +297,15 @@ def main():
         else:
             is_best = False
 
-        # Always save latest model
-        save_checkpoint(
-            model,
-            optimizer,
-            epoch + 1,
-            avg_loss,
-            os.path.join("checkpoints", "latest"),
-        )
+        # Save latest model at end of training
+        if epoch + 1 == num_epochs:
+            save_checkpoint(
+                model,
+                optimizer,
+                epoch + 1,
+                avg_loss,
+                os.path.join("checkpoints", "latest"),
+            )
 
         # Add row to table
         row = [

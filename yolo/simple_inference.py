@@ -122,26 +122,104 @@ def visualize_activations(frame, predictions, model):
     """Visualize activations from the final layer"""
     batch_size, channels, grid_size, _ = predictions.shape
 
-    # Sum activations across channels to get activation strength per grid cell
-    activations = mx.sum(mx.abs(predictions), axis=1)  # Shape: [batch, S, S]
-    activations = activations[0]  # Take first batch
-    mx.eval(activations)
+    # Reshape predictions to [batch, S, S, B*(5+C)]
+    pred = mx.reshape(predictions, (batch_size, model.S, model.S, -1))[0]
+    mx.eval(pred)
 
-    # Convert to numpy and normalize to [0, 1]
-    act_np = activations.tolist()
-    act_np = np.array(act_np)
-    act_np = (act_np - act_np.min()) / (act_np.max() - act_np.min() + 1e-6)
+    # Extract different components
+    box1 = pred[..., :4]  # First box coordinates
+    box2 = pred[..., 4:8]  # Second box coordinates
+    class_scores = pred[..., 8:]  # Class scores
 
-    # Resize to frame size
+    # Create different visualizations
+    vis_types = {
+        "box1_xy": mx.sum(mx.abs(box1[..., :2]), axis=-1),  # Box 1 position
+        "box1_wh": mx.sum(mx.abs(box1[..., 2:]), axis=-1),  # Box 1 size
+        "box2_xy": mx.sum(mx.abs(box2[..., :2]), axis=-1),  # Box 2 position
+        "box2_wh": mx.sum(mx.abs(box2[..., 2:]), axis=-1),  # Box 2 size
+        "class": mx.sum(mx.abs(class_scores), axis=-1),  # Class confidence
+    }
+
+    # Create grid layout
     height, width = frame.shape[:2]
-    act_resized = cv2.resize(act_np, (width, height), interpolation=cv2.INTER_LINEAR)
+    cell_height = height // model.S
+    cell_width = width // model.S
 
-    # Convert to heatmap
-    heatmap = cv2.applyColorMap((act_resized * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    # Create a layout of visualizations
+    n_vis = len(vis_types)
+    grid_width = 3
+    grid_height = (n_vis + grid_width - 1) // grid_width
 
-    # Blend with original frame
-    alpha = 0.7
-    return cv2.addWeighted(frame, 1 - alpha, heatmap, alpha, 0)
+    # Create output image
+    output_height = grid_height * (cell_height * model.S)
+    output_width = grid_width * (cell_width * model.S)
+    output = np.zeros((output_height, output_width, 3), dtype=np.uint8)
+
+    # Add each visualization to the grid
+    for idx, (name, activations) in enumerate(vis_types.items()):
+        # Normalize activations
+        act_np = activations.tolist()
+        act_np = np.array(act_np)
+        act_np = (act_np - act_np.min()) / (act_np.max() - act_np.min() + 1e-6)
+
+        # Resize to grid size
+        act_resized = cv2.resize(
+            act_np,
+            (cell_width * model.S, cell_height * model.S),
+            interpolation=cv2.INTER_NEAREST,
+        )
+
+        # Convert to heatmap
+        heatmap = cv2.applyColorMap(
+            (act_resized * 255).astype(np.uint8), cv2.COLORMAP_JET
+        )
+
+        # Calculate position in grid
+        grid_y = idx // grid_width
+        grid_x = idx % grid_width
+
+        # Place in output image
+        y_start = grid_y * (cell_height * model.S)
+        x_start = grid_x * (cell_width * model.S)
+        output[
+            y_start : y_start + cell_height * model.S,
+            x_start : x_start + cell_width * model.S,
+        ] = heatmap
+
+        # Add label
+        cv2.putText(
+            output,
+            name,
+            (x_start + 10, y_start + 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 255, 255),
+            2,
+        )
+
+        # Draw grid lines
+        for i in range(model.S + 1):
+            # Vertical lines
+            x = x_start + i * cell_width
+            cv2.line(
+                output,
+                (x, y_start),
+                (x, y_start + cell_height * model.S),
+                (255, 255, 255),
+                1,
+            )
+
+            # Horizontal lines
+            y = y_start + i * cell_height
+            cv2.line(
+                output,
+                (x_start, y),
+                (x_start + cell_width * model.S, y),
+                (255, 255, 255),
+                1,
+            )
+
+    return output
 
 
 def main():

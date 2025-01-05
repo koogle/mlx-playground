@@ -26,7 +26,20 @@ def bbox_loss(predictions, targets, model):
     targ = mx.reshape(targets[..., :4], (batch_size, S, S, 1, 4))
     targ = mx.repeat(targ, B, axis=3)
 
-    # Extract coordinates
+    # Convert target absolute coordinates to cell-relative coordinates
+    cell_x = mx.floor(targ[..., 0] * S)  # Get cell indices
+    cell_y = mx.floor(targ[..., 1] * S)
+
+    # Calculate target cell-relative coordinates [0,1]
+    targ_xy = mx.stack(
+        [
+            targ[..., 0] * S - cell_x,  # x relative to cell
+            targ[..., 1] * S - cell_y,  # y relative to cell
+        ],
+        axis=-1,
+    )
+
+    # Predict cell-relative coordinates
     pred_xy = mx.sigmoid(pred_boxes[..., :2])  # Center coordinates [0,1] within cell
 
     # Reshape anchors to match prediction shape
@@ -40,9 +53,6 @@ def bbox_loss(predictions, targets, model):
     # Target width/height are already in [0,1] range for whole image
     # Convert to grid-relative coordinates
     targ_wh = targ[..., 2:4] * S
-
-    # Target coordinates (already in [0,1] range within cell)
-    targ_xy = targ[..., :2]
 
     # Get object mask
     obj_mask = mx.squeeze(mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1)

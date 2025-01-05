@@ -65,16 +65,14 @@ def train_step(model, batch, optimizer):
     """Single training step with simplified bbox-only loss"""
     images, targets = batch
 
-    def loss_fn(params):
+    def loss_fn(params, images, targets):
         model.update(params)
         predictions = model(images)
-        loss, components = bbox_loss(predictions, targets, model)
-        return loss, components
+        return bbox_loss(predictions, targets, model)
 
-    # Compute loss and gradients
-    (loss, components), grads = mx.value_and_grad(loss_fn, has_aux=True)(
-        model.parameters()
-    )
+    # Compute loss and gradients using mlx.nn.value_and_grad instead
+    loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
+    (loss, components), grads = loss_and_grad_fn(model.parameters(), images, targets)
 
     # Update parameters
     optimizer.update(model, grads)

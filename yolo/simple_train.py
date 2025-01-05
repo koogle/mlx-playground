@@ -148,8 +148,11 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
 
 def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
     """Load model checkpoint"""
-    model_path = os.path.join(checkpoint_dir, f"model_epoch_{epoch}.safetensors")
-    info_path = os.path.join(checkpoint_dir, f"info_epoch_{epoch}.npz")
+    # Check in the "latest" folder
+    model_path = os.path.join(
+        checkpoint_dir, "latest", f"model_epoch_{epoch}.safetensors"
+    )
+    info_path = os.path.join(checkpoint_dir, "latest", f"info_epoch_{epoch}.npz")
 
     # Load model weights
     model.load_weights(model_path)
@@ -189,6 +192,12 @@ def parse_args():
         type=Path,
         default="./VOCdevkit/VOC2012",
         help="Path to VOC dataset",
+    )
+    parser.add_argument(
+        "--start-epoch",
+        type=int,
+        default=0,
+        help="Epoch to start training from (useful for resuming)",
     )
     return parser.parse_args()
 
@@ -251,6 +260,16 @@ def main():
     model = YOLO()
     optimizer = optim.Adam(learning_rate=learning_rate)
 
+    # Load checkpoint if starting from a specific epoch
+    if args.start_epoch > 0:
+        epoch, _ = load_checkpoint(model, optimizer, "checkpoints", args.start_epoch)
+        print(f"Resuming training from epoch {epoch}")
+    else:
+        epoch = 0
+
+    # Adjust num_epochs to continue training for the specified number of epochs
+    num_epochs += epoch
+
     # Table setup
     headers = ["Epoch", "Loss", "XY Loss", "WH Loss", "Val Loss", "Time(s)", "Best"]
     table = []
@@ -265,7 +284,7 @@ def main():
     best_val_loss = float("inf")
     last_val_loss = "N/A"  # Store last validation loss
 
-    for epoch in range(num_epochs):
+    for epoch in range(epoch, num_epochs):
         model.train()
         epoch_loss = 0
         epoch_xy_loss = 0

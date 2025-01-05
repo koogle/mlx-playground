@@ -233,6 +233,8 @@ def main():
 
     if train_size:
         train_dataset.image_ids = train_dataset.image_ids[:train_size]
+        # Print two image names for dev mode
+        print("Sample images in dev mode:", train_dataset.image_ids[:2])
 
     val_dataset = VOCDataset(
         data_dir=args.data_dir,

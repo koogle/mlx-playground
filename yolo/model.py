@@ -195,24 +195,18 @@ class YOLO(nn.Module):
         )
 
     def __call__(self, x):
-        print(f"Input shape: {x.shape}")
-
         # Backbone
         x = self.backbone(x)
-        print(f"After backbone: {x.shape if x is not None else 'None'}")
 
         # Detection layers
         x = self.detect1(x)
         x = self.bn_detect1(x)
-        print(f"After detect1: {x.shape if x is not None else 'None'}")
 
         x = self.detect2(x)
         x = self.bn_detect2(x)
-        print(f"After detect2: {x.shape if x is not None else 'None'}")
 
         # Final convolution
         x = self.conv_final(x)
-        print(f"After conv_final: {x.shape if x is not None else 'None'}")
 
         return x
 

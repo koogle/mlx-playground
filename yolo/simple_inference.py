@@ -79,8 +79,9 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     pred_xy = (pred_xy + grid_xy) * cell_size  # Add cell offset and scale
 
     # Clip and threshold width/height predictions
-    min_size = 0.01  # Minimum 1% of image size
-    pred_wh = mx.clip(pred_wh, min_size, 1.0)  # Ensure reasonable size
+    min_size = 0.05  # Increased minimum size to 5%
+    max_size = 0.9  # Maximum 90% of image size
+    pred_wh = mx.clip(pred_wh, min_size, max_size)  # Ensure reasonable size
     mx.eval(pred_xy, pred_wh)
 
     # Convert to corner format (x1, y1, x2, y2)
@@ -185,66 +186,61 @@ def main():
                 try:
                     # Preprocess frame
                     input_tensor = preprocess_frame(frame)
-                    print(f"\nInput shape: {input_tensor.shape}")
 
-                    # Run inference with debug info
-                    try:
-                        predictions = model(input_tensor)
-                        print("Forward pass completed")
-                    except Exception as e:
-                        print(f"Error in model forward pass: {e}")
-                        print("Model state:")
-                        for name, param in model.parameters().items():
-                            print(f"  {name}: {param.shape}")
-                        continue
-
+                    # Run inference
+                    predictions = model(input_tensor)
                     if predictions is None:
-                        print("Error: Model returned None predictions")
                         continue
 
-                    # Ensure predictions are evaluated
                     mx.eval(predictions)
-                    print(f"Predictions shape: {predictions.shape}")
-
-                    # Decode predictions
                     boxes = decode_predictions(predictions, model)
-                    if boxes is None:
-                        print("Error: Failed to decode predictions")
-                        continue
-
-                    # Ensure boxes are evaluated
                     mx.eval(boxes)
-                    print(f"Boxes shape: {boxes.shape}")
 
                     # Convert to numpy array for OpenCV
                     boxes_np = np.array([b.tolist() for b in boxes])
                     boxes_np = boxes_np[0]  # Get first batch
 
-                    # Filter boxes based on size threshold
+                    # Filter boxes based on size and aspect ratio
                     min_size = 0.05  # Minimum 5% of image size
+                    max_size = 0.9  # Maximum 90% of image size
+                    max_boxes = 5  # Maximum number of boxes to show
                     valid_boxes = []
-                    for box in boxes_np:
-                        w = box[2] - box[0]  # width
-                        h = box[3] - box[1]  # height
-                        if w > min_size and h > min_size:
-                            valid_boxes.append(box)
 
-                    if valid_boxes:
+                    for box in boxes_np:
+                        w = float(box[2] - box[0])  # width
+                        h = float(box[3] - box[1])  # height
+
+                        # Convert to Python floats for comparison
+                        if float(min_size) < w < float(max_size) and float(
+                            min_size
+                        ) < h < float(max_size):
+                            # Calculate aspect ratio safely
+                            aspect_ratio = max(w, h) / (min(w, h) + 1e-6)
+                            if float(aspect_ratio) < 3:  # Aspect ratio less than 3:1
+                                valid_boxes.append(box)
+
+                    # Keep only the largest boxes up to max_boxes
+                    if valid_boxes:  # Python list check
+                        areas = [
+                            float((b[2] - b[0]) * (b[3] - b[1])) for b in valid_boxes
+                        ]
+                        valid_boxes = [
+                            b
+                            for _, b in sorted(zip(areas, valid_boxes), reverse=True)[
+                                :max_boxes
+                            ]
+                        ]
                         last_boxes = np.array(valid_boxes)
-                        print(f"Found {len(valid_boxes)} valid boxes")
 
                     # Update inference time
                     last_inference_time = current_time
 
                 except Exception as e:
                     print(f"Error during inference: {e}")
-                    import traceback
-
-                    traceback.print_exc()
                     continue
 
             # Draw boxes (using last valid boxes)
-            if last_boxes is not None:
+            if last_boxes is not None and len(last_boxes) > 0:  # Python list check
                 frame = draw_boxes(frame, last_boxes)
 
             # Show the frame

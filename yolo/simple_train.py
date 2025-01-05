@@ -206,8 +206,8 @@ def main():
         val_size = 20
     else:
         # Full training settings
-        batch_size = args.batch_size or 32
-        num_epochs = args.epochs or 1000
+        batch_size = args.batch_size or 16
+        num_epochs = args.epochs or 125
         val_frequency = 50
         train_size = None  # Use full dataset
         val_size = None

@@ -162,10 +162,15 @@ def visualize_activations(frame, predictions, model):
 
     # Add each visualization to the grid
     for idx, (name, activations) in enumerate(vis_types.items()):
-        # Normalize activations
+        # Convert to numpy for processing
         act_np = activations.tolist()
         act_np = np.array(act_np)
-        act_np = (act_np - act_np.min()) / (act_np.max() - act_np.min() + 1e-6)
+
+        # Normalize to [0, 1]
+        act_min = np.min(act_np)
+        act_max = np.max(act_np)
+        if act_max > act_min:
+            act_np = (act_np - act_min) / (act_max - act_min)
 
         # Resize to grid size
         act_resized = cv2.resize(
@@ -327,62 +332,44 @@ def main():
                 try:
                     input_tensor = preprocess_frame(frame)
                     predictions = model(input_tensor)
-                    if predictions is None:
-                        continue
 
-                    mx.eval(predictions)
-                    last_predictions = predictions  # Store for visualization
+                    # Convert predictions to numpy before checking
+                    if predictions is not None and predictions.tolist() is not None:
+                        mx.eval(predictions)
+                        last_predictions = predictions  # Store for visualization
 
-                    boxes = decode_predictions(predictions, model)
-                    mx.eval(boxes)
+                        boxes = decode_predictions(predictions, model)
+                        mx.eval(boxes)
 
-                    # Convert to numpy array for OpenCV
-                    boxes_np = np.array([b.tolist() for b in boxes])
-                    boxes_np = boxes_np[0]  # Get first batch
+                        # Convert to numpy array for OpenCV
+                        boxes_np = np.array([b.tolist() for b in boxes])
+                        boxes_np = boxes_np[0]  # Get first batch
 
-                    # Filter boxes based on size and aspect ratio
-                    min_size = 0.05  # Minimum 5% of image size
-                    max_size = 0.9  # Maximum 90% of image size
-                    max_boxes = 5  # Maximum number of boxes to show
-                    valid_boxes = []
+                        # Filter boxes using numpy array
+                        valid_boxes = filter_boxes(boxes_np)
 
-                    for box in boxes_np:
-                        w = float(box[2] - box[0])  # width
-                        h = float(box[3] - box[1])  # height
+                        if len(valid_boxes) > 0:
+                            last_boxes = valid_boxes
 
-                        # Convert to Python floats for comparison
-                        if float(min_size) < w < float(max_size) and float(
-                            min_size
-                        ) < h < float(max_size):
-                            # Calculate aspect ratio safely
-                            aspect_ratio = max(w, h) / (min(w, h) + 1e-6)
-                            if float(aspect_ratio) < 3:  # Aspect ratio less than 3:1
-                                valid_boxes.append(box)
-
-                    # Keep only the largest boxes up to max_boxes
-                    if valid_boxes:  # Python list check
-                        areas = [
-                            float((b[2] - b[0]) * (b[3] - b[1])) for b in valid_boxes
-                        ]
-                        valid_boxes = [
-                            b
-                            for _, b in sorted(zip(areas, valid_boxes), reverse=True)[
-                                :max_boxes
-                            ]
-                        ]
-                        last_boxes = np.array(valid_boxes)
-
-                    # Update inference time
-                    last_inference_time = current_time
+                        # Update inference time
+                        last_inference_time = current_time
 
                 except Exception as e:
                     print(f"Error during inference: {e}")
+                    import traceback
+
+                    traceback.print_exc()
                     continue
 
             # Create output frame based on visualization mode
             output_frame = frame.copy()
 
-            if show_activations and last_predictions is not None:
+            # Check visualization mode using Python bool operations
+            if (
+                show_activations
+                and last_predictions is not None
+                and last_predictions.tolist() is not None
+            ):
                 output_frame = visualize_activations(
                     output_frame, last_predictions, model
                 )
@@ -406,30 +393,44 @@ def main():
 
 
 def filter_boxes(boxes_np):
-    # Filter boxes based on size and aspect ratio
+    """Filter boxes using numpy operations"""
     min_size = 0.05  # Minimum 5% of image size
     max_size = 0.9  # Maximum 90% of image size
     max_boxes = 5  # Maximum number of boxes to show
     valid_boxes = []
 
-    for box in boxes_np:
-        w = float(box[2] - box[0])  # width
-        h = float(box[3] - box[1])  # height
+    # Convert all values to numpy for consistent comparison
+    boxes_np = np.array(boxes_np)
 
-        if float(min_size) < w < float(max_size) and float(min_size) < h < float(
-            max_size
-        ):
-            aspect_ratio = max(w, h) / (min(w, h) + 1e-6)
-            if float(aspect_ratio) < 3:  # Aspect ratio less than 3:1
-                valid_boxes.append(box)
+    # Calculate widths and heights
+    widths = boxes_np[:, 2] - boxes_np[:, 0]
+    heights = boxes_np[:, 3] - boxes_np[:, 1]
 
-    if valid_boxes:
-        areas = [float((b[2] - b[0]) * (b[3] - b[1])) for b in valid_boxes]
-        valid_boxes = [
-            b for _, b in sorted(zip(areas, valid_boxes), reverse=True)[:max_boxes]
-        ]
+    # Calculate aspect ratios
+    aspect_ratios = np.maximum(widths, heights) / (np.minimum(widths, heights) + 1e-6)
 
-    return np.array(valid_boxes)
+    # Create mask for valid boxes
+    valid_mask = (
+        (widths > min_size)
+        & (widths < max_size)
+        & (heights > min_size)
+        & (heights < max_size)
+        & (aspect_ratios < 3)
+    )
+
+    # Get valid boxes
+    valid_boxes = boxes_np[valid_mask]
+
+    if len(valid_boxes) > 0:
+        # Calculate areas
+        areas = (valid_boxes[:, 2] - valid_boxes[:, 0]) * (
+            valid_boxes[:, 3] - valid_boxes[:, 1]
+        )
+        # Sort by area
+        sorted_indices = np.argsort(areas)[::-1][:max_boxes]
+        valid_boxes = valid_boxes[sorted_indices]
+
+    return valid_boxes
 
 
 if __name__ == "__main__":

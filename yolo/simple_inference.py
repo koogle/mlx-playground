@@ -60,7 +60,7 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
 
     # Reshape predictions to [batch, S, S, B, 4]
     pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
-    mx.eval(pred)  # Ensure computation is complete
+    mx.eval(pred)
 
     # Extract coordinates
     pred_xy = pred[..., :2]  # Center coordinates relative to cell
@@ -72,23 +72,30 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     )
     grid_xy = mx.stack([grid_x, grid_y], axis=-1)
     grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
-    mx.eval(grid_xy)  # Ensure computation is complete
+    mx.eval(grid_xy)
 
     # Convert predictions to absolute coordinates
     cell_size = 1.0 / S
     pred_xy = (pred_xy + grid_xy) * cell_size  # Add cell offset and scale
-    pred_wh = mx.clip(pred_wh, 0, 1)  # Ensure positive width/height
-    mx.eval(pred_xy, pred_wh)  # Ensure computations are complete
+
+    # Clip and threshold width/height predictions
+    min_size = 0.01  # Minimum 1% of image size
+    pred_wh = mx.clip(pred_wh, min_size, 1.0)  # Ensure reasonable size
+    mx.eval(pred_xy, pred_wh)
 
     # Convert to corner format (x1, y1, x2, y2)
     pred_x1y1 = pred_xy - pred_wh / 2
     pred_x2y2 = pred_xy + pred_wh / 2
     boxes = mx.concatenate([pred_x1y1, pred_x2y2], axis=-1)
-    mx.eval(boxes)  # Ensure computation is complete
+    mx.eval(boxes)
+
+    # Clip boxes to image boundaries
+    boxes = mx.clip(boxes, 0.0, 1.0)
+    mx.eval(boxes)
 
     # Reshape to [batch, S*S*B, 4]
     boxes = mx.reshape(boxes, (batch_size, S * S * B, 4))
-    mx.eval(boxes)  # Ensure computation is complete
+    mx.eval(boxes)
 
     return boxes
 
@@ -161,6 +168,7 @@ def main():
 
     last_inference_time = 0
     inference_interval = args.interval
+    last_boxes = None  # Store last valid boxes
 
     print("Starting inference. Press 'q' to quit.")
 
@@ -211,10 +219,19 @@ def main():
                     # Convert to numpy array for OpenCV
                     boxes_np = np.array([b.tolist() for b in boxes])
                     boxes_np = boxes_np[0]  # Get first batch
-                    print(f"Final boxes shape: {boxes_np.shape}")
 
-                    # Draw boxes
-                    frame = draw_boxes(frame, boxes_np)
+                    # Filter boxes based on size threshold
+                    min_size = 0.05  # Minimum 5% of image size
+                    valid_boxes = []
+                    for box in boxes_np:
+                        w = box[2] - box[0]  # width
+                        h = box[3] - box[1]  # height
+                        if w > min_size and h > min_size:
+                            valid_boxes.append(box)
+
+                    if valid_boxes:
+                        last_boxes = np.array(valid_boxes)
+                        print(f"Found {len(valid_boxes)} valid boxes")
 
                     # Update inference time
                     last_inference_time = current_time
@@ -225,6 +242,10 @@ def main():
 
                     traceback.print_exc()
                     continue
+
+            # Draw boxes (using last valid boxes)
+            if last_boxes is not None:
+                frame = draw_boxes(frame, last_boxes)
 
             # Show the frame
             cv2.imshow("YOLO Detection", frame)

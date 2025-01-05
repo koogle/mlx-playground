@@ -4,6 +4,31 @@ import time
 import mlx.core as mx
 import numpy as np
 from model import YOLO
+import argparse
+from pathlib import Path
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="YOLO Inference")
+    parser.add_argument(
+        "--model",
+        type=Path,
+        required=True,
+        help="Path to model checkpoint (.safetensors file)",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="Inference interval in seconds",
+    )
+    parser.add_argument(
+        "--camera",
+        type=int,
+        default=0,
+        help="Camera device index",
+    )
+    return parser.parse_args()
 
 
 def preprocess_frame(frame, target_size=448):
@@ -84,28 +109,34 @@ def draw_boxes(frame, boxes, color=(0, 255, 0), thickness=2):
 
 
 def main():
+    args = parse_args()
+
     # Load model
     print("Loading model...")
     model = YOLO()
-    checkpoint_dir = "checkpoints"
-    latest_checkpoint = max(
-        [f for f in os.listdir(checkpoint_dir) if f.endswith(".safetensors")],
-        key=lambda x: int(x.split("_")[2].split(".")[0]),
-    )
-    model_path = os.path.join(checkpoint_dir, latest_checkpoint)
-    model.load_weights(model_path)
-    model.eval()
 
-    print(f"Loaded model from {model_path}")
+    if not args.model.exists():
+        raise FileNotFoundError(f"Model checkpoint not found: {args.model}")
+
+    try:
+        model.load_weights(str(args.model))
+        print("Model weights loaded successfully")
+        print(f"Model parameters: {model.parameters().keys()}")
+    except Exception as e:
+        print(f"Error loading model weights: {e}")
+        return
+
+    model.eval()
+    print(f"Loaded model from {args.model}")
 
     # Initialize camera
     print("Initializing camera...")
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
         raise RuntimeError("Failed to open camera")
 
     last_inference_time = 0
-    inference_interval = 1.0  # Run inference every second
+    inference_interval = args.interval
 
     print("Starting inference. Press 'q' to quit.")
 
@@ -117,28 +148,44 @@ def main():
 
             current_time = time.time()
 
-            # Run inference every second
+            # Run inference every interval
             if current_time - last_inference_time >= inference_interval:
-                # Preprocess frame
-                input_tensor = preprocess_frame(frame)
+                try:
+                    # Preprocess frame
+                    input_tensor = preprocess_frame(frame)
+                    print(f"Input shape: {input_tensor.shape}")
 
-                # Run inference and ensure all computations are complete
-                predictions = model(input_tensor)
-                predictions = mx.eval(predictions)
+                    # Run inference and ensure all computations are complete
+                    predictions = model(input_tensor)
+                    if predictions is None:
+                        print("Error: Model returned None predictions")
+                        continue
 
-                # Decode predictions and ensure computations are complete
-                boxes = decode_predictions(predictions, model)
-                boxes = mx.eval(boxes)
+                    predictions = mx.eval(predictions)
+                    print(f"Predictions shape: {predictions.shape}")
 
-                # Convert to numpy array for OpenCV
-                boxes_np = np.array([b.tolist() for b in boxes])
-                boxes_np = boxes_np[0]  # Get first batch
+                    # Decode predictions and ensure computations are complete
+                    boxes = decode_predictions(predictions, model)
+                    if boxes is None:
+                        print("Error: Failed to decode predictions")
+                        continue
 
-                # Draw boxes
-                frame = draw_boxes(frame, boxes_np)
+                    boxes = mx.eval(boxes)
+                    print(f"Boxes shape: {boxes.shape}")
 
-                # Update inference time
-                last_inference_time = current_time
+                    # Convert to numpy array for OpenCV
+                    boxes_np = np.array([b.tolist() for b in boxes])
+                    boxes_np = boxes_np[0]  # Get first batch
+                    print(f"Final boxes shape: {boxes_np.shape}")
+
+                    # Draw boxes
+                    frame = draw_boxes(frame, boxes_np)
+
+                    # Update inference time
+                    last_inference_time = current_time
+                except Exception as e:
+                    print(f"Error during inference: {e}")
+                    continue
 
             # Show the frame
             cv2.imshow("YOLO Detection", frame)

@@ -17,7 +17,7 @@ def bbox_loss(predictions, targets, model):
     S = model.S  # Grid size
     B = model.B  # Number of boxes per cell
 
-    # Reshape predictions and targets to [batch, S, S, B, 4] (only x,y,w,h)
+    # Reshape predictions and targets
     pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
     targ = mx.reshape(targets[..., :4], (batch_size, S, S, 1, 4))
     targ = mx.repeat(targ, B, axis=3)  # Repeat for each predicted box
@@ -36,23 +36,28 @@ def bbox_loss(predictions, targets, model):
         mx.expand_dims(obj_mask, axis=-1), B, axis=-1
     )  # Shape: [batch, S, S, B]
 
-    # Coordinate losses
-    xy_loss = mx.sum(mx.square(pred_xy - targ_xy), axis=-1)  # Position loss
+    # Position loss (normalized by cell size)
+    xy_loss = mx.sum(mx.square(pred_xy - targ_xy), axis=-1) / (S * S)
+
+    # Size loss (using relative scale)
     wh_loss = mx.sum(
-        mx.square(mx.sqrt(mx.maximum(pred_wh, 0) + 1e-6) - mx.sqrt(targ_wh + 1e-6)),
+        mx.square(
+            mx.sqrt(mx.maximum(pred_wh, 1e-6)) - mx.sqrt(mx.maximum(targ_wh, 1e-6))
+        ),
         axis=-1,
-    )  # Size loss
+    )
 
     # Only compute loss for cells that contain objects
-    coord_loss = obj_mask * (xy_loss + wh_loss)
-    total_loss = (
-        5.0 * mx.sum(coord_loss) / batch_size
-    )  # Higher weight for coordinate loss
+    coord_loss = obj_mask * (xy_loss + 0.5 * wh_loss)  # Reduce weight of size loss
+
+    # Normalize by number of objects and add small lambda
+    num_objects = mx.sum(obj_mask) + 1e-6
+    total_loss = 2.0 * mx.sum(coord_loss) / num_objects  # Reduced coordinate weight
 
     # Return components for monitoring
     components = {
-        "xy": mx.sum(obj_mask * xy_loss).item() / batch_size,
-        "wh": mx.sum(obj_mask * wh_loss).item() / batch_size,
+        "xy": mx.sum(obj_mask * xy_loss).item() / num_objects.item(),
+        "wh": mx.sum(obj_mask * wh_loss).item() / num_objects.item(),
     }
 
     return total_loss, components

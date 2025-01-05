@@ -418,9 +418,9 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
 
     # Convert MLX arrays to numpy if needed
     if not isinstance(boxes_np, np.ndarray):
-        boxes_np = np.array(boxes_np.tolist())
+        boxes_np = np.array(boxes_np)
     if confidences_np is not None and not isinstance(confidences_np, np.ndarray):
-        confidences_np = np.array(confidences_np.tolist())
+        confidences_np = np.array(confidences_np)
 
     # Calculate widths and heights
     widths = boxes_np[:, 2] - boxes_np[:, 0]

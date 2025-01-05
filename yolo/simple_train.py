@@ -6,6 +6,7 @@ from model import YOLO
 from data.voc import VOCDataset, create_data_loader
 import time
 from tabulate import tabulate
+from functools import partial
 
 
 def bbox_loss(predictions, targets, model):
@@ -54,13 +55,11 @@ def bbox_loss(predictions, targets, model):
     num_objects = mx.sum(obj_mask) + 1e-6
     total_loss = 2.0 * mx.sum(coord_loss) / num_objects  # Reduced coordinate weight
 
-    # Return components for monitoring
-    components = {
-        "xy": mx.sum(obj_mask * xy_loss).item() / num_objects.item(),
-        "wh": mx.sum(obj_mask * wh_loss).item() / num_objects.item(),
-    }
+    # Return raw values for monitoring
+    xy_total = mx.sum(obj_mask * xy_loss)
+    wh_total = mx.sum(obj_mask * wh_loss)
 
-    return total_loss, components
+    return total_loss, (xy_total, wh_total, num_objects)
 
 
 def train_step(model, batch, optimizer):
@@ -74,29 +73,43 @@ def train_step(model, batch, optimizer):
 
     # Compute loss and gradients
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
-    (loss, components), grads = loss_and_grad_fn(model.parameters(), images, targets)
 
-    # Update parameters
-    optimizer.update(model, grads)
-    mx.eval(model.parameters(), optimizer.state)
+    # Capture state for compilation
+    state = [model.state, optimizer.state]
+
+    @partial(mx.compile, inputs=state, outputs=state)
+    def compiled_step():
+        (loss, components), grads = loss_and_grad_fn(
+            model.parameters(), images, targets
+        )
+        optimizer.update(model, grads)
+        return loss, components
+
+    loss, (xy_total, wh_total, num_objects) = compiled_step()
+
+    # Calculate components after compilation
+    components = {
+        "xy": xy_total.item() / num_objects.item(),
+        "wh": wh_total.item() / num_objects.item(),
+    }
 
     return loss, components
 
 
 def validate(model, val_loader):
-    """Run validation"""
+    """Run validation lazily"""
     model.eval()
-    total_loss = 0
-    num_batches = 0
+    losses = []
 
     for batch in val_loader:
         images, targets = batch
         predictions = model(images)
         loss, _ = bbox_loss(predictions, targets, model)
-        total_loss += loss.item()
-        num_batches += 1
+        losses.append(loss)
 
-    return total_loss / num_batches
+    # Only evaluate at the end
+    mx.eval(losses)
+    return sum(l.item() for l in losses) / len(losses)
 
 
 def save_checkpoint(model, optimizer, epoch, loss, save_dir):
@@ -192,17 +205,21 @@ def main():
         num_batches = 0
         start_time = time.time()
 
+        losses_and_states = []  # Collect all losses and states
         for batch_idx, batch in enumerate(train_loader):
             loss, components = train_step(model, batch, optimizer)
-            epoch_loss += loss.item()
-            epoch_xy_loss += components["xy"]
-            epoch_wh_loss += components["wh"]
-            num_batches += 1
+            losses_and_states.append(
+                (loss, components, model.parameters(), optimizer.state)
+            )
 
-        # Calculate epoch metrics
-        avg_loss = epoch_loss / num_batches
-        avg_xy_loss = epoch_xy_loss / num_batches
-        avg_wh_loss = epoch_wh_loss / num_batches
+        # Evaluate everything at once at the end of epoch
+        losses, components_list, model_states, opt_states = zip(*losses_and_states)
+        mx.eval(losses, components_list, model_states, opt_states)
+
+        # Calculate metrics
+        epoch_loss = sum(l.item() for l in losses) / len(losses)
+        epoch_xy_loss = sum(c["xy"] for c in components_list) / len(components_list)
+        epoch_wh_loss = sum(c["wh"] for c in components_list) / len(components_list)
         epoch_time = time.time() - start_time
 
         # Only run validation at specified frequency
@@ -226,15 +243,19 @@ def main():
 
         # Always save latest model
         save_checkpoint(
-            model, optimizer, epoch + 1, avg_loss, os.path.join("checkpoints", "latest")
+            model,
+            optimizer,
+            epoch + 1,
+            epoch_loss,
+            os.path.join("checkpoints", "latest"),
         )
 
         # Add row to table
         row = [
             f"{epoch + 1}/{num_epochs}",
-            f"{avg_loss:.4f}",
-            f"{avg_xy_loss:.4f}",
-            f"{avg_wh_loss:.4f}",
+            f"{epoch_loss:.4f}",
+            f"{epoch_xy_loss:.4f}",
+            f"{epoch_wh_loss:.4f}",
             last_val_loss,
             f"{epoch_time:.2f}",
             "*" if is_best else "",

@@ -177,7 +177,7 @@ def main():
         num_batches = 0
         start_time = time.time()
 
-        print(f"\nEpoch {epoch + 1}/{num_epochs}")
+        print(f"\nEpoch {epoch + 1}/{num_epochs}", end="\r")
 
         for batch_idx, batch in enumerate(train_loader):
             # Training step
@@ -186,9 +186,8 @@ def main():
             epoch_xy_loss += components["xy"]
             epoch_wh_loss += components["wh"]
             num_batches += 1
-
             # Print minimal progress
-            print(f"Batch {batch_idx + 1}/{len(train_loader)}, Loss: {loss.item():.4f}")
+            # print(f"Batch {batch_idx + 1}/{len(train_loader)}, Loss: {loss.item():.4f}")
 
         # Calculate epoch metrics
         avg_loss = epoch_loss / num_batches
@@ -196,8 +195,8 @@ def main():
         avg_wh_loss = epoch_wh_loss / num_batches
         epoch_time = time.time() - start_time
 
-        print(f"\nEpoch {epoch + 1} Summary:")
-        print(f"Average Loss: {avg_loss:.4f}")
+        # print(f"\nEpoch {epoch + 1} Summary:")
+        print(f"\nAverage Loss: {avg_loss:.4f}")
         print(f"Average XY Loss: {avg_xy_loss:.4f}")
         print(f"Average WH Loss: {avg_wh_loss:.4f}")
         print(f"Time: {epoch_time:.2f}s")

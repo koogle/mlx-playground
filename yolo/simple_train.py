@@ -208,9 +208,21 @@ def main():
 
             if is_best:
                 best_val_loss = val_loss
-                save_checkpoint(model, optimizer, epoch + 1, val_loss, "checkpoints")
+                # Save best model
+                save_checkpoint(
+                    model,
+                    optimizer,
+                    epoch + 1,
+                    val_loss,
+                    os.path.join("checkpoints", "best"),
+                )
         else:
             is_best = False
+
+        # Always save latest model
+        save_checkpoint(
+            model, optimizer, epoch + 1, avg_loss, os.path.join("checkpoints", "latest")
+        )
 
         # Add row to table
         row = [

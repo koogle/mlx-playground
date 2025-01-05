@@ -23,8 +23,8 @@ def bbox_loss(predictions, targets, model):
     targ = mx.repeat(targ, B, axis=3)
 
     # Extract coordinates
-    pred_xy = mx.sigmoid(pred[..., :2])  # Sigmoid for relative cell position
-    pred_wh = mx.sigmoid(pred[..., 2:4])  # Sigmoid for relative image size
+    pred_xy = mx.sigmoid(pred[..., :2])  # Center coordinates [0,1]
+    pred_wh = mx.sigmoid(pred[..., 2:4])  # Width/height [0,1]
     targ_xy = targ[..., :2]
     targ_wh = targ[..., 2:4]
 
@@ -32,70 +32,124 @@ def bbox_loss(predictions, targets, model):
     obj_mask = mx.squeeze(mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1)
     obj_mask = mx.repeat(mx.expand_dims(obj_mask, axis=-1), B, axis=-1)
 
-    # Position loss (MSE)
-    xy_loss = mx.sum(mx.square(pred_xy - targ_xy), axis=-1)
+    # Position loss (MSE with coordinate scaling)
+    xy_scale = 2.0  # Increase weight for coordinate prediction
+    xy_loss = xy_scale * mx.sum(mx.square(pred_xy - targ_xy), axis=-1)
 
-    # Size loss (MSE)
-    wh_loss = mx.sum(mx.square(pred_wh - targ_wh), axis=-1)
+    # Size loss (MSE with relative scale)
+    wh_scale = 2.0  # Increase weight for size prediction
+    wh_loss = wh_scale * mx.sum(mx.square(pred_wh - targ_wh), axis=-1)
 
     # Only compute loss for cells that contain objects
     coord_loss = obj_mask * (xy_loss + wh_loss)
 
-    # Normalize by number of objects
-    num_objects = mx.sum(obj_mask) + 1e-6
-    total_loss = mx.sum(coord_loss) / num_objects
+    # Normalize by batch size and grid size
+    total_loss = mx.sum(coord_loss) / (batch_size * S * S)
 
-    return total_loss, (xy_loss, wh_loss, num_objects)
+    return total_loss, (xy_loss, wh_loss, mx.sum(obj_mask))
 
 
 def train_step(model, batch, optimizer):
     """Single training step with coordinate-only loss"""
     images, targets = batch
 
-    def loss_fn(params, images, targets):
+    def loss_fn(params, inputs, targets):
         model.update(params)
-        predictions = model(images)
-        return bbox_loss(predictions, targets, model)
+        predictions = model(inputs)
+        loss, components = bbox_loss(predictions, targets, model)
+        return loss
 
-    # Compute loss and gradients
-    loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
+    # Compute loss and gradients directly without compilation
+    loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
 
-    # Capture state for compilation
-    state = [model.state, optimizer.state]
+    # Print debug info
+    print("\nRaw gradients:")
+    for name, g in grads.items():
+        if isinstance(g, dict):
+            print(f"{name}: (nested dict)")
+        elif g is None:
+            print(f"{name}: None")
+        else:
+            try:
+                print(f"{name}: shape={g.shape}, mean={mx.mean(g).item():.2e}")
+            except:
+                print(f"{name}: (failed to process)")
 
-    @partial(mx.compile, inputs=state, outputs=state)
-    def compiled_step():
-        (loss, components), grads = loss_and_grad_fn(
-            model.parameters(), images, targets
-        )
-        optimizer.update(model, grads)
-        return loss, components
+    # Update model parameters
+    optimizer.update(model, grads)
 
-    loss, (xy_loss, wh_loss, num_objects) = compiled_step()
-
-    # Calculate mean loss components
+    # Compute loss components for logging
+    _, components = bbox_loss(model(images), targets, model)
     components = {
-        "xy": mx.mean(xy_loss).item(),
-        "wh": mx.mean(wh_loss).item(),
+        "xy": mx.mean(components[0]).item(),
+        "wh": mx.mean(components[1]).item(),
     }
 
     return loss, components
 
 
 def validate(model, val_loader):
-    """Run validation lazily"""
+    """Run validation with detailed debugging"""
     model.eval()
     losses = []
+    print("\nValidation Details:")
 
-    for batch in val_loader:
+    for batch_idx, batch in enumerate(val_loader):
         images, targets = batch
         predictions = model(images)
-        loss, _ = bbox_loss(predictions, targets, model)
+        loss, (xy_loss, wh_loss, num_objects) = bbox_loss(predictions, targets, model)
+
+        # Print details for each validation image
+        print(f"\nBatch {batch_idx}:")
+        print(f"Number of objects: {num_objects.item()}")
+        print(f"XY Loss: {mx.mean(xy_loss).item():.4f}")
+        print(f"WH Loss: {mx.mean(wh_loss).item():.4f}")
+        print(f"Total Loss: {loss.item():.4f}")
+
+        # Debug predictions vs targets
+        batch_size = predictions.shape[0]
+        S = model.S
+        B = model.B
+
+        # Reshape and extract predictions
+        pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
+        pred_xy = mx.sigmoid(pred[..., :2])
+        pred_wh = mx.sigmoid(pred[..., 2:4])
+
+        # Reshape and extract targets
+        targ = mx.reshape(targets[..., :4], (batch_size, S, S, 1, 4))
+        targ_xy = targ[..., :2]
+        targ_wh = targ[..., 2:4]
+
+        # Get object mask
+        obj_mask = mx.squeeze(
+            mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1
+        )
+
+        # Find cells with objects
+        for b in range(batch_size):
+            print(f"\nImage {b}:")
+            for i in range(S):
+                for j in range(S):
+                    if obj_mask[b, i, j].item() > 0:
+                        print(f"Object in cell ({i},{j}):")
+                        print(
+                            f"  Target: xy={targ_xy[b,i,j,0].tolist()}, wh={targ_wh[b,i,j,0].tolist()}"
+                        )
+                        print(
+                            f"  Pred 1: xy={pred_xy[b,i,j,0].tolist()}, wh={pred_wh[b,i,j,0].tolist()}"
+                        )
+                        print(
+                            f"  Pred 2: xy={pred_xy[b,i,j,1].tolist()}, wh={pred_wh[b,i,j,1].tolist()}"
+                        )
+
         losses.append(loss)
 
-    # Only evaluate at the end
+    # Evaluate all losses at once
     mx.eval(losses)
-    return sum(l.item() for l in losses) / len(losses)
+    avg_loss = sum(l.item() for l in losses) / len(losses)
+    print(f"\nAverage validation loss: {avg_loss:.4f}")
+    return avg_loss
 
 
 def save_checkpoint(model, optimizer, epoch, loss, save_dir):
@@ -289,6 +343,7 @@ def main():
     # Table setup
     headers = ["Epoch", "Loss", "XY Loss", "WH Loss", "Val Loss", "Time(s)", "Best"]
     table = []
+    show_batches = True  # Set to True to see batch details, False for table view
 
     best_val_loss = float("inf")
     last_val_loss = "N/A"  # Store last validation loss
@@ -301,9 +356,22 @@ def main():
         num_batches = 0
         start_time = time.time()
 
+        if show_batches:
+            print(f"\nEpoch {epoch + 1}/{num_epochs}")
+            print("Training on fixed dev set:")
+            for img_id in dev_image_ids:
+                print(f"  {img_id}")
+
         for batch_idx, batch in enumerate(train_loader):
             # Training step
             loss, components = train_step(model, batch, optimizer)
+
+            # Print batch details if enabled
+            if show_batches:
+                print(f"\nBatch {batch_idx}:")
+                print(f"Loss: {loss.item():.4f}")
+                print(f"XY Loss: {components['xy']:.4f}")
+                print(f"WH Loss: {components['wh']:.4f}")
 
             # Evaluate immediately to free memory
             mx.eval(loss, components)
@@ -319,12 +387,11 @@ def main():
         avg_wh_loss = epoch_wh_loss / num_batches
         epoch_time = time.time() - start_time
 
-        # Only run validation at specified frequency
+        # Run validation and update table
         if (epoch + 1) % val_frequency == 0:
             val_loss = validate(model, val_loader)
             last_val_loss = f"{val_loss:.4f}"
             is_best = val_loss < best_val_loss
-
             if is_best:
                 best_val_loss = val_loss
                 save_checkpoint(
@@ -336,16 +403,6 @@ def main():
                 )
         else:
             is_best = False
-
-        # Save latest model at end of training
-        if epoch + 1 == num_epochs:
-            save_checkpoint(
-                model,
-                optimizer,
-                epoch + 1,
-                avg_loss,
-                os.path.join("checkpoints", "latest"),
-            )
 
         # Add row to table
         row = [
@@ -359,8 +416,9 @@ def main():
         ]
         table.append(row)
 
-        # Print the table in a standard way
-        print(tabulate(table, headers=headers, tablefmt="grid"))
+        # Only print table if batch details are hidden
+        if not show_batches:
+            print(tabulate(table, headers=headers, tablefmt="grid"))
 
 
 if __name__ == "__main__":

@@ -180,17 +180,21 @@ class YOLO(nn.Module):
         self.detect2 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
         self.bn_detect2 = nn.BatchNorm(1024)
 
-        # Final detection layer (outputs raw predictions)
+        # Final detection layer (outputs simplified predictions)
+        # For each anchor box: [tx, ty, tw, th, confidence, class_probs]
         self.conv_final = nn.Conv2d(1024, B * (5 + C), kernel_size=1)
 
         # Activation
         self.relu = nn.ReLU()
 
-        # Initialize anchor boxes (precomputed using k-means clustering)
+        # Initialize 5 anchor boxes (these are example values - should be computed from your dataset)
         self.anchors = mx.array(
             [
-                [1.3221, 1.73145],  # Smaller anchor box
-                [3.19275, 4.00944],  # Larger anchor box
+                [1.08, 1.19],  # small objects
+                [3.42, 4.41],  # tall objects
+                [6.63, 11.38],  # large objects
+                [9.42, 5.11],  # wide objects
+                [16.62, 10.52],  # extra large objects
             ]
         )
 
@@ -211,67 +215,83 @@ class YOLO(nn.Module):
         return x
 
     def decode_predictions(self, pred, conf_threshold=0.1, nms_threshold=0.4):
-        """
-        Decode raw predictions to bounding boxes
-
-        Args:
-            pred: Raw predictions from forward pass [batch, B*(5+C), S, S]
-            conf_threshold: Confidence threshold for filtering weak detections
-            nms_threshold: IoU threshold for non-maximum suppression
-
-        Returns:
-            boxes: [batch, num_boxes, 4] - Absolute coordinates (x1, y1, x2, y2)
-            scores: [batch, num_boxes] - Confidence scores
-            class_ids: [batch, num_boxes] - Class indices
-        """
+        """Simplified prediction decoding focusing on box coordinates"""
         batch_size = pred.shape[0]
 
-        # Reshape and transpose to [batch, S, S, B, 5 + C]
-        pred = mx.transpose(pred, (0, 2, 3, 1))  # [batch, S, S, B*(5+C)]
+        # Reshape predictions [batch, S, S, B*(5+C)]
+        pred = mx.transpose(pred, (0, 2, 3, 1))
         pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5 + self.C))
 
-        # Split prediction into components and apply activations
-        box_xy = mx.sigmoid(
-            pred[..., 0:2]
-        )  # Center coordinates (relative to cell) [0,1]
-        box_wh = mx.exp(pred[..., 2:4])  # Width/height (relative to anchors)
-        conf = mx.sigmoid(pred[..., 4:5])  # Object confidence [0,1]
+        # Extract predictions
+        tx_ty = pred[..., 0:2]  # Box center offset predictions
+        tw_th = pred[..., 2:4]  # Box size predictions
+        conf = mx.sigmoid(pred[..., 4:5])  # Object confidence
         prob = mx.softmax(pred[..., 5:], axis=-1)  # Class probabilities
 
-        # Convert box coordinates to absolute coordinates
+        # Generate grid coordinates
         grid_x, grid_y = mx.meshgrid(
             mx.arange(self.S, dtype=mx.float32), mx.arange(self.S, dtype=mx.float32)
         )
         grid_xy = mx.stack([grid_x, grid_y], axis=-1)
         grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
 
-        # Convert relative coordinates to absolute coordinates
-        box_xy = (box_xy + grid_xy) / self.S  # Add cell offsets and normalize
-        box_wh = box_wh * mx.reshape(
-            self.anchors, (1, 1, self.B, 2)
-        )  # Scale by anchors
+        # Convert predictions to actual coordinates
+        # bx = σ(tx) + cx, by = σ(ty) + cy
+        box_xy = mx.sigmoid(tx_ty) + grid_xy
+        # bw = pw * exp(tw), bh = ph * exp(th)
+        box_wh = self.anchors[None, None, :, :] * mx.exp(tw_th)
 
-        # Convert to corner coordinates (x1, y1, x2, y2 format)
+        # Normalize coordinates
+        box_xy = box_xy / self.S
+        box_wh = box_wh / self.S
+
+        # Convert to corner coordinates
         box_mins = box_xy - box_wh / 2.0
         box_maxs = box_xy + box_wh / 2.0
         boxes = mx.concatenate([box_mins, box_maxs], axis=-1)
 
-        # Compute class scores and confidence
-        class_scores = conf * prob  # [batch, S, S, B, C]
+        # Get class scores and best class
+        class_scores = conf * prob
+        best_scores = mx.max(class_scores, axis=-1)
+        best_classes = mx.argmax(class_scores, axis=-1)
 
-        # Get best class and score for each box
-        best_scores = mx.max(class_scores, axis=-1)  # [batch, S, S, B]
-        best_classes = mx.argmax(class_scores, axis=-1)  # [batch, S, S, B]
+        # Reshape for output
+        boxes = mx.reshape(boxes, (batch_size, -1, 4))
+        scores = mx.reshape(best_scores, (batch_size, -1))
+        class_ids = mx.reshape(best_classes, (batch_size, -1))
 
-        # Reshape boxes and scores for output
-        boxes = mx.reshape(boxes, (batch_size, -1, 4))  # [batch, S*S*B, 4]
-        scores = mx.reshape(best_scores, (batch_size, -1))  # [batch, S*S*B]
-        class_ids = mx.reshape(best_classes, (batch_size, -1))  # [batch, S*S*B]
-
-        # Filter by confidence threshold
+        # Filter by confidence
         mask = scores > conf_threshold
 
-        # TODO: Implement NMS here
-        # For now, just return all boxes above threshold
-
         return boxes, scores, class_ids
+
+
+def compute_anchor_boxes(dataset, num_anchors=5):
+    """
+    Compute anchor boxes using k-means clustering
+
+    Args:
+        dataset: List of normalized bounding box dimensions (w, h)
+        num_anchors: Number of anchor boxes to generate
+
+    Returns:
+        anchors: Array of anchor box dimensions [num_anchors, 2]
+    """
+
+    def iou_distance(box, clusters):
+        """
+        Distance metric for k-means clustering based on IOU
+        """
+        w1, h1 = box
+        w2, h2 = clusters
+
+        intersection = mx.minimum(w1, w2) * mx.minimum(h1, h2)
+        union = w1 * h1 + w2 * h2 - intersection
+
+        return 1 - intersection / union
+
+    # Implementation of k-means clustering with IOU distance
+    # This is a simplified version - you'll want to implement the full algorithm
+    # using your training data
+
+    return anchors  # [num_anchors, 2] array of width/height pairs

@@ -2,7 +2,7 @@ import os
 import mlx.core as mx
 import mlx.optimizers as optim
 from model import YOLO
-from data.voc import VOCDataset, create_data_loader
+from data.voc import VOC_CLASSES, VOCDataset, create_data_loader
 import time
 from tabulate import tabulate
 import argparse
@@ -137,7 +137,7 @@ def validate(model, val_loader):
 
     for batch_idx, batch in enumerate(val_loader):
         images, targets = batch
-        predictions = model(images)  # [batch, S, S, B*5]
+        predictions = model(images)  # [batch, S, S, B*(5+C)]
         loss, components = yolo_loss(predictions, targets, model)
 
         # Print details for each validation image
@@ -151,17 +151,22 @@ def validate(model, val_loader):
         batch_size = predictions.shape[0]
         S = model.S
         B = model.B
+        C = model.C
 
         # Reshape predictions
-        pred = mx.reshape(predictions, (batch_size, S, S, B, 5))
+        pred = mx.reshape(
+            predictions, (batch_size, S, S, B, 5 + C)
+        )  # [batch,S,S,B,5+C]
         pred_xy = mx.sigmoid(pred[..., 0:2])  # [batch,S,S,B,2]
         pred_wh = pred[..., 2:4]  # [batch,S,S,B,2]
         pred_conf = mx.sigmoid(pred[..., 4])  # [batch,S,S,B]
+        pred_classes = mx.softmax(pred[..., 5:], axis=-1)  # [batch,S,S,B,C]
 
         # Extract targets
         target_xy = targets[..., 0:2]  # [batch,S,S,2]
         target_wh = targets[..., 2:4]  # [batch,S,S,2]
         target_conf = targets[..., 4]  # [batch,S,S]
+        target_classes = targets[..., 5:]  # [batch,S,S,C]
 
         # Find cells with objects
         for b in range(batch_size):
@@ -173,9 +178,15 @@ def validate(model, val_loader):
                         print(
                             f"  Target: xy={target_xy[b,i,j].tolist()}, wh={target_wh[b,i,j].tolist()}"
                         )
+                        class_idx = mx.argmax(target_classes[b, i, j]).item()
+                        print(f"  Class: {VOC_CLASSES[class_idx]}")
                         for k in range(B):
                             print(
                                 f"  Pred {k}: xy={pred_xy[b,i,j,k].tolist()}, wh={pred_wh[b,i,j,k].tolist()}"
+                            )
+                            pred_class_idx = mx.argmax(pred_classes[b, i, j, k]).item()
+                            print(
+                                f"    Class: {VOC_CLASSES[pred_class_idx]} ({mx.max(pred_classes[b,i,j,k]).item():.2f})"
                             )
 
         losses.append(loss)

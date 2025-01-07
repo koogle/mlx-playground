@@ -174,18 +174,30 @@ class YOLO(nn.Module):
         # Compute output channels
         out_channels = B * (5 + C)  # 5 for box params (x,y,w,h,conf) + C class scores
 
-        # Create backbone with target size S
+        # Initialize weights with proper scaling
+        def init_weights(shape):
+            return mx.random.normal(shape) * 0.01
+
+        # Create layers with proper initialization
         self.backbone = DarkNet19(target_size=S)
 
         # Detection head
         self.detect1 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
         self.bn_detect1 = nn.BatchNorm(1024)
+
         self.detect2 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
         self.bn_detect2 = nn.BatchNorm(1024)
 
         # Final detection layer outputs for each anchor box:
         # [tx, ty, tw, th, confidence, class_scores] * B boxes
         self.conv_final = nn.Conv2d(1024, out_channels, kernel_size=1)
+
+        # Initialize weights with small values
+        for layer in [self.detect1, self.detect2, self.conv_final]:
+            if isinstance(layer, nn.Conv2d):
+                layer.weight = init_weights(layer.weight.shape)
+                if layer.bias is not None:
+                    layer.bias = mx.zeros(layer.bias.shape)
 
         # Activation
         self.relu = nn.ReLU()

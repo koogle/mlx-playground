@@ -105,26 +105,44 @@ def yolo_loss(predictions, targets, model):
 
     # 1. Reshape predictions
     pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))  # [batch,S,S,B,5+C]
-    pred_xy = mx.sigmoid(pred[..., 0:2])  # [batch,S,S,B,2]
-    pred_wh = pred[..., 2:4]  # [batch,S,S,B,2]
-    pred_conf = mx.sigmoid(pred[..., 4])  # [batch,S,S,B]
-    pred_classes = mx.softmax(pred[..., 5:], axis=-1)  # [batch,S,S,B,C]
 
-    # 2. Process targets - expand for comparison
+    # Add epsilon for numerical stability
+    eps = 1e-6
+
+    # 2. Box predictions
+    pred_xy = mx.sigmoid(mx.clip(pred[..., 0:2], -10, 10))  # [batch,S,S,B,2]
+    pred_wh = mx.clip(pred[..., 2:4], -10, 10)  # [batch,S,S,B,2]
+    pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -10, 10))  # [batch,S,S,B]
+
+    # Class predictions with numerical stability
+    class_logits = mx.clip(pred[..., 5:], -10, 10)
+    pred_classes = mx.softmax(class_logits, axis=-1)  # [batch,S,S,B,C]
+
+    # 3. Target processing
     target_xy = mx.expand_dims(targets[..., 0:2], axis=3)  # [batch,S,S,1,2]
     target_wh = mx.expand_dims(targets[..., 2:4], axis=3)  # [batch,S,S,1,2]
     target_conf = targets[..., 4]  # [batch,S,S]
     target_classes = targets[..., 5:]  # [batch,S,S,C]
-    target_classes = mx.expand_dims(target_classes, axis=3)  # [batch,S,S,1,C]
 
-    # 3. Grid cell offsets
+    # Expand target_conf for broadcasting
+    obj_mask = mx.expand_dims(target_conf, axis=-1)  # [batch,S,S,1]
+    obj_mask = mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,1,1]
+    obj_mask = mx.broadcast_to(obj_mask, (batch_size, S, S, B, 1))  # [batch,S,S,B,1]
+
+    # Expand target_classes for broadcasting
+    target_classes = mx.expand_dims(target_classes, axis=3)  # [batch,S,S,1,C]
+    target_classes = mx.broadcast_to(
+        target_classes, (batch_size, S, S, B, C)
+    )  # [batch,S,S,B,C]
+
+    # 4. Grid cell offsets
     grid_x, grid_y = mx.meshgrid(
         mx.arange(S, dtype=mx.float32), mx.arange(S, dtype=mx.float32)
     )
     grid_xy = mx.stack([grid_x, grid_y], axis=-1)  # [S,S,2]
     grid_xy = mx.expand_dims(grid_xy, axis=2)  # [S,S,1,2]
 
-    # 4. Convert predictions to global coordinates
+    # 5. Convert predictions to global coordinates
     pred_xy = (pred_xy + grid_xy) / S
 
     # Scale width/height by anchors
@@ -133,55 +151,38 @@ def yolo_loss(predictions, targets, model):
     anchors = mx.expand_dims(anchors, axis=0)  # [1,1,1,B,2]
     pred_wh = anchors * mx.exp(pred_wh) / S
 
-    # 5. Compute IoU
+    # 6. Compute IoU
     pred_boxes = mx.concatenate([pred_xy, pred_wh], axis=-1)  # [batch,S,S,B,4]
     target_boxes = mx.concatenate([target_xy, target_wh], axis=-1)  # [batch,S,S,1,4]
     ious = compute_box_iou(pred_boxes, target_boxes)  # [batch,S,S,B]
+    # 7. Create masks
+    best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
 
-    # 6. Create box mask
-    best_ious = mx.max(ious, axis=-1, keepdims=True)  # [batch,S,S,1]
-    box_mask = ious >= best_ious  # [batch,S,S,B]
+    best_ious = mx.broadcast_to(best_ious, ious.shape)
 
-    # Expand target_conf for broadcasting
-    target_conf = mx.expand_dims(target_conf, axis=-1)  # [batch,S,S,1]
-    target_conf = mx.expand_dims(target_conf, axis=3)  # [batch,S,S,1,1]
-    target_conf = mx.broadcast_to(
-        target_conf, (batch_size, S, S, B, 1)
-    )  # [batch,S,S,B,1]
+    box_mask = (ious >= best_ious) * obj_mask  # [batch,S,S,B,1]
 
-    # Create final mask
-    box_mask = box_mask * target_conf  # [batch,S,S,B,1]
-
-    # 7. Compute losses
+    # 8. Compute losses
     xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1, keepdims=True)
-    wh_loss = box_mask * mx.sum(
-        mx.square(mx.log(pred_wh + 1e-6) - mx.log(target_wh + 1e-6)),
-        axis=-1,
-        keepdims=True,
-    )
+    wh_loss = box_mask * mx.sum(mx.square(pred_wh - target_wh), axis=-1, keepdims=True)
 
-    pred_conf = mx.expand_dims(pred_conf, axis=-1)
-
-    # Confidence loss
-    conf_loss = box_mask * mx.square(pred_conf - 1) + (1 - box_mask) * mx.square(
-        pred_conf
+    # Expand pred_conf for loss calculation
+    pred_conf = mx.expand_dims(pred_conf, axis=-1)  # [batch,S,S,B,1]
+    conf_loss = (
+        box_mask * mx.square(pred_conf - 1)
+        + (1 - box_mask) * mx.square(pred_conf) * 0.5
     )
 
     # Class loss (only for cells with objects)
-    # class_mask = mx.expand_dims(target_conf, axis=-1)  # [batch,S,S,1,1]
-    class_loss = target_conf * mx.sum(
+    class_loss = obj_mask * mx.sum(
         mx.square(pred_classes - target_classes), axis=-1, keepdims=True
     )
 
-    # 8. Weight and combine losses
-    lambda_coord = 5.0
-    lambda_noobj = 0.5
-    lambda_class = 1.0
+    # 9. Compute final loss with weights
     total_loss = (
-        lambda_coord * (xy_loss + wh_loss)
-        + conf_loss * (1 - lambda_noobj)
-        + lambda_noobj * conf_loss * (1 - box_mask)
-        + lambda_class * class_loss
+        5.0 * (xy_loss + wh_loss)  # Coordinate loss
+        + conf_loss  # Confidence loss
+        + class_loss  # Class loss
     )
 
     return mx.mean(total_loss), {
@@ -189,5 +190,5 @@ def yolo_loss(predictions, targets, model):
         "wh": mx.mean(wh_loss).item(),
         "conf": mx.mean(conf_loss).item(),
         "class": mx.mean(class_loss).item(),
-        "iou": mx.mean(mx.squeeze(ious, axis=-1) * box_mask[..., 0]).item(),
+        "iou": mx.mean(ious * box_mask).item(),
     }

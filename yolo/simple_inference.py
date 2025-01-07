@@ -8,28 +8,7 @@ import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-VOC_CLASSES = [
-    "aeroplane",
-    "bicycle",
-    "bird",
-    "boat",
-    "bottle",
-    "bus",
-    "car",
-    "cat",
-    "chair",
-    "cow",
-    "diningtable",
-    "dog",
-    "horse",
-    "motorbike",
-    "person",
-    "pottedplant",
-    "sheep",
-    "sofa",
-    "train",
-    "tvmonitor",
-]
+from data.voc import VOC_CLASSES
 
 
 def parse_args():

@@ -180,31 +180,21 @@ class YOLO(nn.Module):
         self.detect2 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
         self.bn_detect2 = nn.BatchNorm(1024)
 
-        # Final detection layer
-        # For each anchor box: [x, y, w, h, confidence]
+        # Final detection layer outputs for each anchor box:
+        # [tx, ty, tw, th, confidence] * num_anchors
         self.conv_final = nn.Conv2d(1024, B * 5, kernel_size=1)
 
         # Activation
         self.relu = nn.ReLU()
 
-        # Initialize anchor boxes (will be updated using compute_anchor_boxes)
-        """
-
-Anchor boxes (width, height):
-Anchor 1: (0.053, 0.091)
-Anchor 2: (0.148, 0.132)
-Anchor 3: (0.098, 0.274)
-Anchor 4: (0.294, 0.239)
-Anchor 5: (0.176, 0.438)
-        """
-
+        # Anchor boxes sorted by size
         self.anchors = mx.array(
             [
-                [0.053, 0.091],  # These are placeholder values
-                [0.148, 0.132],  # They should be updated using
-                [0.098, 0.274],  # compute_anchor_boxes on your
-                [0.294, 0.239],  # actual training data
-                [0.176, 0.438],
+                [0.053, 0.091],  # Small objects
+                [0.148, 0.132],  # Medium-small objects
+                [0.098, 0.274],  # Medium objects
+                [0.294, 0.239],  # Medium-large objects
+                [0.176, 0.438],  # Large objects
             ]
         )
 
@@ -219,53 +209,50 @@ Anchor 5: (0.176, 0.438)
 
         return x
 
-    def decode_predictions(self, pred, conf_threshold=0.1, nms_threshold=0.4):
-        """Simplified prediction decoding focusing on box coordinates"""
+    def decode_predictions(self, pred, conf_threshold=0.1):
+        """Decode raw predictions to bounding boxes"""
         batch_size = pred.shape[0]
 
-        # Reshape predictions [batch, S, S, B*(5+C)]
+        # Reshape predictions [batch, S, S, B*5]
         pred = mx.transpose(pred, (0, 2, 3, 1))
-        pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5 + self.C))
+        pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5))
 
-        # Extract predictions
-        tx_ty = pred[..., 0:2]  # Box center offset predictions
-        tw_th = pred[..., 2:4]  # Box size predictions
-        conf = mx.sigmoid(pred[..., 4:5])  # Object confidence
-        prob = mx.softmax(pred[..., 5:], axis=-1)  # Class probabilities
+        # Extract components
+        tx_ty = pred[..., 0:2]  # Offset predictions
+        tw_th = pred[..., 2:4]  # Width/height predictions
+        conf = mx.sigmoid(pred[..., 4])  # Confidence scores
 
-        # Generate grid coordinates
+        # Generate grid coordinates [S,S,2]
         grid_x, grid_y = mx.meshgrid(
             mx.arange(self.S, dtype=mx.float32), mx.arange(self.S, dtype=mx.float32)
         )
         grid_xy = mx.stack([grid_x, grid_y], axis=-1)
-        grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
+        grid_xy = mx.expand_dims(grid_xy, axis=2)  # [S,S,1,2]
 
         # Convert predictions to actual coordinates
-        # bx = σ(tx) + cx, by = σ(ty) + cy
-        box_xy = mx.sigmoid(tx_ty) + grid_xy
-        # bw = pw * exp(tw), bh = ph * exp(th)
-        box_wh = self.anchors[None, None, :, :] * mx.exp(tw_th)
+        # Center coordinates: sigmoid(t) + grid_cell
+        box_xy = mx.sigmoid(tx_ty) + grid_xy  # [batch,S,S,B,2]
+        box_xy = box_xy / self.S  # Normalize to [0,1]
 
-        # Normalize coordinates
-        box_xy = box_xy / self.S
-        box_wh = box_wh / self.S
+        # Width/height: anchor * exp(t)
+        anchors = mx.expand_dims(self.anchors, axis=0)  # [1,B,2]
+        anchors = mx.expand_dims(anchors, axis=0)  # [1,1,B,2]
+        anchors = mx.expand_dims(anchors, axis=0)  # [1,1,1,B,2]
+        anchors = mx.broadcast_to(anchors, (batch_size, self.S, self.S, self.B, 2))
+
+        box_wh = anchors * mx.exp(tw_th)  # [batch,S,S,B,2]
+        box_wh = box_wh / self.S  # Normalize to [0,1]
 
         # Convert to corner coordinates
-        box_mins = box_xy - box_wh / 2.0
-        box_maxs = box_xy + box_wh / 2.0
-        boxes = mx.concatenate([box_mins, box_maxs], axis=-1)
-
-        # Get class scores and best class
-        class_scores = conf * prob
-        best_scores = mx.max(class_scores, axis=-1)
-        best_classes = mx.argmax(class_scores, axis=-1)
+        box_mins = box_xy - box_wh / 2
+        box_maxs = box_xy + box_wh / 2
+        boxes = mx.concatenate([box_mins, box_maxs], axis=-1)  # [batch,S,S,B,4]
 
         # Reshape for output
-        boxes = mx.reshape(boxes, (batch_size, -1, 4))
-        scores = mx.reshape(best_scores, (batch_size, -1))
-        class_ids = mx.reshape(best_classes, (batch_size, -1))
+        boxes = mx.reshape(boxes, (batch_size, -1, 4))  # [batch,S*S*B,4]
+        scores = mx.reshape(conf, (batch_size, -1))  # [batch,S*S*B]
 
         # Filter by confidence
         mask = scores > conf_threshold
 
-        return boxes, scores, class_ids
+        return boxes, scores

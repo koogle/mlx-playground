@@ -23,34 +23,34 @@ def compute_box_iou(boxes1, boxes2):
     """
     # Ensure both inputs have same batch size
     batch_size = boxes1.shape[0]
-    
+
     # Convert from center format to corner format
     boxes1_x1 = boxes1[..., 0:1] - boxes1[..., 2:3] / 2
     boxes1_y1 = boxes1[..., 1:2] - boxes1[..., 3:4] / 2
     boxes1_x2 = boxes1[..., 0:1] + boxes1[..., 2:3] / 2
     boxes1_y2 = boxes1[..., 1:2] + boxes1[..., 3:4] / 2
-    
+
     boxes2_x1 = boxes2[..., 0:1] - boxes2[..., 2:3] / 2
     boxes2_y1 = boxes2[..., 1:2] - boxes2[..., 3:4] / 2
     boxes2_x2 = boxes2[..., 0:1] + boxes2[..., 2:3] / 2
     boxes2_y2 = boxes2[..., 1:2] + boxes2[..., 3:4] / 2
-    
+
     # Intersection coordinates
     inter_x1 = mx.maximum(boxes1_x1, boxes2_x1)
     inter_y1 = mx.maximum(boxes1_y1, boxes2_y1)
     inter_x2 = mx.minimum(boxes1_x2, boxes2_x2)
     inter_y2 = mx.minimum(boxes1_y2, boxes2_y2)
-    
+
     # Intersection area
     inter_w = mx.maximum(0, inter_x2 - inter_x1)
     inter_h = mx.maximum(0, inter_y2 - inter_y1)
     intersection = inter_w * inter_h
-    
+
     # Union area
-    boxes1_area = (boxes1[..., 2:3] * boxes1[..., 3:4])
-    boxes2_area = (boxes2[..., 2:3] * boxes2[..., 3:4])
+    boxes1_area = boxes1[..., 2:3] * boxes1[..., 3:4]
+    boxes2_area = boxes2[..., 2:3] * boxes2[..., 3:4]
     union = boxes1_area + boxes2_area - intersection
-    
+
     # IoU
     iou = intersection / (union + 1e-6)
     return mx.clip(iou, 0, 1)
@@ -68,138 +68,112 @@ def focal_loss(pred, target, gamma=2.0, alpha=0.25):
 def validate_inputs(predictions, targets, model):
     """
     Validate input shapes and values for the YOLO loss function.
-    
+
     Args:
         predictions: Model predictions [batch, B*(5 + C), S, S] in NCHW format
         targets: Ground truth targets [batch, S, S, B*(5 + C)] in NHWC format
         model: YOLO model instance
-    
+
     Raises:
         ValueError: If inputs are invalid
     """
     if len(predictions.shape) != 4:
-        raise ValueError(f"Predictions must have 4 dimensions, got {len(predictions.shape)}")
-    
+        raise ValueError(
+            f"Predictions must have 4 dimensions, got {len(predictions.shape)}"
+        )
+
     if len(targets.shape) != 4:
         raise ValueError(f"Targets must have 4 dimensions, got {len(targets.shape)}")
-    
+
     batch_size, _, S, channels = predictions.shape
     expected_channels = model.B * (5 + model.C)
-    
+
     if channels != expected_channels:
         raise ValueError(
             f"Predictions should have {expected_channels} channels, got {channels}. "
             f"Check model.B ({model.B}) and model.C ({model.C})"
         )
-    
+
     if targets.shape != (batch_size, S, S, expected_channels):
         raise ValueError(
             f"Targets shape mismatch. Expected {(batch_size, S, S, expected_channels)}, got {targets.shape}"
         )
 
 
-def yolo_loss(predictions, targets, model, lambda_coord=10.0, lambda_noobj=1.0, class_weights=None):
+def yolo_loss(predictions, targets, model):
     """
-    Compute YOLO loss
-    predictions: [batch_size, S, S, B*5 + C] - Output from model in NHWC format
-    targets: [batch_size, S, S, 5 + C] - Target in NHWC format
+    Compute YOLO loss with anchor boxes
+    predictions: [batch_size, S, S, B*5] - Raw predictions from model
+    targets: [batch_size, S, S, 5] - Target boxes
     """
     batch_size = predictions.shape[0]
-    S = model.S  # Grid size
-    B = model.B  # Number of boxes per cell
-    C = model.C  # Number of classes
-    
-    print(f"Shapes - predictions: {predictions.shape}, targets: {targets.shape}")
-    print(f"Model params - S: {S}, B: {B}, C: {C}")
-    
-    # Calculate expected sizes
-    box_features = B * 5  # Each box has 5 values (x, y, w, h, conf)
-    total_features = box_features + C
-    print(f"Expected features: boxes={box_features}, total={total_features}")
-    
-    # Split predictions - predictions are already in NHWC format
-    pred_boxes = predictions[..., :box_features].reshape(batch_size, S, S, B, 5)  # [batch, S, S, B, 5]
-    pred_classes = predictions[..., box_features:]  # [batch, S, S, C]
-    
-    # Reshape targets - targets are already in NHWC format
-    target = targets  # [batch, S, S, 5 + C]
-    target_boxes = target[..., :5]  # [batch, S, S, 5]
-    target_classes = target[..., 5:]  # [batch, S, S, C]
-    
-    # Expand target boxes to match prediction shape
-    target_boxes = mx.expand_dims(target_boxes, axis=3)  # [batch, S, S, 1, 5]
-    target_boxes = mx.repeat(target_boxes, B, axis=3)    # [batch, S, S, B, 5]
-    
-    # Compute IoU for each predicted box
-    # Reshape boxes for IoU computation
-    pred_boxes_reshaped = pred_boxes[..., :4].reshape(batch_size, S*S*B, 4)
-    target_boxes_reshaped = target_boxes[..., :4].reshape(batch_size, S*S*B, 4)
-    
+    S = model.S
+    B = model.B
+
+    # Reshape predictions to separate boxes
+    pred = mx.reshape(predictions, (batch_size, S, S, B, 5))
+
+    # Extract components
+    pred_xy = mx.sigmoid(pred[..., 0:2])  # Center coordinates relative to grid cell
+    pred_wh = pred[..., 2:4]  # Width/height predictions (will be scaled by anchors)
+    pred_conf = mx.sigmoid(pred[..., 4])  # Object confidence
+
+    # Extract target components
+    target_xy = targets[..., 0:2]  # Target center coordinates
+    target_wh = targets[..., 2:4]  # Target width/height
+    target_conf = targets[..., 4:5]  # Target confidence
+
+    # Create grid cell offsets
+    grid_x, grid_y = mx.meshgrid(
+        mx.arange(S, dtype=mx.float32), mx.arange(S, dtype=mx.float32)
+    )
+    grid_xy = mx.stack([grid_x, grid_y], axis=-1)
+    grid_xy = mx.expand_dims(grid_xy, axis=2)  # Add box dimension
+
+    # Convert predictions to global coordinates
+    pred_xy = (pred_xy + grid_xy) / S  # Add cell offset and normalize
+
+    # Scale width/height by anchors
+    anchors = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
+    anchors = mx.expand_dims(anchors, axis=0)  # [1,1,B,2]
+    anchors = mx.expand_dims(anchors, axis=0)  # [1,1,1,B,2]
+    pred_wh = anchors * mx.exp(pred_wh) / S  # Scale by anchors and normalize
+
     # Compute IoU between predictions and targets
-    ious = compute_box_iou(pred_boxes_reshaped, target_boxes_reshaped)  # [batch, S*S*B]
-    ious = ious.reshape(batch_size, S, S, B)  # [batch, S, S, B]
-    
-    # Find responsible box (box with highest IoU)
-    # Instead of using array indexing, we'll use one-hot encoding with max
-    best_ious_idx = mx.argmax(ious, axis=3)  # [batch, S, S]
-    best_box_mask = mx.zeros((batch_size, S, S, B))
-    
-    # Create one-hot encoding for best box using comparison
-    for b in range(B):
-        best_box_mask = mx.where(
-            mx.expand_dims(best_ious_idx == b, axis=-1),
-            mx.ones_like(best_box_mask),
-            best_box_mask
-        )
-    
-    # Object mask from target
-    obj_mask = mx.expand_dims(target_boxes[..., 4], axis=-1)  # [batch, S, S, B, 1]
-    noobj_mask = 1 - obj_mask
-    
-    # Box coordinate loss (only for responsible boxes)
-    box_loss = obj_mask * mx.sum(
-        mx.square(pred_boxes[..., :2] - target_boxes[..., :2]) +  # xy loss
-        mx.square(mx.sqrt(pred_boxes[..., 2:4] + 1e-6) - mx.sqrt(target_boxes[..., 2:4] + 1e-6)),  # wh loss
-        axis=-1
+    pred_boxes = mx.concatenate([pred_xy, pred_wh], axis=-1)
+    target_boxes = mx.concatenate([target_xy, target_wh], axis=-1)
+    ious = compute_box_iou(pred_boxes, target_boxes)
+
+    # Find best anchor box for each target
+    best_ious = mx.max(ious, axis=-1, keepdims=True)
+    box_mask = (ious >= best_ious) * mx.expand_dims(target_conf, axis=-1)
+
+    # Compute losses
+    xy_loss = box_mask * mx.sum(
+        mx.square(pred_xy - mx.expand_dims(target_xy, axis=-2)), axis=-1
     )
-    box_loss = lambda_coord * mx.sum(box_loss)
-    
-    # Confidence loss
-    conf_loss_obj = obj_mask * mx.square(pred_boxes[..., 4:5] - mx.expand_dims(ious, axis=-1))
-    conf_loss_noobj = noobj_mask * mx.square(pred_boxes[..., 4:5])
-    conf_loss = mx.sum(conf_loss_obj + lambda_noobj * conf_loss_noobj)
-    
-    # Class loss (only for cells with objects)
-    # Apply focal loss for class predictions
-    alpha = 0.25
-    gamma = 2.0
-    class_probs = mx.softmax(pred_classes, axis=-1)
-    focal_weight = mx.power(1 - class_probs + 1e-6, gamma)
-    
-    # Reshape obj_mask for class loss
-    obj_mask_class = mx.squeeze(target_boxes[..., 4:5], axis=-1)  # [batch, S, S, B]
-    obj_mask_class = mx.max(obj_mask_class, axis=-1, keepdims=True)  # [batch, S, S, 1]
-    
-    class_loss = obj_mask_class * focal_weight * mx.sum(
-        -target_classes * mx.log(class_probs + 1e-6),
+    wh_loss = box_mask * mx.sum(
+        mx.square(
+            mx.log(pred_wh + 1e-6) - mx.expand_dims(mx.log(target_wh + 1e-6), axis=-2)
+        ),
         axis=-1,
-        keepdims=True
     )
-    if class_weights is not None:
-        class_weights = mx.array(class_weights)
-        class_loss = class_loss * mx.sum(target_classes * class_weights, axis=-1, keepdims=True)
-    class_loss = mx.sum(class_loss)
-    
-    # Total loss
-    total_loss = (box_loss + conf_loss + class_loss) / batch_size
-    
-    # Return loss components for logging
-    components = {
-        'iou': mx.mean(ious * mx.squeeze(obj_mask, axis=-1)).item(),
-        'coord': box_loss.item() / batch_size,
-        'conf': conf_loss.item() / batch_size,
-        'class': class_loss.item() / batch_size,
-        'noobj': mx.sum(conf_loss_noobj).item() / batch_size
+    conf_loss = box_mask * mx.square(pred_conf - 1) + (1 - box_mask) * mx.square(
+        pred_conf
+    )
+
+    # Weight the losses
+    lambda_coord = 5.0
+    lambda_noobj = 0.5
+    total_loss = (
+        lambda_coord * (xy_loss + wh_loss)
+        + conf_loss * (1 - lambda_noobj)
+        + lambda_noobj * conf_loss * (1 - box_mask)
+    )
+
+    return mx.mean(total_loss), {
+        "xy": mx.mean(xy_loss).item(),
+        "wh": mx.mean(wh_loss).item(),
+        "conf": mx.mean(conf_loss).item(),
+        "iou": mx.mean(ious * box_mask).item(),
     }
-    
-    return total_loss, components

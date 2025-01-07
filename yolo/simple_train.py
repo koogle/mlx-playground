@@ -116,45 +116,17 @@ def calculate_iou(boxes1, boxes2):
 
 
 def train_step(model, batch, optimizer):
+    """Single training step"""
     images, targets = batch
 
-    def loss_fn(params, inputs, targets):
+    def loss_fn(params, images, targets):
         model.update(params)
-        predictions = model(inputs)
-        loss, components = bbox_loss(predictions, targets, model)
-        print(f"Loss in loss_fn: {loss.item():.4f}")
-        return loss
+        predictions = model(images)  # Now returns [batch, S, S, B*5]
+        return yolo_loss(predictions, targets, model)
 
-    # Compute loss and gradients
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
-
-    # Debug gradients
-    grad_norms = {}
-    for k, g in grads.items():
-        if isinstance(g, mx.array):
-            grad_norms[k] = mx.sqrt(mx.sum(mx.square(g))).item()
-    print("Gradient norms:", grad_norms)
-
-    # Clip gradients
-    max_grad_norm = 10.0
-    for k, g in grads.items():
-        if isinstance(g, mx.array):
-            norm = mx.sqrt(mx.sum(mx.square(g)))
-            if norm > max_grad_norm:
-                grads[k] = g * (max_grad_norm / norm)
-                print(f"Clipped gradient for {k}: {norm.item()} -> {max_grad_norm}")
-
-    # Update model parameters
     optimizer.update(model, grads)
-
-    # Compute final loss components for logging
-    _, components = bbox_loss(model(images), targets, model)
-
-    return loss, {
-        "xy": components[0].item(),
-        "wh": components[1].item(),
-        "num_objects": components[2].item(),
-    }
+    return loss
 
 
 def validate(model, val_loader):
@@ -396,7 +368,7 @@ def main():
 
     # Training loop
     print("Initializing model...")
-    model = YOLO()
+    model = YOLO(S=7, B=5, C=20)
     optimizer = optim.Adam(learning_rate=learning_rate)
 
     # Load checkpoint if starting from a specific epoch

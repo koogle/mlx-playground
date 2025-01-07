@@ -181,7 +181,7 @@ class YOLO(nn.Module):
         self.bn_detect2 = nn.BatchNorm(1024)
 
         # Final detection layer outputs for each anchor box:
-        # [tx, ty, tw, th, confidence] * num_anchors
+        # [tx, ty, tw, th, confidence] * B boxes = B*5 total values
         self.conv_final = nn.Conv2d(1024, B * 5, kernel_size=1)
 
         # Activation
@@ -205,8 +205,10 @@ class YOLO(nn.Module):
         # Detection layers
         x = self.relu(self.bn_detect1(self.detect1(x)))
         x = self.relu(self.bn_detect2(self.detect2(x)))
-        x = self.conv_final(x)
+        x = self.conv_final(x)  # [batch, B*5, S, S]
 
+        # Convert from NCHW to NHWC
+        x = mx.transpose(x, (0, 2, 3, 1))  # [batch, S, S, B*5]
         return x
 
     def decode_predictions(self, pred, conf_threshold=0.1):
@@ -251,8 +253,5 @@ class YOLO(nn.Module):
         # Reshape for output
         boxes = mx.reshape(boxes, (batch_size, -1, 4))  # [batch,S*S*B,4]
         scores = mx.reshape(conf, (batch_size, -1))  # [batch,S*S*B]
-
-        # Filter by confidence
-        mask = scores > conf_threshold
 
         return boxes, scores

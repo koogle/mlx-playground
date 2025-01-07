@@ -8,6 +8,29 @@ import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw
 
+VOC_CLASSES = [
+    "aeroplane",
+    "bicycle",
+    "bird",
+    "boat",
+    "bottle",
+    "bus",
+    "car",
+    "cat",
+    "chair",
+    "cow",
+    "diningtable",
+    "dog",
+    "horse",
+    "motorbike",
+    "person",
+    "pottedplant",
+    "sheep",
+    "sofa",
+    "train",
+    "tvmonitor",
+]
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="YOLO Inference")
@@ -67,29 +90,34 @@ def preprocess_frame(frame, target_size=448):
 
 
 def decode_predictions(predictions, model, conf_threshold=0.25):
-    """Decode raw predictions to bounding boxes."""
+    """Decode raw predictions to bounding boxes and class predictions."""
     print("\nDecoding predictions:")
     print(f"Raw predictions shape: {predictions.shape}")
 
     batch_size = predictions.shape[0]
     S = model.S  # Grid size
     B = model.B  # Number of boxes per cell
+    C = model.C  # Number of classes
 
-    # Reshape predictions to [batch, S, S, B, 5]
-    pred = mx.reshape(predictions[..., : B * 5], (batch_size, S, S, B, 5))
+    # Reshape predictions to [batch, S, S, B, 5+C]
+    pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
     mx.eval(pred)
 
-    # Extract coordinates and confidence
+    # Extract components
     pred_xy = mx.sigmoid(pred[..., :2])  # Sigmoid for relative cell position [0,1]
     pred_wh = pred[..., 2:4]  # Raw width/height
     pred_conf = mx.sigmoid(pred[..., 4])  # Confidence score
-    mx.eval(pred_xy, pred_wh, pred_conf)
+    pred_classes = mx.softmax(pred[..., 5:], axis=-1)  # Class probabilities
+    mx.eval(pred_xy, pred_wh, pred_conf, pred_classes)
 
-    print("\nAfter sigmoid:")
+    print("\nAfter sigmoid/softmax:")
     print(f"XY range: [{pred_xy.min().item():.3f}, {pred_xy.max().item():.3f}]")
     print(f"WH range: [{pred_wh.min().item():.3f}, {pred_wh.max().item():.3f}]")
     print(
         f"Confidence range: [{pred_conf.min().item():.3f}, {pred_conf.max().item():.3f}]"
+    )
+    print(
+        f"Class scores range: [{pred_classes.min().item():.3f}, {pred_classes.max().item():.3f}]"
     )
 
     # Create grid
@@ -106,10 +134,6 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     pred_wh = mx.sigmoid(pred_wh)  # Sigmoid for relative image size [0,1]
     mx.eval(pred_xy, pred_wh)
 
-    print("\nAfter grid transformation:")
-    print(f"XY range: [{pred_xy.min().item():.3f}, {pred_xy.max().item():.3f}]")
-    print(f"WH range: [{pred_wh.min().item():.3f}, {pred_wh.max().item():.3f}]")
-
     # Convert to corner format (x1, y1, x2, y2)
     pred_x1y1 = pred_xy - pred_wh / 2
     pred_x2y2 = pred_xy + pred_wh / 2
@@ -118,23 +142,32 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     # Clip to [0,1]
     boxes = mx.clip(boxes, 0.0, 1.0)
 
-    # Reshape to [batch, S*S*B, 4]
+    # Get class predictions
+    class_scores = mx.max(pred_classes, axis=-1)  # Best class probability
+    class_ids = mx.argmax(pred_classes, axis=-1)  # Class with highest probability
+
+    # Combine confidence with class probability
+    scores = pred_conf * class_scores
+
+    # Reshape outputs
     boxes = mx.reshape(boxes, (batch_size, S * S * B, 4))
-    confidences = mx.reshape(pred_conf, (batch_size, S * S * B))
-    mx.eval(boxes, confidences)
+    scores = mx.reshape(scores, (batch_size, S * S * B))
+    class_ids = mx.reshape(class_ids, (batch_size, S * S * B))
+    mx.eval(boxes, scores, class_ids)
 
     print("\nFinal shapes:")
     print(f"Boxes: {boxes.shape}")
-    print(f"Confidences: {confidences.shape}")
+    print(f"Scores: {scores.shape}")
+    print(f"Class IDs: {class_ids.shape}")
 
-    return boxes, confidences
+    return boxes, scores, class_ids
 
 
-def draw_boxes(image, boxes, scores):
-    """Draw predicted boxes on image"""
+def draw_boxes(image, boxes, scores, classes=None, class_names=None):
+    """Draw predicted boxes on image with class labels"""
     draw = ImageDraw.Draw(image)
 
-    for box, score in zip(boxes, scores):
+    for i, (box, score) in enumerate(zip(boxes, scores)):
         # Convert normalized coordinates to pixels
         x1, y1, x2, y2 = box.tolist()
         x1 = x1 * image.width
@@ -145,8 +178,13 @@ def draw_boxes(image, boxes, scores):
         # Draw box
         draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
 
-        # Draw confidence
-        draw.text((x1, y1 - 10), f"{score:.2f}", fill="red")
+        # Draw label
+        label = f"{score:.2f}"
+        if classes is not None and class_names is not None:
+            class_id = classes[i].item()
+            label = f"{class_names[class_id]}: {score:.2f}"
+
+        draw.text((x1, y1 - 10), label, fill="red")
 
     return image
 
@@ -291,87 +329,40 @@ def load_ground_truth(image_id, data_dir="./VOCdevkit/VOC2012"):
 
 
 def analyze_single_image(args, model, image_id):
-    """Analyze a single image and show predictions vs ground truth"""
-    image_path = os.path.join(args.data_dir, "JPEGImages", f"{image_id}.jpg")
-    frame = cv2.imread(str(image_path))
-    if frame is None:
-        raise RuntimeError(f"Failed to load image: {image_path}")
+    """Process a single image with the model"""
+    # Load and preprocess image
+    image_path = args.data_dir / "JPEGImages" / f"{image_id}.jpg"
+    if not image_path.exists():
+        raise FileNotFoundError(f"Image not found: {image_path}")
 
-    # Load ground truth
-    gt_boxes, gt_classes = load_ground_truth(image_id, args.data_dir)
-    print(f"\nGround truth for {image_id}:")
-    for box, cls in zip(gt_boxes, gt_classes):
-        print(f"  {cls}: {box}")
+    # Load image with PIL for better visualization
+    pil_image = Image.open(image_path)
+
+    # Convert to numpy for preprocessing
+    np_image = np.array(pil_image)
+    input_tensor = preprocess_frame(np_image)
 
     # Run inference
-    input_tensor = preprocess_frame(frame)
     predictions = model(input_tensor)
 
-    print("\nRaw predictions shape:", predictions.shape)
-    print("First few values:", predictions[0, :10])  # Show first few values
+    # Process predictions
+    boxes, scores, classes = process_predictions(
+        predictions[0], model
+    )  # Process first batch
 
-    if predictions is not None:
-        mx.eval(predictions)
-        boxes, confidences = decode_predictions(predictions, model)
-        mx.eval(boxes, confidences)
+    # Draw boxes on image
+    output_image = draw_boxes(pil_image, boxes, scores, classes, VOC_CLASSES)
 
-        # Convert to numpy
-        boxes_np = np.array([b.tolist() for b in boxes])
-        confidences_np = np.array([c.tolist() for c in confidences])
-        boxes_np = boxes_np[0]  # Get first batch
-        confidences_np = confidences_np[0]  # Get first batch
+    # Save or display result
+    output_path = f"output_{image_id}.jpg"
+    output_image.save(output_path)
+    print(f"\nSaved detection result to {output_path}")
 
-        print("\nDecoded boxes shape:", boxes_np.shape)
-        print("Confidence scores shape:", confidences_np.shape)
-
-        # Filter boxes
-        valid_boxes, valid_confidences = filter_boxes(
-            boxes_np.tolist(),
-            confidences_np=(
-                confidences_np.tolist() if confidences_np is not None else None
-            ),
-        )
-
-        print("\nAfter filtering:")
-        print(f"Number of valid boxes: {len(valid_boxes)}")
-        for i, (box, conf) in enumerate(zip(valid_boxes, valid_confidences)):
-            print(f"  Box {i}: {box}, confidence: {conf:.3f}")
-
-        # Create visualization
-        output_frame = frame.copy()
-
-        # Draw ground truth in blue
-        output_frame = draw_boxes(
-            output_frame, gt_boxes, color=(255, 0, 0), labels=gt_classes  # Blue
-        )
-
-        # Draw predictions in confidence-based colors
-        output_frame = draw_boxes(
-            output_frame, valid_boxes, confidences=valid_confidences
-        )
-
-        # Add legend
-        cv2.putText(
-            output_frame,
-            "Blue: Ground Truth, Color: Predictions (Red->Green = Low->High Confidence)",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            2,
-        )
-
-        # Show the image
-        cv2.imshow("YOLO Detection", output_frame)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-        # Calculate IoU with ground truth
-        print("\nIoU with ground truth:")
-        for i, pred_box in enumerate(valid_boxes):
-            for j, gt_box in enumerate(gt_boxes):
-                iou = calculate_iou(pred_box, gt_box)
-                print(f"  Pred {i} vs GT {j} ({gt_classes[j]}): {iou:.3f}")
+    # Print detection details
+    print("\nDetections:")
+    for box, score, class_id in zip(boxes, scores, classes):
+        class_name = VOC_CLASSES[class_id.item()]
+        print(f"- {class_name}: {score.item():.3f} at {box.tolist()}")
 
 
 def calculate_iou(box1, box2):
@@ -459,62 +450,29 @@ def main():
                 try:
                     input_tensor = preprocess_frame(frame)
                     predictions = model(input_tensor)
+                    last_predictions = predictions  # Store for visualization
 
-                    # Convert predictions to numpy before checking
-                    if predictions is not None and predictions.tolist() is not None:
-                        mx.eval(predictions)
-                        last_predictions = predictions  # Store for visualization
+                    # Process predictions
+                    boxes, scores, classes = process_predictions(predictions[0], model)
 
-                        boxes, confidences = decode_predictions(predictions, model)
-                        mx.eval(boxes, confidences)
+                    # Convert frame to PIL Image for drawing
+                    pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-                        # Convert to numpy array for OpenCV
-                        boxes_np = np.array([b.tolist() for b in boxes])
-                        confidences_np = np.array([c.tolist() for c in confidences])
-                        boxes_np = boxes_np[0]  # Get first batch
-                        confidences_np = confidences_np[0]  # Get first batch
+                    # Draw detections
+                    output_frame = draw_boxes(
+                        pil_frame, boxes, scores, classes, VOC_CLASSES
+                    )
 
-                        # Filter boxes using numpy array
-                        valid_boxes, valid_confidences = filter_boxes(
-                            boxes_np.tolist(),
-                            confidences_np=(
-                                confidences_np.tolist()
-                                if confidences_np is not None
-                                else None
-                            ),
-                        )
+                    # Convert back to OpenCV format
+                    frame = cv2.cvtColor(np.array(output_frame), cv2.COLOR_RGB2BGR)
 
-                        if len(valid_boxes) > 0:
-                            last_boxes = valid_boxes
-                            last_confidences = valid_confidences
-
-                        # Update inference time
-                        last_inference_time = current_time
+                    last_inference_time = current_time
 
                 except Exception as e:
-                    print(f"Error during inference: {e}")
-                    import traceback
-
-                    traceback.print_exc()
-                    continue
-
-            # Create output frame based on visualization mode
-            output_frame = frame.copy()
-
-            # Check visualization mode using Python bool operations
-            if (
-                show_activations
-                and last_predictions is not None
-                and last_predictions.tolist() is not None
-            ):
-                output_frame = visualize_activations(
-                    output_frame, last_predictions, model
-                )
-            elif last_boxes is not None and len(last_boxes) > 0:
-                output_frame = draw_boxes(output_frame, last_boxes, last_confidences)
+                    print(f"Inference error: {e}")
 
             # Show the frame
-            cv2.imshow("YOLO Detection", output_frame)
+            cv2.imshow("YOLO Detection", frame)
 
             # Handle key presses
             key = cv2.waitKey(1) & 0xFF
@@ -599,17 +557,19 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
 
 
 def process_predictions(predictions, model, conf_thresh=0.2):
-    """Convert raw predictions to boxes"""
+    """Convert raw predictions to boxes with class information"""
     S = model.S
-    B = model.B  # Now 5 boxes per cell
+    B = model.B
+    C = model.C
 
-    # Reshape predictions to [S,S,B,5]
-    predictions = mx.reshape(predictions, (S, S, B, 5))
+    # Reshape predictions to [S,S,B,5+C]
+    predictions = mx.reshape(predictions, (S, S, B, 5 + C))
 
     # Extract components
     pred_xy = mx.sigmoid(predictions[..., 0:2])  # Center coordinates
     pred_wh = predictions[..., 2:4]  # Width/height predictions
-    pred_conf = mx.sigmoid(predictions[..., 4])  # Confidence scores
+    pred_conf = mx.sigmoid(predictions[..., 4])  # Object confidence
+    pred_classes = mx.softmax(predictions[..., 5:], axis=-1)  # Class probabilities
 
     # Create grid offsets
     grid_x, grid_y = mx.meshgrid(
@@ -632,15 +592,20 @@ def process_predictions(predictions, model, conf_thresh=0.2):
         axis=-1,
     )
 
-    # Get confidence scores
-    scores = pred_conf
+    # Get class predictions
+    class_scores = mx.max(pred_classes, axis=-1)  # Best class probability
+    class_ids = mx.argmax(pred_classes, axis=-1)  # Class with highest probability
+
+    # Combine object confidence with class probability
+    scores = pred_conf * class_scores
 
     # Filter by confidence
     mask = scores > conf_thresh
     boxes = boxes[mask]
     scores = scores[mask]
+    classes = class_ids[mask]
 
-    return boxes, scores
+    return boxes, scores, classes
 
 
 if __name__ == "__main__":

@@ -175,20 +175,23 @@ class VOCDataset:
         }
 
     def _load_image(self, idx: int) -> np.ndarray:
-        """Load image from disk and preprocess"""
+        """Load and preprocess image"""
         # Get image path
         image_path = os.path.join(self.image_dir, self.image_ids[idx] + ".jpg")
         image = Image.open(image_path).convert("RGB")
+
+        # Resize
         image = image.resize((self.img_size, self.img_size))
 
-        # Convert to numpy array and normalize
-        image = np.array(image, dtype=np.float32) / 255.0
+        # Convert to numpy and preprocess
+        image = np.array(image, dtype=np.float32)
+        image = self.preprocess_image(image)
 
         if self.augment:
             anno = self._get_annotation(idx)
             image, anno["boxes"] = augment_image(image, anno["boxes"], self.img_size)
 
-        return image.astype(np.float32)  # Ensure float32 type
+        return image
 
     def _convert_to_grid(self, boxes, classes):
         """Convert boxes to grid format"""
@@ -217,19 +220,92 @@ class VOCDataset:
         return len(self.image_ids)
 
     def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array]:
-        """Get a single sample"""
+        """Get a single training example"""
+        image_id = self.image_ids[idx]
+
         # Load image and annotations
         image = self._load_image(idx)
-        anno = self._get_annotation(idx)
+        annotations = self._get_annotation(idx)
 
-        # Convert to grid format
-        target = self._convert_to_grid(anno["boxes"], anno["classes"])
+        boxes = annotations["boxes"]
+        labels = annotations["classes"]
 
-        # Convert to MLX arrays - keep channels last (NHWC format)
-        image = mx.array(image)  # Shape: (H, W, C)
-        target = mx.array(target)  # Shape: (S, S, B*(5+C))
+        # Convert to target format
+        target = self.convert_to_target(boxes, labels, image.shape[:2])
+
+        # Convert to MLX arrays
+        image = mx.array(image)
+        target = mx.array(target)
 
         return image, target
+
+    def convert_to_target(self, boxes, labels, image_shape):
+        """Convert boxes and labels to YOLO target format"""
+        S = self.grid_size
+        C = 20  # VOC has 20 classes
+
+        # Initialize target grid
+        target = np.zeros((S, S, 5 + C))  # x,y,w,h,obj + class_probs
+
+        # Convert boxes to relative coordinates
+        height, width = image_shape
+        boxes = boxes.copy()
+        boxes[:, [0, 2]] /= width  # x coordinates
+        boxes[:, [1, 3]] /= height  # y coordinates
+
+        # Convert from corners to center format
+        boxes_ctr = np.zeros_like(boxes)
+        boxes_ctr[:, 0] = (boxes[:, 0] + boxes[:, 2]) / 2  # cx
+        boxes_ctr[:, 1] = (boxes[:, 1] + boxes[:, 3]) / 2  # cy
+        boxes_ctr[:, 2] = boxes[:, 2] - boxes[:, 0]  # w
+        boxes_ctr[:, 3] = boxes[:, 3] - boxes[:, 1]  # h
+
+        for box, label in zip(boxes_ctr, labels):
+            cx, cy, w, h = box
+
+            # Get grid cell indices
+            grid_x = int(S * cx)
+            grid_y = int(S * cy)
+
+            # Handle edge cases
+            grid_x = min(grid_x, S - 1)
+            grid_y = min(grid_y, S - 1)
+
+            # Convert coordinates to be relative to grid cell
+            cx_rel = S * cx - grid_x
+            cy_rel = S * cy - grid_y
+
+            # Set target values
+            if target[grid_y, grid_x, 4] == 0:  # If no object already assigned
+                target[grid_y, grid_x, 0] = cx_rel
+                target[grid_y, grid_x, 1] = cy_rel
+                target[grid_y, grid_x, 2] = w
+                target[grid_y, grid_x, 3] = h
+                target[grid_y, grid_x, 4] = 1  # Object confidence
+                target[grid_y, grid_x, 5 + label] = 1  # Class one-hot encoding
+
+        return target
+
+    def preprocess_image(self, image):
+        """Preprocess image for model input"""
+        # Image should already be resized and normalized from _load_image
+        # Just need to ensure it's in the right format
+        if len(image.shape) == 2:
+            # Add channel dimension for grayscale images
+            image = np.expand_dims(image, axis=-1)
+
+        # Ensure we have 3 channels
+        if image.shape[-1] == 1:
+            image = np.repeat(image, 3, axis=-1)
+        elif image.shape[-1] != 3:
+            raise ValueError(f"Expected 3 channels, got {image.shape[-1]}")
+
+        # Ensure float32 type and [0,1] range
+        image = image.astype(np.float32)
+        if image.max() > 1.0:
+            image /= 255.0
+
+        return image
 
 
 class DataLoader:

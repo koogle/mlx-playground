@@ -121,7 +121,7 @@ def train_step(model, batch, optimizer):
 
     def loss_fn(params, images, targets):
         model.update(params)
-        predictions = model(images)  # Now returns [batch, S, S, B*5]
+        predictions = model(images)  # [batch, S, S, B*(5+C)]
         return yolo_loss(predictions, targets, model)
 
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)

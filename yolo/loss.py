@@ -95,23 +95,27 @@ def validate_inputs(predictions, targets, model):
 
 def yolo_loss(predictions, targets, model):
     """
-    predictions: [batch_size, S, S, B*5] - Raw predictions from model
-    targets: [batch_size, S, S, 5] - Target boxes (single box per cell)
+    predictions: [batch_size, S, S, B*(5+C)] - Raw predictions from model
+    targets: [batch_size, S, S, 5+C] - Target boxes and class labels
     """
     batch_size = predictions.shape[0]
     S = model.S
     B = model.B
+    C = model.C
 
     # 1. Reshape predictions
-    pred = mx.reshape(predictions, (batch_size, S, S, B, 5))
+    pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))  # [batch,S,S,B,5+C]
     pred_xy = mx.sigmoid(pred[..., 0:2])  # [batch,S,S,B,2]
     pred_wh = pred[..., 2:4]  # [batch,S,S,B,2]
     pred_conf = mx.sigmoid(pred[..., 4])  # [batch,S,S,B]
+    pred_classes = mx.softmax(pred[..., 5:], axis=-1)  # [batch,S,S,B,C]
 
     # 2. Process targets - expand for comparison
     target_xy = mx.expand_dims(targets[..., 0:2], axis=3)  # [batch,S,S,1,2]
     target_wh = mx.expand_dims(targets[..., 2:4], axis=3)  # [batch,S,S,1,2]
     target_conf = targets[..., 4]  # [batch,S,S]
+    target_classes = targets[..., 5:]  # [batch,S,S,C]
+    target_classes = mx.expand_dims(target_classes, axis=3)  # [batch,S,S,1,C]
 
     # 3. Grid cell offsets
     grid_x, grid_y = mx.meshgrid(
@@ -145,7 +149,7 @@ def yolo_loss(predictions, targets, model):
         target_conf, (batch_size, S, S, B, 1)
     )  # [batch,S,S,B,1]
 
-    # Create final mask (ensure consistent dimensions)
+    # Create final mask
     box_mask = box_mask * target_conf  # [batch,S,S,B,1]
 
     # 7. Compute losses
@@ -156,24 +160,34 @@ def yolo_loss(predictions, targets, model):
         keepdims=True,
     )
 
-    # Expand pred_conf for loss calculation
-    pred_conf = mx.expand_dims(pred_conf, axis=-1)  # [batch,S,S,B,1]
+    pred_conf = mx.expand_dims(pred_conf, axis=-1)
+
+    # Confidence loss
     conf_loss = box_mask * mx.square(pred_conf - 1) + (1 - box_mask) * mx.square(
         pred_conf
+    )
+
+    # Class loss (only for cells with objects)
+    # class_mask = mx.expand_dims(target_conf, axis=-1)  # [batch,S,S,1,1]
+    class_loss = target_conf * mx.sum(
+        mx.square(pred_classes - target_classes), axis=-1, keepdims=True
     )
 
     # 8. Weight and combine losses
     lambda_coord = 5.0
     lambda_noobj = 0.5
+    lambda_class = 1.0
     total_loss = (
         lambda_coord * (xy_loss + wh_loss)
         + conf_loss * (1 - lambda_noobj)
         + lambda_noobj * conf_loss * (1 - box_mask)
+        + lambda_class * class_loss
     )
 
     return mx.mean(total_loss), {
         "xy": mx.mean(xy_loss).item(),
         "wh": mx.mean(wh_loss).item(),
         "conf": mx.mean(conf_loss).item(),
-        "iou": mx.mean(ious * box_mask).item(),
+        "class": mx.mean(class_loss).item(),
+        "iou": mx.mean(mx.squeeze(ious, axis=-1) * box_mask[..., 0]).item(),
     }

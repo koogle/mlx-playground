@@ -208,24 +208,24 @@ class YOLO(nn.Module):
         # Detection layers
         x = self.relu(self.bn_detect1(self.detect1(x)))
         x = self.relu(self.bn_detect2(self.detect2(x)))
-        x = self.conv_final(x)  # [batch, B*5, S, S]
+        x = self.conv_final(x)  # [batch, B*(5+C), S, S]
 
         # Convert from NCHW to NHWC
-        x = mx.transpose(x, (0, 2, 3, 1))  # [batch, S, S, B*5]
+        x = mx.transpose(x, (0, 2, 3, 1))  # [batch, S, S, B*(5+C)]
         return x
 
     def decode_predictions(self, pred, conf_threshold=0.1):
-        """Decode raw predictions to bounding boxes"""
+        """Decode raw predictions to bounding boxes and class scores"""
         batch_size = pred.shape[0]
 
-        # Reshape predictions [batch, S, S, B*5]
-        pred = mx.transpose(pred, (0, 2, 3, 1))
-        pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5))
+        # Reshape predictions [batch, S, S, B*(5+C)]
+        pred = mx.reshape(pred, (batch_size, self.S, self.S, self.B, 5 + self.C))
 
         # Extract components
         tx_ty = pred[..., 0:2]  # Offset predictions
         tw_th = pred[..., 2:4]  # Width/height predictions
         conf = mx.sigmoid(pred[..., 4])  # Confidence scores
+        class_scores = mx.softmax(pred[..., 5:], axis=-1)  # Class probabilities
 
         # Generate grid coordinates [S,S,2]
         grid_x, grid_y = mx.meshgrid(
@@ -253,8 +253,13 @@ class YOLO(nn.Module):
         box_maxs = box_xy + box_wh / 2
         boxes = mx.concatenate([box_mins, box_maxs], axis=-1)  # [batch,S,S,B,4]
 
+        # Get class predictions
+        class_probs = mx.max(class_scores, axis=-1)  # Best class probability
+        class_ids = mx.argmax(class_scores, axis=-1)  # Class with highest probability
+
         # Reshape for output
         boxes = mx.reshape(boxes, (batch_size, -1, 4))  # [batch,S*S*B,4]
-        scores = mx.reshape(conf, (batch_size, -1))  # [batch,S*S*B]
+        scores = mx.reshape(conf * class_probs, (batch_size, -1))  # Combined confidence
+        classes = mx.reshape(class_ids, (batch_size, -1))  # [batch,S*S*B]
 
-        return boxes, scores
+        return boxes, scores, classes

@@ -6,6 +6,7 @@ import numpy as np
 from model import YOLO
 import argparse
 from pathlib import Path
+from PIL import Image, ImageDraw
 
 
 def parse_args():
@@ -129,49 +130,25 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     return boxes, confidences
 
 
-def draw_boxes(frame, boxes, confidences=None, color=None, thickness=2, labels=None):
-    """Draw bounding boxes on frame with optional confidence scores and labels"""
-    height, width = frame.shape[:2]
+def draw_boxes(image, boxes, scores):
+    """Draw predicted boxes on image"""
+    draw = ImageDraw.Draw(image)
 
-    for i, box in enumerate(boxes):
-        # Convert normalized coordinates to pixel coordinates
-        x1 = int(box[0] * width)
-        y1 = int(box[1] * height)
-        x2 = int(box[2] * width)
-        y2 = int(box[3] * height)
+    for box, score in zip(boxes, scores):
+        # Convert normalized coordinates to pixels
+        x1, y1, x2, y2 = box.tolist()
+        x1 = x1 * image.width
+        y1 = y1 * image.height
+        x2 = x2 * image.width
+        y2 = y2 * image.height
 
-        # Use provided color or confidence-based color
-        if color is not None:
-            box_color = color
-        elif confidences is not None:
-            conf = confidences[i]
-            # Red channel decreases with confidence
-            r = int(255 * (1 - conf))
-            # Green channel increases with confidence
-            g = int(255 * conf)
-            box_color = (0, g, r)  # BGR format
-        else:
-            box_color = (0, 255, 0)  # Default green
+        # Draw box
+        draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
 
-        # Draw rectangle
-        cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, thickness)
+        # Draw confidence
+        draw.text((x1, y1 - 10), f"{score:.2f}", fill="red")
 
-        # Add label if provided
-        if labels is not None and i < len(labels):
-            label = f"{labels[i]}"
-            if confidences is not None:
-                label += f" {confidences[i]:.2f}"
-            cv2.putText(
-                frame,
-                label,
-                (x1, y1 - 5),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                box_color,
-                2,
-            )
-
-    return frame
+    return image
 
 
 def visualize_activations(frame, predictions, model):
@@ -421,10 +398,10 @@ def calculate_iou(box1, box2):
 
 def main():
     args = parse_args()
-
-    # Load model
     print("Loading model...")
-    model = YOLO()
+
+    # Initialize model with same parameters as training
+    model = YOLO(S=7, B=5, C=20)  # B*(5+C) = 5*(5+20) = 5*25 = 125 output channels
 
     if not args.model.exists():
         raise FileNotFoundError(f"Model checkpoint not found: {args.model}")
@@ -437,9 +414,13 @@ def main():
             print("  Warning: No parameters loaded")
     except Exception as e:
         print(f"Error loading model weights: {e}")
-        import traceback
-
-        traceback.print_exc()
+        print("\nModel architecture:")
+        print(f"Grid size (S): {model.S}")
+        print(f"Boxes per cell (B): {model.B}")
+        print(f"Number of classes (C): {model.C}")
+        print(
+            f"Output channels: {model.B * (5 + model.C)}"
+        )  # 5 box params + C class scores
         return
 
     model.eval()
@@ -615,6 +596,51 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
             print(f"Box {i}: {box}, confidence: {conf:.3f}")
 
     return valid_boxes, valid_confidences
+
+
+def process_predictions(predictions, model, conf_thresh=0.2):
+    """Convert raw predictions to boxes"""
+    S = model.S
+    B = model.B  # Now 5 boxes per cell
+
+    # Reshape predictions to [S,S,B,5]
+    predictions = mx.reshape(predictions, (S, S, B, 5))
+
+    # Extract components
+    pred_xy = mx.sigmoid(predictions[..., 0:2])  # Center coordinates
+    pred_wh = predictions[..., 2:4]  # Width/height predictions
+    pred_conf = mx.sigmoid(predictions[..., 4])  # Confidence scores
+
+    # Create grid offsets
+    grid_x, grid_y = mx.meshgrid(
+        mx.arange(S, dtype=mx.float32), mx.arange(S, dtype=mx.float32)
+    )
+    grid_xy = mx.stack([grid_x, grid_y], axis=-1)  # [S,S,2]
+    grid_xy = mx.expand_dims(grid_xy, axis=2)  # [S,S,1,2]
+
+    # Convert predictions to global coordinates
+    pred_xy = (pred_xy + grid_xy) / S
+
+    # Scale width/height by anchors
+    anchors = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
+    anchors = mx.expand_dims(anchors, axis=0)  # [1,1,B,2]
+    pred_wh = anchors * mx.exp(pred_wh) / S
+
+    # Convert to corner format
+    boxes = mx.concatenate(
+        [pred_xy - pred_wh / 2, pred_xy + pred_wh / 2],  # top-left  # bottom-right
+        axis=-1,
+    )
+
+    # Get confidence scores
+    scores = pred_conf
+
+    # Filter by confidence
+    mask = scores > conf_thresh
+    boxes = boxes[mask]
+    scores = scores[mask]
+
+    return boxes, scores
 
 
 if __name__ == "__main__":

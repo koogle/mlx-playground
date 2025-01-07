@@ -171,6 +171,9 @@ class YOLO(nn.Module):
         self.B = B
         self.C = C
 
+        # Compute output channels
+        out_channels = B * (5 + C)  # 5 for box params (x,y,w,h,conf) + C class scores
+
         # Create backbone with target size S
         self.backbone = DarkNet19(target_size=S)
 
@@ -181,8 +184,8 @@ class YOLO(nn.Module):
         self.bn_detect2 = nn.BatchNorm(1024)
 
         # Final detection layer outputs for each anchor box:
-        # [tx, ty, tw, th, confidence] * B boxes = B*5 total values
-        self.conv_final = nn.Conv2d(1024, B * 5, kernel_size=1)
+        # [tx, ty, tw, th, confidence, class_scores] * B boxes
+        self.conv_final = nn.Conv2d(1024, out_channels, kernel_size=1)
 
         # Activation
         self.relu = nn.ReLU()

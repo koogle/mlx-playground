@@ -17,7 +17,9 @@ def bbox_loss(predictions, targets, model):
     B = model.B  # Number of boxes per cell
 
     # Reshape predictions and targets
-    pred_boxes = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
+    pred_boxes = mx.reshape(
+        predictions[..., : B * 4], (batch_size, S, S, B, 4), allowzero=True
+    )
     pred_conf = mx.sigmoid(predictions[..., B * 4 : (B * 5)])
     pred_conf = mx.reshape(pred_conf, (batch_size, S, S, B))
 
@@ -135,52 +137,46 @@ def validate(model, val_loader):
 
     for batch_idx, batch in enumerate(val_loader):
         images, targets = batch
-        predictions = model(images)
-        loss, (xy_loss, wh_loss, num_objects) = bbox_loss(predictions, targets, model)
+        predictions = model(images)  # [batch, S, S, B*5]
+        loss, components = yolo_loss(predictions, targets, model)
 
         # Print details for each validation image
-        # print(f"\nBatch {batch_idx}:")
-        # print(f"Number of objects: {num_objects.item()}")
-        # print(f"XY Loss: {mx.mean(xy_loss).item():.4f}")
-        # print(f"WH Loss: {mx.mean(wh_loss).item():.4f}")
-        # print(f"Total Loss: {loss.item():.4f}")
+        print(f"\nBatch {batch_idx}:")
+        print(f"Loss: {loss.item():.4f}")
+        print(f"Components:")
+        for k, v in components.items():
+            print(f"  {k}: {v:.4f}")
 
         # Debug predictions vs targets
         batch_size = predictions.shape[0]
         S = model.S
         B = model.B
 
-        # Reshape and extract predictions
-        pred = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))
-        pred_xy = mx.sigmoid(pred[..., :2])
-        pred_wh = mx.sigmoid(pred[..., 2:4])
+        # Reshape predictions
+        pred = mx.reshape(predictions, (batch_size, S, S, B, 5))
+        pred_xy = mx.sigmoid(pred[..., 0:2])  # [batch,S,S,B,2]
+        pred_wh = pred[..., 2:4]  # [batch,S,S,B,2]
+        pred_conf = mx.sigmoid(pred[..., 4])  # [batch,S,S,B]
 
-        # Reshape and extract targets
-        targ = mx.reshape(targets[..., :4], (batch_size, S, S, 1, 4))
-        targ_xy = targ[..., :2]
-        targ_wh = targ[..., 2:4]
-
-        # Get object mask
-        obj_mask = mx.squeeze(
-            mx.reshape(targets[..., 4:5], (batch_size, S, S, 1)), axis=-1
-        )
+        # Extract targets
+        target_xy = targets[..., 0:2]  # [batch,S,S,2]
+        target_wh = targets[..., 2:4]  # [batch,S,S,2]
+        target_conf = targets[..., 4]  # [batch,S,S]
 
         # Find cells with objects
         for b in range(batch_size):
             print(f"\nImage {b}:")
             for i in range(S):
                 for j in range(S):
-                    if obj_mask[b, i, j].item() > 0:
+                    if target_conf[b, i, j].item() > 0:
                         print(f"Object in cell ({i},{j}):")
                         print(
-                            f"  Target: xy={targ_xy[b,i,j,0].tolist()}, wh={targ_wh[b,i,j,0].tolist()}"
+                            f"  Target: xy={target_xy[b,i,j].tolist()}, wh={target_wh[b,i,j].tolist()}"
                         )
-                        print(
-                            f"  Pred 1: xy={pred_xy[b,i,j,0].tolist()}, wh={pred_wh[b,i,j,0].tolist()}"
-                        )
-                        print(
-                            f"  Pred 2: xy={pred_xy[b,i,j,1].tolist()}, wh={pred_wh[b,i,j,1].tolist()}"
-                        )
+                        for k in range(B):
+                            print(
+                                f"  Pred {k}: xy={pred_xy[b,i,j,k].tolist()}, wh={pred_wh[b,i,j,k].tolist()}"
+                            )
 
         losses.append(loss)
 

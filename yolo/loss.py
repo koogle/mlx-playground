@@ -138,21 +138,15 @@ def yolo_loss(predictions, targets, model):
     best_ious = mx.max(ious, axis=-1, keepdims=True)  # [batch,S,S,1]
     box_mask = ious >= best_ious  # [batch,S,S,B]
 
-    # Debug shapes
-    print(f"box_mask shape before squeeze: {box_mask.shape}")
-    box_mask = mx.squeeze(box_mask)  # Remove any extra dimensions
-    print(f"box_mask shape after squeeze: {box_mask.shape}")
-    print(f"target_conf shape: {target_conf.shape}")
-
     # Expand target_conf for broadcasting
     target_conf = mx.expand_dims(target_conf, axis=-1)  # [batch,S,S,1]
-    target_conf_expanded = mx.broadcast_to(
-        target_conf, (batch_size, S, S, B)
-    )  # [batch,S,S,B]
+    target_conf = mx.expand_dims(target_conf, axis=3)  # [batch,S,S,1,1]
+    target_conf = mx.broadcast_to(
+        target_conf, (batch_size, S, S, B, 1)
+    )  # [batch,S,S,B,1]
 
-    # Create final mask
-    box_mask = box_mask * target_conf_expanded  # [batch,S,S,B]
-    box_mask = mx.expand_dims(box_mask, axis=-1)  # [batch,S,S,B,1]
+    # Create final mask (ensure consistent dimensions)
+    box_mask = box_mask * target_conf  # [batch,S,S,B,1]
 
     # 7. Compute losses
     xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1, keepdims=True)
@@ -181,5 +175,5 @@ def yolo_loss(predictions, targets, model):
         "xy": mx.mean(xy_loss).item(),
         "wh": mx.mean(wh_loss).item(),
         "conf": mx.mean(conf_loss).item(),
-        "iou": mx.mean(ious * mx.squeeze(box_mask, axis=-1)).item(),
+        "iou": mx.mean(ious * box_mask).item(),
     }

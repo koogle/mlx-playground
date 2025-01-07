@@ -1,14 +1,13 @@
 import os
 import mlx.core as mx
-import mlx.nn as nn
 import mlx.optimizers as optim
 from model import YOLO
 from data.voc import VOCDataset, create_data_loader
 import time
 from tabulate import tabulate
-from functools import partial
 import argparse
 from pathlib import Path
+from loss import yolo_loss
 
 
 def bbox_loss(predictions, targets, model):
@@ -16,7 +15,6 @@ def bbox_loss(predictions, targets, model):
     batch_size = predictions.shape[0]
     S = model.S  # Grid size (e.g., 7x7)
     B = model.B  # Number of boxes per cell
-    anchors = model.anchors  # Shape: (B, 2)
 
     # Reshape predictions and targets
     pred_boxes = mx.reshape(predictions[..., : B * 4], (batch_size, S, S, B, 4))

@@ -159,7 +159,7 @@ class DarkNet19(nn.Module):
 class YOLO(nn.Module):
     """YOLOv2 object detection model"""
 
-    def __init__(self, S=7, B=2, C=20):
+    def __init__(self, S=7, B=5, C=20):
         """
         Args:
             S: Grid size (S x S)
@@ -180,21 +180,21 @@ class YOLO(nn.Module):
         self.detect2 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
         self.bn_detect2 = nn.BatchNorm(1024)
 
-        # Final detection layer (outputs simplified predictions)
-        # For each anchor box: [tx, ty, tw, th, confidence, class_probs]
-        self.conv_final = nn.Conv2d(1024, B * (5 + C), kernel_size=1)
+        # Final detection layer
+        # For each anchor box: [x, y, w, h, confidence]
+        self.conv_final = nn.Conv2d(1024, B * 5, kernel_size=1)
 
         # Activation
         self.relu = nn.ReLU()
 
-        # Initialize 5 anchor boxes (these are example values - should be computed from your dataset)
+        # Initialize anchor boxes (will be updated using compute_anchor_boxes)
         self.anchors = mx.array(
             [
-                [1.08, 1.19],  # small objects
-                [3.42, 4.41],  # tall objects
-                [6.63, 11.38],  # large objects
-                [9.42, 5.11],  # wide objects
-                [16.62, 10.52],  # extra large objects
+                [1.0, 1.0],  # These are placeholder values
+                [2.0, 2.0],  # They should be updated using
+                [4.0, 4.0],  # compute_anchor_boxes on your
+                [8.0, 8.0],  # actual training data
+                [16.0, 16.0],
             ]
         )
 
@@ -203,13 +203,8 @@ class YOLO(nn.Module):
         x = self.backbone(x)
 
         # Detection layers
-        x = self.detect1(x)
-        x = self.bn_detect1(x)
-
-        x = self.detect2(x)
-        x = self.bn_detect2(x)
-
-        # Final convolution
+        x = self.relu(self.bn_detect1(self.detect1(x)))
+        x = self.relu(self.bn_detect2(self.detect2(x)))
         x = self.conv_final(x)
 
         return x
@@ -266,32 +261,86 @@ class YOLO(nn.Module):
         return boxes, scores, class_ids
 
 
-def compute_anchor_boxes(dataset, num_anchors=5):
+def compute_anchor_boxes(dataset, num_anchors=5, num_iterations=100):
     """
-    Compute anchor boxes using k-means clustering
+    Compute anchor boxes using k-means clustering with IOU distance metric
 
     Args:
-        dataset: List of normalized bounding box dimensions (w, h)
+        dataset: List of normalized bounding box dimensions [(w1,h1), (w2,h2), ...]
         num_anchors: Number of anchor boxes to generate
+        num_iterations: Maximum number of k-means iterations
 
     Returns:
-        anchors: Array of anchor box dimensions [num_anchors, 2]
+        anchors: [num_anchors, 2] array of width/height pairs
     """
+    # Convert dataset to mx.array
+    boxes = mx.array(dataset)
+    num_boxes = len(boxes)
+
+    # Randomly initialize clusters
+    indices = mx.random.randint(0, num_boxes, (num_anchors,))
+    clusters = boxes[indices]
 
     def iou_distance(box, clusters):
         """
-        Distance metric for k-means clustering based on IOU
+        Calculate IOU-based distance between a box and all clusters
+        Args:
+            box: [2] array of width, height
+            clusters: [num_anchors, 2] array of cluster centers
+        Returns:
+            distances: [num_anchors] array of 1-IOU distances
         """
-        w1, h1 = box
-        w2, h2 = clusters
+        # Broadcast box to match clusters shape
+        box = mx.broadcast_to(box, clusters.shape)
 
-        intersection = mx.minimum(w1, w2) * mx.minimum(h1, h2)
-        union = w1 * h1 + w2 * h2 - intersection
+        # Calculate intersection areas
+        intersect_w = mx.minimum(box[:, 0], clusters[:, 0])
+        intersect_h = mx.minimum(box[:, 1], clusters[:, 1])
+        intersection = intersect_w * intersect_h
 
-        return 1 - intersection / union
+        # Calculate union areas
+        box_area = box[:, 0] * box[:, 1]
+        cluster_area = clusters[:, 0] * clusters[:, 1]
+        union = box_area + cluster_area - intersection
 
-    # Implementation of k-means clustering with IOU distance
-    # This is a simplified version - you'll want to implement the full algorithm
-    # using your training data
+        # Return 1-IOU as distance
+        return 1 - intersection / (union + 1e-6)
 
-    return anchors  # [num_anchors, 2] array of width/height pairs
+    # K-means clustering
+    for _ in range(num_iterations):
+        # Calculate distances from each box to each cluster
+        distances = mx.stack([iou_distance(box, clusters) for box in boxes])
+
+        # Assign boxes to nearest cluster
+        assignments = mx.argmin(distances, axis=1)
+
+        # Store old clusters for convergence check
+        old_clusters = clusters.copy()
+
+        # Update clusters
+        for i in range(num_anchors):
+            mask = assignments == i
+            if mx.sum(mask) > 0:
+                clusters[i] = mx.mean(boxes[mask], axis=0)
+
+        # Check for convergence
+        if mx.all(old_clusters == clusters):
+            break
+
+    # Sort anchors by area
+    areas = clusters[:, 0] * clusters[:, 1]
+    sorted_idx = mx.argsort(areas)
+    return clusters[sorted_idx]
+
+
+def update_anchors(model, dataset):
+    """
+    Update model's anchor boxes using the training dataset
+
+    Args:
+        model: YOLO model instance
+        dataset: List of normalized bounding box dimensions [(w1,h1), (w2,h2), ...]
+    """
+    anchors = compute_anchor_boxes(dataset, num_anchors=model.B)
+    model.anchors = anchors
+    return model

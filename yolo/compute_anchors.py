@@ -130,8 +130,8 @@ def main():
     for i, (w, h) in enumerate(anchors.tolist()):
         print(f"Anchor {i+1}: ({w:.3f}, {h:.3f})")
 
-    # Save anchors to file
-    mx.save("anchor_boxes.npz", {"anchors": anchors})
+    # Save anchors directly (no need for dictionary)
+    mx.save("anchor_boxes.npz", anchors)
     print("\nSaved anchor boxes to anchor_boxes.npz")
 
 

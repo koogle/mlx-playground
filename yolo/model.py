@@ -188,13 +188,23 @@ class YOLO(nn.Module):
         self.relu = nn.ReLU()
 
         # Initialize anchor boxes (will be updated using compute_anchor_boxes)
+        """
+
+Anchor boxes (width, height):
+Anchor 1: (0.053, 0.091)
+Anchor 2: (0.148, 0.132)
+Anchor 3: (0.098, 0.274)
+Anchor 4: (0.294, 0.239)
+Anchor 5: (0.176, 0.438)
+        """
+
         self.anchors = mx.array(
             [
-                [1.0, 1.0],  # These are placeholder values
-                [2.0, 2.0],  # They should be updated using
-                [4.0, 4.0],  # compute_anchor_boxes on your
-                [8.0, 8.0],  # actual training data
-                [16.0, 16.0],
+                [0.053, 0.091],  # These are placeholder values
+                [0.148, 0.132],  # They should be updated using
+                [0.098, 0.274],  # compute_anchor_boxes on your
+                [0.294, 0.239],  # actual training data
+                [0.176, 0.438],
             ]
         )
 

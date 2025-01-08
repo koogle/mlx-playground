@@ -578,13 +578,39 @@ def process_predictions(predictions, model, conf_thresh=0.2):
     # Combine object confidence with class probability
     scores = pred_conf * class_scores
 
-    # Filter by confidence
-    mask = scores > conf_thresh
-    boxes = boxes[mask]
-    scores = scores[mask]
-    classes = class_ids[mask]
+    # Convert to numpy for filtering
+    boxes_np = boxes.tolist()
+    scores_np = scores.tolist()
+    classes_np = class_ids.tolist()
 
-    return boxes, scores, classes
+    # Filter by confidence
+    filtered_boxes = []
+    filtered_scores = []
+    filtered_classes = []
+
+    # Flatten and filter
+    for i in range(S):
+        for j in range(S):
+            for k in range(B):
+                if scores_np[i][j][k] > conf_thresh:
+                    filtered_boxes.append(boxes_np[i][j][k])
+                    filtered_scores.append(scores_np[i][j][k])
+                    filtered_classes.append(classes_np[i][j][k])
+
+    # Convert back to MLX arrays
+    if filtered_boxes:
+        return (
+            mx.array(filtered_boxes),
+            mx.array(filtered_scores),
+            mx.array(filtered_classes),
+        )
+    else:
+        # Return empty arrays with correct shapes
+        return (
+            mx.zeros((0, 4)),
+            mx.zeros((0,)),
+            mx.zeros((0,), dtype=mx.int32),
+        )
 
 
 if __name__ == "__main__":

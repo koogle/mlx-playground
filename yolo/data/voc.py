@@ -133,7 +133,6 @@ class VOCDataset:
         img_id = self.image_ids[idx]
         anno_path = os.path.join(self.annotation_dir, f"{img_id}.xml")
 
-        # Parse XML
         tree = ET.parse(anno_path)
         root = tree.getroot()
 
@@ -142,30 +141,28 @@ class VOCDataset:
         width = float(size.find("width").text)
         height = float(size.find("height").text)
 
-        # Boxes and classes
         boxes = []
         classes = []
 
         for obj in root.iter("object"):
-            # Get class
             class_name = obj.find("name").text
             if class_name not in CLASS_TO_IDX:
                 continue
 
-            # Get bbox
             bbox = obj.find("bndbox")
+            # Get coordinates normalized to [0,1]
             xmin = float(bbox.find("xmin").text) / width
             ymin = float(bbox.find("ymin").text) / height
             xmax = float(bbox.find("xmax").text) / width
             ymax = float(bbox.find("ymax").text) / height
 
-            # Convert to YOLO format (center_x, center_y, w, h)
-            center_x = (xmin + xmax) / 2
-            center_y = (ymin + ymax) / 2
-            w = xmax - xmin
-            h = ymax - ymin
+            # Convert to center format
+            cx = (xmin + xmax) / 2  # center x [0,1]
+            cy = (ymin + ymax) / 2  # center y [0,1]
+            w = xmax - xmin  # width [0,1]
+            h = ymax - ymin  # height [0,1]
 
-            boxes.append([center_x, center_y, w, h])
+            boxes.append([cx, cy, w, h])
             classes.append(CLASS_TO_IDX[class_name])
 
         return {
@@ -240,49 +237,48 @@ class VOCDataset:
         return image, target
 
     def convert_to_target(self, boxes, labels, image_shape):
-        """Convert boxes and labels to YOLO target format"""
-        S = self.grid_size
-        C = 20  # VOC has 20 classes
+        """Convert boxes and labels to YOLO target format
 
-        # Initialize target grid
-        target = np.zeros((S, S, 5 + C))  # x,y,w,h,obj + class_probs
+        Args:
+            boxes: List of [cx, cy, w, h] in normalized coordinates [0,1]
+            labels: List of class indices
+            image_shape: (height, width) of the image
+        """
+        S = self.grid_size  # Grid size
+        C = len(VOC_CLASSES)  # Number of classes
 
-        # Convert boxes to relative coordinates
-        height, width = image_shape
-        boxes = boxes.copy()
-        boxes[:, [0, 2]] /= width  # x coordinates
-        boxes[:, [1, 3]] /= height  # y coordinates
+        # Initialize target tensor
+        target = np.zeros((S, S, 5 + C))
 
-        # Convert from corners to center format
-        boxes_ctr = np.zeros_like(boxes)
-        boxes_ctr[:, 0] = (boxes[:, 0] + boxes[:, 2]) / 2  # cx
-        boxes_ctr[:, 1] = (boxes[:, 1] + boxes[:, 3]) / 2  # cy
-        boxes_ctr[:, 2] = boxes[:, 2] - boxes[:, 0]  # w
-        boxes_ctr[:, 3] = boxes[:, 3] - boxes[:, 1]  # h
+        # Boxes should already be in center format and normalized [0,1]
+        boxes = np.array(boxes, dtype=np.float32)
 
-        for box, label in zip(boxes_ctr, labels):
-            cx, cy, w, h = box
+        for box, label in zip(boxes, labels):
+            cx, cy, w, h = box  # Already normalized [0,1]
 
             # Get grid cell indices
-            grid_x = int(S * cx)
+            grid_x = int(S * cx)  # Which grid cell
             grid_y = int(S * cy)
 
             # Handle edge cases
             grid_x = min(grid_x, S - 1)
             grid_y = min(grid_y, S - 1)
 
-            # Convert coordinates to be relative to grid cell
-            cx_rel = S * cx - grid_x
-            cy_rel = S * cy - grid_y
+            # Convert to cell-relative coordinates [0,1]
+            cx_cell = cx * S - grid_x  # relative x within cell
+            cy_cell = cy * S - grid_y  # relative y within cell
 
-            # Set target values
-            if target[grid_y, grid_x, 4] == 0:  # If no object already assigned
-                target[grid_y, grid_x, 0] = cx_rel
-                target[grid_y, grid_x, 1] = cy_rel
-                target[grid_y, grid_x, 2] = w
-                target[grid_y, grid_x, 3] = h
-                target[grid_y, grid_x, 4] = 1  # Object confidence
-                target[grid_y, grid_x, 5 + label] = 1  # Class one-hot encoding
+            # Only assign if cell is empty (no object yet)
+            if target[grid_y, grid_x, 4] == 0:
+                # Box coordinates and confidence
+                target[grid_y, grid_x, 0] = cx_cell  # x offset within cell [0,1]
+                target[grid_y, grid_x, 1] = cy_cell  # y offset within cell [0,1]
+                target[grid_y, grid_x, 2] = w  # width relative to image [0,1]
+                target[grid_y, grid_x, 3] = h  # height relative to image [0,1]
+                target[grid_y, grid_x, 4] = 1.0  # confidence
+
+                # Class one-hot encoding
+                target[grid_y, grid_x, 5 + label] = 1.0
 
         return target
 

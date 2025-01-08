@@ -129,103 +129,83 @@ def train_step(model, batch, optimizer):
     return loss
 
 
-def validate(model, val_loader):
-    """Run validation with detailed debugging"""
-    model.eval()
-    losses = []
-    print("\nValidation Details:")
+def format_loss_components(components):
+    """Format loss components for display"""
+    return (
+        f"XY: {components['xy']:.4f}, "
+        f"WH: {components['wh']:.4f}, "
+        f"Conf: {components['conf']:.4f}, "
+        f"Class: {components['class']:.4f}, "
+        f"IoU: {components['iou']:.4f}"
+    )
 
-    for batch_idx, batch in enumerate(val_loader):
+
+def validate(model, val_loader):
+    """Run validation with aggregated loss components"""
+    model.eval()
+    val_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
+    num_batches = 0
+    print("\nValidation:")
+
+    for batch in val_loader:
         images, targets = batch
-        predictions = model(images)  # [batch, S, S, B*(5+C)]
+        predictions = model(images)
+
+        # Debug prediction statistics
+        analyze_predictions(predictions, targets, model)
+
         loss, components = yolo_loss(predictions, targets, model)
 
-        # Print details for each validation image
-        print(f"\nBatch {batch_idx}:")
-        print(f"Loss: {loss.item():.4f}")
-        print(f"Components:")
+        # Accumulate losses
+        val_losses["total"] += loss.item()
         for k, v in components.items():
-            print(f"  {k}: {v:.4f}")
+            val_losses[k] += v
+        num_batches += 1
 
-        # Debug predictions vs targets
-        batch_size = predictions.shape[0]
-        S = model.S
-        B = model.B
-        C = model.C
+    # Calculate averages
+    for k in val_losses:
+        val_losses[k] /= num_batches
 
-        # Reshape predictions
-        pred = mx.reshape(
-            predictions, (batch_size, S, S, B, 5 + C)
-        )  # [batch,S,S,B,5+C]
-        pred_xy = mx.sigmoid(pred[..., 0:2])  # [batch,S,S,B,2]
-        pred_wh = pred[..., 2:4]  # [batch,S,S,B,2]
-        pred_conf = mx.sigmoid(pred[..., 4])  # [batch,S,S,B]
-        pred_classes = mx.softmax(pred[..., 5:], axis=-1)  # [batch,S,S,B,C]
+    # Print validation summary
+    print(f"\nValidation Summary:")
+    print(f"Total Loss: {val_losses['total']:.4f}")
+    print(f"Components: {format_loss_components(val_losses)}")
 
-        # Extract targets
-        target_xy = targets[..., 0:2]  # [batch,S,S,2]
-        target_wh = targets[..., 2:4]  # [batch,S,S,2]
-        target_conf = targets[..., 4]  # [batch,S,S]
-        target_classes = targets[..., 5:]  # [batch,S,S,C]
-
-        # Find cells with objects
-        for b in range(batch_size):
-            print(f"\nImage {b}:")
-            for i in range(S):
-                for j in range(S):
-                    if target_conf[b, i, j].item() > 0:
-                        print(f"Object in cell ({i},{j}):")
-                        print(
-                            f"  Target: xy={target_xy[b,i,j].tolist()}, wh={target_wh[b,i,j].tolist()}"
-                        )
-                        class_idx = mx.argmax(target_classes[b, i, j]).item()
-                        print(f"  Class: {VOC_CLASSES[class_idx]}")
-                        for k in range(B):
-                            print(
-                                f"  Pred {k}: xy={pred_xy[b,i,j,k].tolist()}, wh={pred_wh[b,i,j,k].tolist()}"
-                            )
-                            pred_class_idx = mx.argmax(pred_classes[b, i, j, k]).item()
-                            print(
-                                f"    Class: {VOC_CLASSES[pred_class_idx]} ({mx.max(pred_classes[b,i,j,k]).item():.2f})"
-                            )
-
-        losses.append(loss)
-
-    # Evaluate all losses at once
-    mx.eval(losses)
-    avg_loss = sum(l.item() for l in losses) / len(losses)
-    print(f"\nAverage validation loss: {avg_loss:.4f}")
-    return avg_loss
+    return val_losses["total"]
 
 
-def save_checkpoint(model, optimizer, epoch, loss, save_dir):
-    """Save model checkpoint"""
-    os.makedirs(save_dir, exist_ok=True)
+def save_checkpoint(model, optimizer, epoch, checkpoint_type="regular"):
+    """Save model checkpoint
 
-    # Save model weights using safetensors
-    model_path = os.path.join(save_dir, f"model_epoch_{epoch}.safetensors")
-    print(f"\nSaving model to {model_path}")
-    print("Model parameters before saving:")
-    for name, param in model.parameters().items():
-        print(f"  {name}: {param.shape if hasattr(param, 'shape') else 'no shape'}")
+    Args:
+        model: YOLO model instance
+        optimizer: Optimizer instance
+        epoch: Current epoch number
+        checkpoint_type: Either "regular" or "best"
+    """
+    # Create checkpoint directory
+    save_dir = Path("checkpoints")
+    save_dir.mkdir(exist_ok=True)
 
-    model.save_weights(model_path)
+    # Determine checkpoint path based on type
+    if checkpoint_type == "best":
+        model_path = save_dir / "best_model.safetensors"
+        info_path = save_dir / "best_info.npz"
+    else:
+        model_path = save_dir / f"model_epoch_{epoch}.safetensors"
+        info_path = save_dir / f"info_epoch_{epoch}.npz"
 
-    # Verify saved weights
-    print("\nVerifying saved weights:")
-    temp_model = YOLO()
-    temp_model.load_weights(model_path)
-    for name, param in temp_model.parameters().items():
-        print(f"  {name}: {param.shape if hasattr(param, 'shape') else 'no shape'}")
+    print(f"\nSaving {checkpoint_type} checkpoint to {model_path}")
 
-    # Save training info (without optimizer state)
+    # Save model weights
+    model.save_weights(str(model_path))
+
+    # Save training info
     info = {
         "epoch": mx.array(epoch),
-        "loss": mx.array(loss),
         "learning_rate": mx.array(optimizer.learning_rate),
     }
-    info_path = os.path.join(save_dir, f"info_epoch_{epoch}.npz")
-    mx.savez(info_path, **info)
+    mx.savez(str(info_path), **info)
 
     return model_path, info_path
 
@@ -296,6 +276,43 @@ def parse_args():
     return parser.parse_args()
 
 
+def analyze_predictions(predictions, targets, model):
+    """Analyze prediction statistics for debugging"""
+    batch_size = predictions.shape[0]
+    S = model.S
+    B = model.B
+    C = model.C
+
+    # Reshape predictions
+    pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
+
+    # Extract components
+    pred_xy = mx.sigmoid(pred[..., 0:2])  # [batch,S,S,B,2]
+    pred_wh = pred[..., 2:4]  # [batch,S,S,B,2]
+    pred_conf = mx.sigmoid(pred[..., 4])  # [batch,S,S,B]
+
+    # Extract targets
+    target_xy = targets[..., 0:2]  # [batch,S,S,2]
+    target_wh = targets[..., 2:4]  # [batch,S,S,2]
+    target_conf = targets[..., 4]  # [batch,S,S]
+
+    print("\nPrediction Analysis:")
+    print(f"XY range: [{pred_xy.min().item():.4f}, {pred_xy.max().item():.4f}]")
+    print(f"WH range: [{pred_wh.min().item():.4f}, {pred_wh.max().item():.4f}]")
+    print(f"Conf range: [{pred_conf.min().item():.4f}, {pred_conf.max().item():.4f}]")
+
+    print("\nTarget Analysis:")
+    print(f"XY range: [{target_xy.min().item():.4f}, {target_xy.max().item():.4f}]")
+    print(f"WH range: [{target_wh.min().item():.4f}, {target_wh.max().item():.4f}]")
+    print(
+        f"Conf range: [{target_conf.min().item():.4f}, {target_conf.max().item():.4f}]"
+    )
+
+    # Count objects
+    num_objects = mx.sum(target_conf).item()
+    print(f"\nNumber of objects: {num_objects}")
+
+
 def main():
     args = parse_args()
 
@@ -340,11 +357,7 @@ def main():
     )
 
     if args.mode == "dev":
-        # Override image_ids with our fixed dev set
         train_dataset.image_ids = dev_image_ids
-        print("\nDevelopment mode using fixed image set:")
-        for img_id in dev_image_ids:
-            print(f"  {img_id}")
     elif train_size:
         train_dataset.image_ids = train_dataset.image_ids[:train_size]
 
@@ -401,73 +414,91 @@ def main():
 
     for epoch in range(epoch, num_epochs):
         model.train()
-        epoch_loss = 0
-        epoch_xy_loss = 0
-        epoch_wh_loss = 0
+        epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
         num_batches = 0
         start_time = time.time()
 
         if show_batches:
-            print(".")
-            # print(f"Epoch {epoch + 1}/{num_epochs}")
+            print(f"\nEpoch {epoch + 1}/{num_epochs}")
 
         for batch_idx, batch in enumerate(train_loader):
             # Training step
             loss, components = train_step(model, batch, optimizer)
 
             # Print batch details if enabled
-            if show_batches and False:
-                print(f"\nBatch {batch_idx}:")
-                print(f"Loss: {loss.item():.4f}")
-                print(f"XY Loss: {components['xy']:.4f}")
-                print(f"WH Loss: {components['wh']:.4f}")
+            # if show_batches:
+            #    print(f"\nBatch {batch_idx}:")
+            #    print(f"Total Loss: {loss.item():.4f}")
+            #    print(f"Components: {format_loss_components(components)}")
 
-            # Evaluate immediately to free memory
-            mx.eval(loss, components)
-
-            epoch_loss += loss.item()
-            epoch_xy_loss += components["xy"]
-            epoch_wh_loss += components["wh"]
+            # Update epoch metrics
+            epoch_losses["total"] += loss.item()
+            for k, v in components.items():
+                epoch_losses[k] += v
             num_batches += 1
 
-        # Calculate epoch metrics
-        avg_loss = epoch_loss / num_batches
-        avg_xy_loss = epoch_xy_loss / num_batches
-        avg_wh_loss = epoch_wh_loss / num_batches
-        epoch_time = time.time() - start_time
+            # Evaluate immediately to free memory
+            mx.eval(loss)
 
-        # Run validation and update table
+        # Calculate epoch metrics
+        epoch_time = time.time() - start_time
+        for k in epoch_losses:
+            epoch_losses[k] /= num_batches
+
+        # Validation
         if (epoch + 1) % val_frequency == 0:
             val_loss = validate(model, val_loader)
-            last_val_loss = f"{val_loss:.4f}"
             is_best = val_loss < best_val_loss
             if is_best:
                 best_val_loss = val_loss
-                save_checkpoint(
-                    model,
-                    optimizer,
-                    epoch + 1,
-                    val_loss,
-                    os.path.join("checkpoints", "best"),
-                )
+                save_checkpoint(model, optimizer, epoch + 1, "best")
+                print("New best model saved!")
         else:
-            is_best = False
+            val_loss = last_val_loss
 
         # Add row to table
-        row = [
-            f"{epoch + 1}/{num_epochs}",
-            f"{avg_loss:.4f}",
-            f"{avg_xy_loss:.4f}",
-            f"{avg_wh_loss:.4f}",
-            last_val_loss,
-            f"{epoch_time:.2f}",
-            "*" if is_best else "",
-        ]
-        table.append(row)
+        table.append(
+            [
+                epoch + 1,
+                f"{epoch_losses['total']:.4f}",
+                f"{epoch_losses['xy']:.4f}",
+                f"{epoch_losses['wh']:.4f}",
+                f"{epoch_losses['conf']:.4f}",
+                f"{epoch_losses['class']:.4f}",
+                f"{epoch_losses['iou']:.4f}",
+                f"{val_loss:.4f}" if isinstance(val_loss, float) else val_loss,
+                f"{epoch_time:.1f}",
+                "*" if val_loss == best_val_loss else "",
+            ]
+        )
 
-        # Only print table if batch details are hidden
-        if not show_batches:
-            print(tabulate(table, headers=headers, tablefmt="grid"))
+        # Print progress
+        if not show_batches or (epoch + 1) % 10 == 0:
+            print("\nTraining Progress:")
+            print(
+                tabulate(
+                    table[-10:],  # Show last 10 epochs
+                    headers=[
+                        "Epoch",
+                        "Loss",
+                        "XY",
+                        "WH",
+                        "Conf",
+                        "Class",
+                        "IoU",
+                        "Val",
+                        "Time",
+                        "Best",
+                    ],
+                    tablefmt="simple",
+                )
+            )
+
+        # Save regular checkpoint
+        if (epoch + 1) % 10 == 0:
+            save_checkpoint(model, optimizer, epoch + 1)
+
+    print("\nTraining completed!")
 
 
 if __name__ == "__main__":

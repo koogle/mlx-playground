@@ -142,9 +142,13 @@ def yolo_loss(predictions, targets, model):
     # 5. Find responsible predictor
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
     box_mask = ious >= best_ious  # [batch,S,S,B]
-    box_mask = mx.expand_dims(box_mask, axis=-1)  # [batch,S,S,B,1]
-    obj_mask = mx.expand_dims(obj_mask, axis=-1)  # [batch,S,S,1]
-    box_mask = box_mask * mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,B,1]
+
+    # Expand obj_mask for broadcasting with box_mask
+    obj_mask = mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,1]
+    obj_mask = mx.broadcast_to(obj_mask, (batch_size, S, S, B))  # [batch,S,S,B]
+
+    # Combine masks
+    box_mask = mx.squeeze(box_mask, axis=-1) * obj_mask  # [batch,S,S,B]
 
     # 6. Compute losses
     # Coordinate loss (only for responsible predictors)
@@ -175,5 +179,5 @@ def yolo_loss(predictions, targets, model):
         "wh": mx.mean(wh_loss).item(),
         "conf": mx.mean(conf_loss).item(),
         "class": mx.mean(class_loss).item(),
-        "iou": mx.mean(ious * box_mask).item(),
+        "iou": mx.mean(mx.squeeze(ious, axis=-1) * box_mask).item(),
     }

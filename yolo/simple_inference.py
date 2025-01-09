@@ -142,11 +142,25 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     return boxes, scores, class_ids
 
 
-def draw_boxes(image, boxes, scores, classes=None, class_names=None):
-    """Draw predicted boxes on image with class labels"""
+def draw_boxes(
+    image, boxes, scores, classes=None, class_names=None, color="red", is_gt=False
+):
+    """Draw boxes on image with class labels
+
+    Args:
+        image: PIL Image to draw on
+        boxes: List of [x1,y1,x2,y2] boxes in normalized coordinates
+        scores: List of confidence scores (or None for ground truth)
+        classes: List of class indices
+        class_names: List of class names
+        color: Color to use for boxes ("red" for predictions, "green" for ground truth)
+        is_gt: Whether these are ground truth boxes
+    """
     draw = ImageDraw.Draw(image)
 
-    for i, (box, score) in enumerate(zip(boxes, scores)):
+    for i, (box, score) in enumerate(
+        zip(boxes, scores if scores is not None else [1.0] * len(boxes))
+    ):
         # Convert normalized coordinates to pixels
         x1, y1, x2, y2 = box.tolist()
         x1 = x1 * image.width
@@ -155,15 +169,21 @@ def draw_boxes(image, boxes, scores, classes=None, class_names=None):
         y2 = y2 * image.height
 
         # Draw box
-        draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
+        draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
 
         # Draw label
-        label = f"{score:.2f}"
-        if classes is not None and class_names is not None:
-            class_id = classes[i].item()
-            label = f"{class_names[class_id]}: {score:.2f}"
+        if is_gt:
+            label = (
+                f"GT: {class_names[classes[i].item()]}" if classes is not None else "GT"
+            )
+        else:
+            label = (
+                f"{class_names[classes[i].item()]}: {score:.2f}"
+                if classes is not None
+                else f"{score:.2f}"
+            )
 
-        draw.text((x1, y1 - 10), label, fill="red")
+        draw.text((x1, y1 - 10), label, fill=color)
 
     return image
 
@@ -325,12 +345,27 @@ def analyze_single_image(args, model, image_id):
     predictions = model(input_tensor)
 
     # Process predictions
-    boxes, scores, classes = process_predictions(
-        predictions[0], model
-    )  # Process first batch
+    boxes, scores, classes = process_predictions(predictions[0], model)
 
-    # Draw boxes on image
-    output_image = draw_boxes(pil_image, boxes, scores, classes, VOC_CLASSES)
+    # Load ground truth
+    gt_boxes, gt_classes = load_ground_truth(image_id, args.data_dir)
+    gt_class_indices = [VOC_CLASSES.index(c) for c in gt_classes]
+
+    # Draw ground truth boxes in green
+    output_image = draw_boxes(
+        pil_image,
+        mx.array(gt_boxes),
+        None,  # No scores for ground truth
+        mx.array(gt_class_indices),
+        VOC_CLASSES,
+        color="green",
+        is_gt=True,
+    )
+
+    # Draw predicted boxes in red
+    output_image = draw_boxes(
+        output_image, boxes, scores, classes, VOC_CLASSES, color="red", is_gt=False
+    )
 
     # Save or display result
     output_path = f"output_{image_id}.jpg"
@@ -338,6 +373,10 @@ def analyze_single_image(args, model, image_id):
     print(f"\nSaved detection result to {output_path}")
 
     # Print detection details
+    print("\nGround Truth:")
+    for box, class_name in zip(gt_boxes, gt_classes):
+        print(f"- {class_name} at {box.tolist()}")
+
     print("\nDetections:")
     for box, score, class_id in zip(boxes, scores, classes):
         class_name = VOC_CLASSES[class_id.item()]

@@ -17,8 +17,8 @@ import math
 
 def compute_box_iou(boxes1, boxes2):
     """
-    boxes1: [batch,S,S,B,4] - Predicted boxes
-    boxes2: [batch,S,S,B,4] - Target boxes (broadcasted)
+    boxes1: [batch,S,S,B,4] - Predicted boxes (only x,y,w,h)
+    boxes2: [batch,S,S,1,4] - Target boxes (only x,y,w,h)
     """
     # Convert from center format to corner format
     boxes1_x1 = boxes1[..., 0:1] - boxes1[..., 2:3] / 2
@@ -131,16 +131,20 @@ def yolo_loss(predictions, targets, model):
     target_classes = mx.expand_dims(targets[..., 5:], axis=3)  # [batch,S,S,1,C]
 
     # 4. Compute IoU between predictions and targets
-    pred_boxes = mx.concatenate([pred_xy, pred_wh], axis=-1)  # [batch,S,S,B,4]
-    target_boxes = mx.concatenate([target_xy, target_wh], axis=-1)  # [batch,S,S,1,4]
+    pred_boxes = mx.concatenate(
+        [pred_xy, pred_wh], axis=-1
+    )  # [batch,S,S,B,4] (only x,y,w,h)
+    target_boxes = mx.concatenate(
+        [target_xy, target_wh], axis=-1
+    )  # [batch,S,S,1,4] (only x,y,w,h)
     ious = compute_box_iou(pred_boxes, target_boxes)  # [batch,S,S,B]
 
     # 5. Find responsible predictor
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
+    box_mask = ious >= best_ious  # [batch,S,S,B]
+    box_mask = mx.expand_dims(box_mask, axis=-1)  # [batch,S,S,B,1]
     obj_mask = mx.expand_dims(obj_mask, axis=-1)  # [batch,S,S,1]
-    box_mask = mx.expand_dims((ious >= best_ious), axis=-1) * mx.expand_dims(
-        obj_mask, axis=3
-    )  # [batch,S,S,B,1]
+    box_mask = box_mask * mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,B,1]
 
     # 6. Compute losses
     # Coordinate loss (only for responsible predictors)

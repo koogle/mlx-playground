@@ -127,7 +127,7 @@ def yolo_loss(predictions, targets, model):
     # 3. Target processing
     target_xy = mx.expand_dims(targets[..., 0:2], axis=3)  # [batch,S,S,1,2]
     target_wh = mx.expand_dims(targets[..., 2:4], axis=3)  # [batch,S,S,1,2]
-    obj_mask = mx.expand_dims(targets[..., 4], axis=3)  # [batch,S,S,1]
+    obj_mask = targets[..., 4]  # [batch,S,S]
     target_classes = mx.expand_dims(targets[..., 5:], axis=3)  # [batch,S,S,1,C]
 
     # 4. Compute IoU between predictions and targets
@@ -137,7 +137,10 @@ def yolo_loss(predictions, targets, model):
 
     # 5. Find responsible predictor
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
-    box_mask = (ious >= best_ious) * obj_mask  # [batch,S,S,B]
+    obj_mask = mx.expand_dims(obj_mask, axis=-1)  # [batch,S,S,1]
+    box_mask = mx.expand_dims((ious >= best_ious), axis=-1) * mx.expand_dims(
+        obj_mask, axis=3
+    )  # [batch,S,S,B,1]
 
     # 6. Compute losses
     # Coordinate loss (only for responsible predictors)

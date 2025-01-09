@@ -47,23 +47,18 @@ def parse_args():
 
 def preprocess_frame(frame, target_size=448):
     """Preprocess frame for model input"""
-    print("\nPreprocessing:")
-    print(f"Input frame shape: {frame.shape}")
 
     # Convert BGR to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     # Resize frame
     resized = cv2.resize(rgb_frame, (target_size, target_size))
-    print(f"Resized shape: {resized.shape}")
 
     # Normalize to [0, 1]
     normalized = resized.astype(np.float32) / 255.0
-    print(f"Value range: [{normalized.min():.3f}, {normalized.max():.3f}]")
 
     # Add batch dimension
     batched = np.expand_dims(normalized, axis=0)
-    print(f"Final input shape: {batched.shape}")
 
     return mx.array(batched)
 
@@ -410,7 +405,7 @@ def main():
     print("Loading model...")
 
     # Initialize model with same parameters as training
-    model = YOLO(S=7, B=5, C=20)  # B*(5+C) = 5*(5+20) = 5*25 = 125 output channels
+    model = YOLO(S=7, B=5, C=20)
 
     if not args.model.exists():
         raise FileNotFoundError(f"Model checkpoint not found: {args.model}")
@@ -418,9 +413,6 @@ def main():
     try:
         model.load_weights(str(args.model))
         print("Model weights loaded successfully")
-        params = model.parameters()
-        if not params:
-            print("  Warning: No parameters loaded")
     except Exception as e:
         print(f"Error loading model weights: {e}")
         print("\nModel architecture:")
@@ -436,7 +428,6 @@ def main():
     print(f"Loaded model from {args.model}")
 
     if args.image:
-        # Extract image ID from path if full path provided
         image_id = args.image.stem
         analyze_single_image(args, model, image_id)
         return
@@ -449,9 +440,8 @@ def main():
 
     last_inference_time = 0
     inference_interval = args.interval
-    last_boxes = None
-    last_predictions = None  # Store last predictions for visualization
-    show_activations = False  # Toggle for visualization mode
+    last_predictions = None
+    show_activations = False
 
     print("Starting inference. Press 'q' to quit, TAB to toggle activation view")
 
@@ -470,27 +460,44 @@ def main():
                     predictions = model(input_tensor)
                     last_predictions = predictions  # Store for visualization
 
-                    # Process predictions
-                    boxes, scores, classes = process_predictions(predictions[0], model)
+                    if show_activations and last_predictions is not None:
+                        # Show activation visualization
+                        activation_frame = visualize_activations(
+                            frame, last_predictions, model
+                        )
+                        cv2.imshow("Activations", activation_frame)
+                    else:
+                        # Process and show detections
+                        boxes, scores, classes = process_predictions(
+                            predictions[0], model
+                        )
 
-                    # Convert frame to PIL Image for drawing
-                    pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                        # Print detection details
+                        print("\nDetections:")
+                        for box, score, class_id in zip(boxes, scores, classes):
+                            class_name = VOC_CLASSES[class_id.item()]
+                            print(
+                                f"- {class_name}: {score.item():.3f} at {box.tolist()}"
+                            )
 
-                    # Draw detections
-                    output_frame = draw_boxes(
-                        pil_frame, boxes, scores, classes, VOC_CLASSES
-                    )
+                        # Convert frame to PIL Image for drawing
+                        pil_frame = Image.fromarray(
+                            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        )
 
-                    # Convert back to OpenCV format
-                    frame = cv2.cvtColor(np.array(output_frame), cv2.COLOR_RGB2BGR)
+                        # Draw detections
+                        output_frame = draw_boxes(
+                            pil_frame, boxes, scores, classes, VOC_CLASSES
+                        )
+
+                        # Convert back to OpenCV format
+                        frame = cv2.cvtColor(np.array(output_frame), cv2.COLOR_RGB2BGR)
+                        cv2.imshow("YOLO Detection", frame)
 
                     last_inference_time = current_time
 
                 except Exception as e:
                     print(f"Inference error: {e}")
-
-            # Show the frame
-            cv2.imshow("YOLO Detection", frame)
 
             # Handle key presses
             key = cv2.waitKey(1) & 0xFF
@@ -498,6 +505,10 @@ def main():
                 break
             elif key == ord("\t"):  # TAB key
                 show_activations = not show_activations
+                if show_activations:
+                    cv2.destroyWindow("YOLO Detection")
+                else:
+                    cv2.destroyWindow("Activations")
                 print(f"Showing {'activations' if show_activations else 'boxes'}")
 
     finally:

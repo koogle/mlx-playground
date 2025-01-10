@@ -116,17 +116,23 @@ def yolo_loss(predictions, targets, model):
 
     # 2. Box predictions with sigmoid for x,y and anchors for w,h
     pred_xy = mx.sigmoid(mx.clip(pred[..., 0:2], -10, 10))  # [batch,S,S,B,2]
+
+    # Handle anchor boxes and width/height prediction
     anchor_wh = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
     anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,B,2]
     anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,1,B,2]
+    anchor_wh = mx.broadcast_to(anchor_wh, (batch_size, S, S, B, 2))
 
+    # Predict width/height with stricter clipping
     pred_wh = anchor_wh * mx.exp(
-        mx.clip(pred[..., 2:4], -1.0, 1.0)  # Limit exponential range
+        mx.clip(pred[..., 2:4], -1.0, 1.0)  # Even more limited range
     )
-    pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -10, 10))  # Object confidence
-    pred_classes = mx.softmax(
-        mx.clip(pred[..., 5:], -10, 10), axis=-1
-    )  # Class probabilities
+
+    # Clip predicted width/height to prevent extremes
+    pred_wh = mx.clip(pred_wh, eps, 1.0 - eps)
+
+    pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -10, 10))
+    pred_classes = mx.softmax(mx.clip(pred[..., 5:], -10, 10), axis=-1)
 
     # 3. Target processing
     target_xy = mx.expand_dims(targets[..., 0:2], axis=3)  # [batch,S,S,1,2]
@@ -145,80 +151,74 @@ def yolo_loss(predictions, targets, model):
     )  # [batch,S,S,1,4] (only x,y,w,h)
 
     # Compute IoU between predictions and targets
-    ious = compute_box_iou(pred_boxes, target_boxes)  # [batch,S,S,B]
+    ious = compute_box_iou(pred_boxes, target_boxes)  # [batch,S,S,B, 1]
+    ious = mx.squeeze(ious, axis=-1)  # [batch,S,S,B]
 
-    # 5. Find responsible predictor
+    # 5. Find responsible predictor (fix dimensions)
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
-    box_mask = ious >= best_ious  # [batch,S,S,B]
-    box_mask = mx.squeeze(box_mask, axis=-1)
+    box_mask = ious >= best_ious  # [batch,S,S,B, 1]
+    # box_mask = mx.squeeze(box_mask, axis=-1)  # [batch,S,S,B]
 
-    # Expand obj_mask for broadcasting with box_mask
+    # Expand obj_mask for broadcasting
     obj_mask = mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,1]
     obj_mask = mx.broadcast_to(obj_mask, (batch_size, S, S, B))  # [batch,S,S,B]
 
-    # Now broadcast target_wh for loss computation
-    target_wh = mx.broadcast_to(target_wh, pred_wh.shape)  # [batch,S,S,B,2]
+    # Combine masks - no need to squeeze
+    box_mask = box_mask * obj_mask  # [batch,S,S,B]
 
-    # 6. Compute losses
-    # Coordinate loss (only for responsible predictors)
+    # 6. Compute losses with proper broadcasting
+    # Coordinate loss (already normalized 0-1)
     xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1)
-    wh_loss = box_mask * mx.sum(
-        mx.square(mx.log(pred_wh + eps) - mx.log(target_wh + eps)), axis=-1
-    )
 
-    # Confidence loss
+    # Width/height loss with better normalization
+    wh_scale_error = mx.log(pred_wh / (target_wh + eps) + eps)
+    normalized_wh_error = mx.sigmoid(wh_scale_error)
+    centered_error = normalized_wh_error - 0.5
+    wh_loss = box_mask * mx.sum(mx.square(centered_error), axis=-1)
+
+    # Confidence loss (use original box_mask)
     conf_loss = (
-        box_mask * mx.square(pred_conf - 1)  # Object confidence loss
-        + (1 - box_mask) * mx.square(pred_conf) * 0.5  # No object confidence loss
+        box_mask * mx.square(pred_conf - ious)  # Object confidence should match IoU
+        + (1 - box_mask) * mx.square(pred_conf) * 0.1  # Reduce weight of no-object loss
     )
 
-    # Class loss (only for cells with objects)
-    class_loss = obj_mask * mx.sum(mx.square(pred_classes - target_classes), axis=-1)
+    # Class loss (use original box_mask)
+    class_loss = box_mask * mx.sum(mx.square(pred_classes - target_classes), axis=-1)
 
-    # Debug information about loss components
-    debug_info = {
-        "raw_xy_range": (pred_xy.min().item(), pred_xy.max().item()),
-        "raw_wh_range": (pred_wh.min().item(), pred_wh.max().item()),
-        "target_xy_range": (target_xy.min().item(), target_xy.max().item()),
-        "target_wh_range": (target_wh.min().item(), target_wh.max().item()),
-        "wh_scale_error": mx.mean(
-            mx.abs(mx.log(pred_wh + eps) - mx.log(target_wh + eps))
-        ).item(),
-        "iou_range": (ious.min().item(), ious.max().item()),
-        "num_objects": mx.sum(obj_mask).item(),
-        "num_responsible": mx.sum(box_mask).item(),
-        "raw_losses": {
-            "xy": mx.sum(xy_loss).item(),
-            "wh": mx.sum(wh_loss).item(),
-            "conf": mx.sum(conf_loss).item(),
-            "class": mx.sum(class_loss).item(),
-        },
-        "anchor_stats": {
-            "min": model.anchors.min().item(),
-            "max": model.anchors.max().item(),
-            "mean": model.anchors.mean().item(),
-        },
-        "wh_relative_error": mx.mean(
-            mx.abs(pred_wh - target_wh) / (target_wh + eps)
-        ).item(),
-    }
-
-    # 7. Compute final loss with weights
+    # 7. Compute final loss with rebalanced weights
     xy_weight = 5.0
-    wh_weight = 25.0  # Increased from 5.0
+    wh_weight = 5.0
+    conf_weight = 2.0  # Increased to focus more on confidence
+    class_weight = 1.0
 
     total_loss = (
-        xy_weight * xy_loss  # XY loss
-        + wh_weight * wh_loss  # WH loss (increased weight)
-        + conf_loss  # Confidence loss
-        + class_loss  # Class loss
+        xy_weight * xy_loss
+        + wh_weight * wh_loss
+        + conf_weight * conf_loss
+        + class_weight * class_loss
     )
 
+    # Add more detailed debug info
+    debug_info = {
+        "wh_scale_error": (wh_scale_error.min().item(), wh_scale_error.max().item()),
+        "normalized_wh": (
+            normalized_wh_error.min().item(),
+            normalized_wh_error.max().item(),
+        ),
+        "centered_error": (centered_error.min().item(), centered_error.max().item()),
+        "pred_wh_range": (pred_wh.min().item(), pred_wh.max().item()),
+        "target_wh_range": (target_wh.min().item(), target_wh.max().item()),
+        "iou_stats": (ious.min().item(), ious.mean().item(), ious.max().item()),
+    }
+
+    # Clip total loss to prevent explosion
+    total_loss = mx.clip(total_loss, 0, 1000)
+
+    # Return mean loss and components
     return mx.mean(total_loss), {
         "xy": mx.mean(xy_loss).item(),
         "wh": mx.mean(wh_loss).item(),
         "conf": mx.mean(conf_loss).item(),
         "class": mx.mean(class_loss).item(),
-        "iou": mx.mean(mx.squeeze(ious, axis=-1) * box_mask).item(),
-        "debug": debug_info,
+        "iou": mx.mean(ious * box_mask).item(),
     }

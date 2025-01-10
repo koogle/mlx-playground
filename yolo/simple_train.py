@@ -419,7 +419,7 @@ def main():
         start_time = time.time()
 
         if show_batches:
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
+            print(f"Epoch {epoch + 1}/{num_epochs}")
 
         for batch_idx, batch in enumerate(train_loader):
             # Training step

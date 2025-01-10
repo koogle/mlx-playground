@@ -116,9 +116,13 @@ def yolo_loss(predictions, targets, model):
 
     # 2. Box predictions with sigmoid for x,y and anchors for w,h
     pred_xy = mx.sigmoid(mx.clip(pred[..., 0:2], -10, 10))  # Cell-relative [0,1]
-    pred_wh = model.anchors * mx.exp(
-        mx.clip(pred[..., 2:4], -10, 10)
-    )  # Image-relative [0,1]
+    anchor_wh = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
+    anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,B,2]
+    anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,1,B,2]
+
+    pred_wh = anchor_wh * mx.exp(
+        mx.clip(pred[..., 2:4], -1.0, 1.0)  # Limit exponential range
+    )
     pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -10, 10))  # Object confidence
     pred_classes = mx.softmax(
         mx.clip(pred[..., 5:], -10, 10), axis=-1
@@ -153,7 +157,9 @@ def yolo_loss(predictions, targets, model):
     # 6. Compute losses
     # Coordinate loss (only for responsible predictors)
     xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1)
-    wh_loss = box_mask * mx.sum(mx.square(pred_wh - target_wh), axis=-1)
+    wh_loss = box_mask * mx.sum(
+        mx.square(mx.log(pred_wh + eps) - mx.log(target_wh + eps)), axis=-1
+    )
 
     # Confidence loss
     conf_loss = (
@@ -164,16 +170,44 @@ def yolo_loss(predictions, targets, model):
     # Class loss (only for cells with objects)
     class_loss = obj_mask * mx.sum(mx.square(pred_classes - target_classes), axis=-1)
 
+    # Debug information about loss components
+    debug_info = {
+        "raw_xy_range": (pred_xy.min().item(), pred_xy.max().item()),
+        "raw_wh_range": (pred_wh.min().item(), pred_wh.max().item()),
+        "target_xy_range": (target_xy.min().item(), target_xy.max().item()),
+        "target_wh_range": (target_wh.min().item(), target_wh.max().item()),
+        "wh_scale_error": mx.mean(
+            mx.abs(mx.log(pred_wh + eps) - mx.log(target_wh + eps))
+        ).item(),
+        "iou_range": (ious.min().item(), ious.max().item()),
+        "num_objects": mx.sum(obj_mask).item(),
+        "num_responsible": mx.sum(box_mask).item(),
+        "raw_losses": {
+            "xy": mx.sum(xy_loss).item(),
+            "wh": mx.sum(wh_loss).item(),
+            "conf": mx.sum(conf_loss).item(),
+            "class": mx.sum(class_loss).item(),
+        },
+        "anchor_stats": {
+            "min": model.anchors.min().item(),
+            "max": model.anchors.max().item(),
+            "mean": model.anchors.mean().item(),
+        },
+        "wh_relative_error": mx.mean(
+            mx.abs(pred_wh - target_wh) / (target_wh + eps)
+        ).item(),
+    }
+
     # 7. Compute final loss with weights
+    xy_weight = 5.0
+    wh_weight = 25.0  # Increased from 5.0
+
     total_loss = (
-        5.0 * xy_loss
-        + 10 * wh_loss  # Coordinate loss weight
+        xy_weight * xy_loss  # XY loss
+        + wh_weight * wh_loss  # WH loss (increased weight)
         + conf_loss  # Confidence loss
         + class_loss  # Class loss
     )
-
-    # Compute mean losses for monitoring
-    num_objects = mx.sum(obj_mask) + eps
 
     return mx.mean(total_loss), {
         "xy": mx.mean(xy_loss).item(),
@@ -181,4 +215,5 @@ def yolo_loss(predictions, targets, model):
         "conf": mx.mean(conf_loss).item(),
         "class": mx.mean(class_loss).item(),
         "iou": mx.mean(mx.squeeze(ious, axis=-1) * box_mask).item(),
+        "debug": debug_info,
     }

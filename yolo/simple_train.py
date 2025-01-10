@@ -157,9 +157,13 @@ def validate(model, val_loader):
         loss, components = yolo_loss(predictions, targets, model)
 
         # Accumulate losses
+
         val_losses["total"] += loss.item()
-        for k, v in components.items():
-            val_losses[k] += v
+        # Only update the basic loss components
+        for k in ["xy", "wh", "conf", "class", "iou"]:
+            if k in components:
+                val_losses[k] += components[k]
+
         num_batches += 1
 
     # Calculate averages
@@ -433,8 +437,11 @@ def main():
 
             # Update epoch metrics
             epoch_losses["total"] += loss.item()
-            for k, v in components.items():
-                epoch_losses[k] += v
+            # Only update the basic loss components
+            for k in ["xy", "wh", "conf", "class", "iou"]:
+                if k in components:
+                    epoch_losses[k] += components[k]
+
             num_batches += 1
 
             # Evaluate immediately to free memory

@@ -166,7 +166,8 @@ def yolo_loss(predictions, targets, model):
 
     # 7. Compute final loss with weights
     total_loss = (
-        5.0 * (xy_loss + wh_loss)  # Coordinate loss weight
+        5.0 * xy_loss
+        + 10 * wh_loss  # Coordinate loss weight
         + conf_loss  # Confidence loss
         + class_loss  # Class loss
     )

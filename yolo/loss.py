@@ -115,7 +115,7 @@ def yolo_loss(predictions, targets, model):
     pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))  # [batch,S,S,B,5+C]
 
     # 2. Box predictions with sigmoid for x,y and anchors for w,h
-    pred_xy = mx.sigmoid(mx.clip(pred[..., 0:2], -10, 10))  # Cell-relative [0,1]
+    pred_xy = mx.sigmoid(mx.clip(pred[..., 0:2], -10, 10))  # [batch,S,S,B,2]
     anchor_wh = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
     anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,B,2]
     anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,1,B,2]
@@ -138,21 +138,26 @@ def yolo_loss(predictions, targets, model):
     pred_boxes = mx.concatenate(
         [pred_xy, pred_wh], axis=-1
     )  # [batch,S,S,B,4] (only x,y,w,h)
+
+    # Don't broadcast target_wh yet - keep as [batch,S,S,1,2]
     target_boxes = mx.concatenate(
         [target_xy, target_wh], axis=-1
     )  # [batch,S,S,1,4] (only x,y,w,h)
+
+    # Compute IoU between predictions and targets
     ious = compute_box_iou(pred_boxes, target_boxes)  # [batch,S,S,B]
 
     # 5. Find responsible predictor
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
     box_mask = ious >= best_ious  # [batch,S,S,B]
+    box_mask = mx.squeeze(box_mask, axis=-1)
 
     # Expand obj_mask for broadcasting with box_mask
     obj_mask = mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,1]
     obj_mask = mx.broadcast_to(obj_mask, (batch_size, S, S, B))  # [batch,S,S,B]
 
-    # Combine masks
-    box_mask = mx.squeeze(box_mask, axis=-1) * obj_mask  # [batch,S,S,B]
+    # Now broadcast target_wh for loss computation
+    target_wh = mx.broadcast_to(target_wh, pred_wh.shape)  # [batch,S,S,B,2]
 
     # 6. Compute losses
     # Coordinate loss (only for responsible predictors)

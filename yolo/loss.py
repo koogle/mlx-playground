@@ -166,31 +166,59 @@ def yolo_loss(predictions, targets, model):
     # Combine masks - no need to squeeze
     box_mask = box_mask * obj_mask  # [batch,S,S,B]
 
-    # 6. Compute losses with proper broadcasting
-    # Coordinate loss (already normalized 0-1)
+    # 6. Compute losses with detailed debugging
+    # Width/height loss analysis
+    wh_debug = {
+        "pred_wh_stats": {
+            "min": pred_wh.min().item(),
+            "max": pred_wh.max().item(),
+            "mean": pred_wh.mean().item(),
+        },
+        "target_wh_stats": {
+            "min": target_wh.min().item(),
+            "max": target_wh.max().item(),
+            "mean": target_wh.mean().item(),
+        },
+        "anchor_stats": {
+            "min": model.anchors.min().item(),
+            "max": model.anchors.max().item(),
+            "mean": model.anchors.mean().item(),
+        },
+    }
+
+    # Compute raw width/height differences
+    wh_diff = pred_wh - target_wh
+    wh_debug["raw_diff"] = {
+        "min": wh_diff.min().item(),
+        "max": wh_diff.max().item(),
+        "mean": wh_diff.mean().item(),
+    }
+
+    # Width/height loss with detailed tracking
+    wh_loss = box_mask * mx.sum(mx.square(pred_wh - target_wh), axis=-1)
+
+    # Track loss statistics for objects only
+    active_wh_loss = wh_loss * box_mask
+    wh_debug["loss_stats"] = {
+        "total": mx.sum(wh_loss).item(),
+        "mean_all": mx.mean(wh_loss).item(),
+        "mean_active": (mx.sum(active_wh_loss) / (mx.sum(box_mask) + eps)).item(),
+        "num_active": mx.sum(box_mask).item(),
+    }
+
+    # Other losses remain the same
     xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1)
-
-    # Width/height loss with better normalization
-    wh_scale_error = mx.log(pred_wh / (target_wh + eps) + eps)
-    normalized_wh_error = mx.sigmoid(wh_scale_error)
-    centered_error = normalized_wh_error - 0.5
-    wh_loss = box_mask * mx.sum(mx.square(centered_error), axis=-1)
-
-    # Confidence loss with better weighting for positive examples
     conf_loss = (
-        box_mask * mx.square(pred_conf - ious) * 2.0  # Increased weight for objects
-        + (1 - box_mask) * mx.square(pred_conf) * 0.1  # Keep background suppressed
+        box_mask * mx.square(pred_conf - 1)
+        + (1 - box_mask) * mx.square(pred_conf) * 0.5
     )
+    class_loss = obj_mask * mx.sum(mx.square(pred_classes - target_classes), axis=-1)
 
-    # Class loss (use original box_mask)
-    class_loss = box_mask * mx.sum(mx.square(pred_classes - target_classes), axis=-1)
-
-    # 7. Compute final loss with rebalanced weights
+    # 7. Compute final loss with weights
     xy_weight = 5.0
     wh_weight = 5.0
-    conf_weight = 5.0  # Increased from 2.0
+    conf_weight = 1.0
     class_weight = 1.0
-
     total_loss = (
         xy_weight * xy_loss
         + wh_weight * wh_loss
@@ -198,27 +226,24 @@ def yolo_loss(predictions, targets, model):
         + class_weight * class_loss
     )
 
-    # Add more detailed debug info
-    debug_info = {
-        "wh_scale_error": (wh_scale_error.min().item(), wh_scale_error.max().item()),
-        "normalized_wh": (
-            normalized_wh_error.min().item(),
-            normalized_wh_error.max().item(),
-        ),
-        "centered_error": (centered_error.min().item(), centered_error.max().item()),
-        "pred_wh_range": (pred_wh.min().item(), pred_wh.max().item()),
-        "target_wh_range": (target_wh.min().item(), target_wh.max().item()),
-        "iou_stats": (ious.min().item(), ious.mean().item(), ious.max().item()),
-    }
 
-    # Clip total loss to prevent explosion
-    total_loss = mx.clip(total_loss, 0, 1000)
-
-    # Return mean loss and components
+    # Return with enhanced debugging info
     return mx.mean(total_loss), {
         "xy": mx.mean(xy_loss).item(),
         "wh": mx.mean(wh_loss).item(),
         "conf": mx.mean(conf_loss).item(),
         "class": mx.mean(class_loss).item(),
         "iou": mx.mean(ious * box_mask).item(),
+        "debug": {
+            "wh": wh_debug,
+            "iou_stats": {
+                "min": ious.min().item(),
+                "max": ious.max().item(),
+                "mean": ious.mean().item(),
+            },
+            "box_mask_stats": {
+                "active": mx.sum(box_mask).item(),
+                "total": mx.size(box_mask).item(),
+            },
+        },
     }

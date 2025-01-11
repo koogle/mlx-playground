@@ -63,18 +63,17 @@ def preprocess_frame(frame, target_size=448):
     return mx.array(batched)
 
 
-def decode_predictions(predictions, model, conf_threshold=0.25):
+def decode_predictions(predictions, model, conf_threshold=0.1):
     """Decode raw predictions to bounding boxes and class predictions."""
     print("\nDecoding predictions:")
     print(f"Raw predictions shape: {predictions.shape}")
 
-    batch_size = predictions.shape[0]
-    S = model.S  # Grid size
-    B = model.B  # Number of boxes per cell
-    C = model.C  # Number of classes
+    S = model.S  # Grid size (7)
+    B = model.B  # Number of boxes per cell (5)
+    C = model.C  # Number of classes (20)
 
-    # Reshape predictions to [batch, S, S, B, 5+C]
-    pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
+    # Reshape predictions to [S, S, B, 5+C]
+    pred = mx.reshape(predictions, (S, S, B, 5 + C))
     mx.eval(pred)
 
     # Extract components
@@ -123,10 +122,12 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     # Combine confidence with class probability
     scores = pred_conf * class_scores
 
-    # Reshape outputs
-    boxes = mx.reshape(boxes, (batch_size, S * S * B, 4))
-    scores = mx.reshape(scores, (batch_size, S * S * B))
-    class_ids = mx.reshape(class_ids, (batch_size, S * S * B))
+    # Reshape outputs - using tuples for shapes
+    boxes = mx.reshape(boxes, (S * S * B, 4))
+    scores = mx.reshape(scores, (S * S * B,))  # Fixed: Use tuple with single element
+    class_ids = mx.reshape(
+        class_ids, (S * S * B,)
+    )  # Fixed: Use tuple with single element
     mx.eval(boxes, scores, class_ids)
 
     print("\nFinal shapes:")
@@ -184,112 +185,50 @@ def draw_boxes(
 
 
 def visualize_activations(frame, predictions, model):
-    """Visualize activations from the final layer"""
+    """Create semi-transparent activation overlay on the frame"""
     batch_size, channels, grid_size, _ = predictions.shape
+    height, width = frame.shape[:2]
 
     # Reshape predictions to [batch, S, S, B*(5+C)]
     pred = mx.reshape(predictions, (batch_size, model.S, model.S, -1))[0]
     mx.eval(pred)
 
-    # Extract different components
-    box1 = pred[..., :4]  # First box coordinates
-    box2 = pred[..., 4:8]  # Second box coordinates
-    class_scores = pred[..., 8:]  # Class scores
+    # Get confidence scores from last layer
+    conf_scores = mx.sigmoid(pred[..., 4::5])  # Get all confidence scores
+    activation_map = mx.max(conf_scores, axis=-1)  # Max confidence at each cell
 
-    # Create different visualizations
-    vis_types = {
-        "box1_xy": mx.sum(mx.abs(box1[..., :2]), axis=-1),  # Box 1 position
-        "box1_wh": mx.sum(mx.abs(box1[..., 2:]), axis=-1),  # Box 1 size
-        "box2_xy": mx.sum(mx.abs(box2[..., :2]), axis=-1),  # Box 2 position
-        "box2_wh": mx.sum(mx.abs(box2[..., 2:]), axis=-1),  # Box 2 size
-        "class": mx.sum(mx.abs(class_scores), axis=-1),  # Class confidence
-    }
+    # Convert to numpy and normalize
+    act_np = activation_map.tolist()
+    act_np = np.array(act_np)
 
-    # Create grid layout
-    height, width = frame.shape[:2]
-    cell_height = height // model.S
-    cell_width = width // model.S
+    # Normalize to [0, 1]
+    act_min = np.min(act_np)
+    act_max = np.max(act_np)
+    if act_max > act_min:
+        act_np = (act_np - act_min) / (act_max - act_min)
 
-    # Create a layout of visualizations
-    n_vis = len(vis_types)
-    grid_width = 3
-    grid_height = (n_vis + grid_width - 1) // grid_width
+    # Resize to frame size
+    act_resized = cv2.resize(act_np, (width, height), interpolation=cv2.INTER_LINEAR)
 
-    # Create output image
-    output_height = grid_height * (cell_height * model.S)
-    output_width = grid_width * (cell_width * model.S)
-    output = np.zeros((output_height, output_width, 3), dtype=np.uint8)
+    # Create heatmap
+    heatmap = cv2.applyColorMap((act_resized * 255).astype(np.uint8), cv2.COLORMAP_JET)
 
-    # Add each visualization to the grid
-    for idx, (name, activations) in enumerate(vis_types.items()):
-        # Convert to numpy for processing
-        act_np = activations.tolist()
-        act_np = np.array(act_np)
+    # Create overlay
+    alpha = 0.5  # Transparency factor
+    overlay = cv2.addWeighted(frame, 1, heatmap, alpha, 0)
 
-        # Normalize to [0, 1]
-        act_min = np.min(act_np)
-        act_max = np.max(act_np)
-        if act_max > act_min:
-            act_np = (act_np - act_min) / (act_max - act_min)
+    # Add text for max activation value
+    cv2.putText(
+        overlay,
+        f"Max activation: {act_max:.3f}",
+        (10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (255, 255, 255),
+        2,
+    )
 
-        # Resize to grid size
-        act_resized = cv2.resize(
-            act_np,
-            (cell_width * model.S, cell_height * model.S),
-            interpolation=cv2.INTER_NEAREST,
-        )
-
-        # Convert to heatmap
-        heatmap = cv2.applyColorMap(
-            (act_resized * 255).astype(np.uint8), cv2.COLORMAP_JET
-        )
-
-        # Calculate position in grid
-        grid_y = idx // grid_width
-        grid_x = idx % grid_width
-
-        # Place in output image
-        y_start = grid_y * (cell_height * model.S)
-        x_start = grid_x * (cell_width * model.S)
-        output[
-            y_start : y_start + cell_height * model.S,
-            x_start : x_start + cell_width * model.S,
-        ] = heatmap
-
-        # Add label
-        cv2.putText(
-            output,
-            name,
-            (x_start + 10, y_start + 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (255, 255, 255),
-            2,
-        )
-
-        # Draw grid lines
-        for i in range(model.S + 1):
-            # Vertical lines
-            x = x_start + i * cell_width
-            cv2.line(
-                output,
-                (x, y_start),
-                (x, y_start + cell_height * model.S),
-                (255, 255, 255),
-                1,
-            )
-
-            # Horizontal lines
-            y = y_start + i * cell_height
-            cv2.line(
-                output,
-                (x_start, y),
-                (x_start + cell_width * model.S, y),
-                (255, 255, 255),
-                1,
-            )
-
-    return output
+    return overlay
 
 
 def load_ground_truth(image_id, data_dir="./VOCdevkit/VOC2012"):
@@ -323,7 +262,7 @@ def load_ground_truth(image_id, data_dir="./VOCdevkit/VOC2012"):
 
 
 def analyze_single_image(args, model, image_id):
-    """Process a single image with the model"""
+    """Process a single image with the model and show detailed analysis"""
     # Load and preprocess image
     image_path = args.data_dir / "JPEGImages" / f"{image_id}.jpg"
     if not image_path.exists():
@@ -336,22 +275,73 @@ def analyze_single_image(args, model, image_id):
     np_image = np.array(pil_image)
     input_tensor = preprocess_frame(np_image)
 
-    # Run inference
+    # Run inference with debug info
     predictions = model(input_tensor)
+
+    print("\nPrediction Analysis:")
+    print(f"Raw prediction shape: {predictions.shape}")
+
+    # Analyze raw predictions
+    pred = mx.reshape(predictions[0], (model.S, model.S, model.B, 5 + model.C))
+
+    print("\nRaw Prediction Stats:")
+    print(
+        f"XY (pre-sigmoid): [{pred[..., 0:2].min().item():.3f}, {pred[..., 0:2].max().item():.3f}]"
+    )
+    print(
+        f"WH (pre-exp): [{pred[..., 2:4].min().item():.3f}, {pred[..., 2:4].max().item():.3f}]"
+    )
+    print(
+        f"Conf (pre-sigmoid): [{pred[..., 4].min().item():.3f}, {pred[..., 4].max().item():.3f}]"
+    )
+
+    # After activation
+    pred_xy = mx.sigmoid(pred[..., 0:2])
+    pred_wh = model.anchors * mx.exp(pred[..., 2:4])
+    pred_conf = mx.sigmoid(pred[..., 4])
+
+    print("\nActivated Prediction Stats:")
+    print(
+        f"XY (post-sigmoid): [{pred_xy.min().item():.3f}, {pred_xy.max().item():.3f}]"
+    )
+    print(f"WH (post-exp): [{pred_wh.min().item():.3f}, {pred_wh.max().item():.3f}]")
+    print(
+        f"Conf (post-sigmoid): [{pred_conf.min().item():.3f}, {pred_conf.max().item():.3f}]"
+    )
 
     # Process predictions
     boxes, scores, classes = process_predictions(predictions[0], model)
 
     # Load ground truth
     gt_boxes, gt_classes = load_ground_truth(image_id, args.data_dir)
-    gt_class_indices = [VOC_CLASSES.index(c) for c in gt_classes]
+    gt_class_indices = [
+        VOC_CLASSES.index(c) for c in gt_classes
+    ]  # Convert class names to indices
+
+    print("\nBox Statistics:")
+    print("Ground Truth Boxes:")
+    for box, cls in zip(gt_boxes, gt_classes):
+        w = box[2] - box[0]
+        h = box[3] - box[1]
+        print(
+            f"- {cls}: w={w:.3f}, h={h:.3f}, center=({(box[0]+box[2])/2:.3f}, {(box[1]+box[3])/2:.3f})"
+        )
+
+    print("\nPredicted Boxes:")
+    for box, score, class_id in zip(boxes, scores, classes):
+        w = box[2].item() - box[0].item()
+        h = box[3].item() - box[1].item()
+        cls = VOC_CLASSES[class_id.item()]
+        print(
+            f"- {cls} ({score.item():.3f}): w={w:.3f}, h={h:.3f}, center=({(box[0].item()+box[2].item())/2:.3f}, {(box[1].item()+box[3].item())/2:.3f})"
+        )
 
     # Draw ground truth boxes in green
     output_image = draw_boxes(
         pil_image,
         mx.array(gt_boxes),
         None,  # No scores for ground truth
-        mx.array(gt_class_indices),
+        mx.array(gt_class_indices),  # Now gt_class_indices is defined
         VOC_CLASSES,
         color="green",
         is_gt=True,
@@ -458,41 +448,34 @@ def main():
                 try:
                     input_tensor = preprocess_frame(frame)
                     predictions = model(input_tensor)
-                    last_predictions = predictions  # Store for visualization
+                    last_predictions = predictions
 
-                    if show_activations and last_predictions is not None:
-                        # Show activation visualization
-                        activation_frame = visualize_activations(
-                            frame, last_predictions, model
-                        )
-                        cv2.imshow("Activations", activation_frame)
-                    else:
-                        # Process and show detections
-                        boxes, scores, classes = process_predictions(
-                            predictions[0], model
-                        )
+                    # Process predictions
+                    boxes, scores, classes = process_predictions(predictions[0], model)
 
-                        # Print detection details
-                        print("\nDetections:")
-                        for box, score, class_id in zip(boxes, scores, classes):
-                            class_name = VOC_CLASSES[class_id.item()]
-                            print(
-                                f"- {class_name}: {score.item():.3f} at {box.tolist()}"
-                            )
+                    # Convert frame to PIL Image for drawing
+                    pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-                        # Convert frame to PIL Image for drawing
-                        pil_frame = Image.fromarray(
-                            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        )
+                    # Draw detections
+                    output_frame = draw_boxes(
+                        pil_frame, boxes, scores, classes, VOC_CLASSES
+                    )
 
-                        # Draw detections
-                        output_frame = draw_boxes(
-                            pil_frame, boxes, scores, classes, VOC_CLASSES
-                        )
+                    # Convert back to OpenCV format
+                    frame = cv2.cvtColor(np.array(output_frame), cv2.COLOR_RGB2BGR)
 
-                        # Convert back to OpenCV format
-                        frame = cv2.cvtColor(np.array(output_frame), cv2.COLOR_RGB2BGR)
-                        cv2.imshow("YOLO Detection", frame)
+                    # Add activation overlay if enabled
+                    if show_activations:
+                        frame = visualize_activations(frame, predictions, model)
+
+                    # Show frame
+                    cv2.imshow("YOLO Detection", frame)
+
+                    # Print detection details
+                    print("\nDetections:")
+                    for box, score, class_id in zip(boxes, scores, classes):
+                        class_name = VOC_CLASSES[class_id.item()]
+                        print(f"- {class_name}: {score.item():.3f} at {box.tolist()}")
 
                     last_inference_time = current_time
 
@@ -505,11 +488,9 @@ def main():
                 break
             elif key == ord("\t"):  # TAB key
                 show_activations = not show_activations
-                if show_activations:
-                    cv2.destroyWindow("YOLO Detection")
-                else:
-                    cv2.destroyWindow("Activations")
-                print(f"Showing {'activations' if show_activations else 'boxes'}")
+                print(
+                    f"Activation overlay {'enabled' if show_activations else 'disabled'}"
+                )
 
     finally:
         cap.release()
@@ -585,82 +566,38 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
     return valid_boxes, valid_confidences
 
 
-def process_predictions(predictions, model, conf_thresh=0.2):
-    """Convert raw predictions to boxes with class information"""
-    S = model.S
-    B = model.B
-    C = model.C
-
-    # Reshape predictions to [S,S,B,5+C]
-    predictions = mx.reshape(predictions, (S, S, B, 5 + C))
-
-    # Extract components
-    pred_xy = mx.sigmoid(predictions[..., 0:2])  # Center coordinates
-    pred_wh = predictions[..., 2:4]  # Width/height predictions
-    pred_conf = mx.sigmoid(predictions[..., 4])  # Object confidence
-    pred_classes = mx.softmax(predictions[..., 5:], axis=-1)  # Class probabilities
-
-    # Create grid offsets
-    grid_x, grid_y = mx.meshgrid(
-        mx.arange(S, dtype=mx.float32), mx.arange(S, dtype=mx.float32)
+def process_predictions(predictions, model, conf_threshold=0.1, nms_threshold=0.5):
+    """Process raw predictions into final detections."""
+    boxes, scores, classes = decode_predictions(
+        predictions, model, conf_threshold=conf_threshold
     )
-    grid_xy = mx.stack([grid_x, grid_y], axis=-1)  # [S,S,2]
-    grid_xy = mx.expand_dims(grid_xy, axis=2)  # [S,S,1,2]
-
-    # Convert predictions to global coordinates
-    pred_xy = (pred_xy + grid_xy) / S
-
-    # Scale width/height by anchors
-    anchors = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
-    anchors = mx.expand_dims(anchors, axis=0)  # [1,1,B,2]
-    pred_wh = anchors * mx.exp(pred_wh) / S
-
-    # Convert to corner format
-    boxes = mx.concatenate(
-        [pred_xy - pred_wh / 2, pred_xy + pred_wh / 2],  # top-left  # bottom-right
-        axis=-1,
-    )
-
-    # Get class predictions
-    class_scores = mx.max(pred_classes, axis=-1)  # Best class probability
-    class_ids = mx.argmax(pred_classes, axis=-1)  # Class with highest probability
-
-    # Combine object confidence with class probability
-    scores = pred_conf * class_scores
 
     # Convert to numpy for filtering
-    boxes_np = boxes.tolist()
-    scores_np = scores.tolist()
-    classes_np = class_ids.tolist()
+    boxes_np = np.array([b.tolist() for b in boxes])
+    scores_np = np.array([s.tolist() for s in scores])
+    classes_np = np.array([c.tolist() for c in classes])
 
-    # Filter by confidence
-    filtered_boxes = []
-    filtered_scores = []
-    filtered_classes = []
+    # Print confidence scores for debugging
+    print("\nRaw confidence scores:")
+    print(f"Min: {scores_np.min():.3f}, Max: {scores_np.max():.3f}")
 
-    # Flatten and filter
-    for i in range(S):
-        for j in range(S):
-            for k in range(B):
-                if scores_np[i][j][k] > conf_thresh:
-                    filtered_boxes.append(boxes_np[i][j][k])
-                    filtered_scores.append(scores_np[i][j][k])
-                    filtered_classes.append(classes_np[i][j][k])
+    # Filter using numpy
+    mask = scores_np > conf_threshold
+    filtered_boxes = boxes_np[mask]
+    filtered_scores = scores_np[mask]
+    filtered_classes = classes_np[mask]
+
+    print(f"Number of boxes above threshold: {len(filtered_scores)}")
+
+    if len(filtered_scores) == 0:
+        return mx.array([]), mx.array([]), mx.array([])
 
     # Convert back to MLX arrays
-    if filtered_boxes:
-        return (
-            mx.array(filtered_boxes),
-            mx.array(filtered_scores),
-            mx.array(filtered_classes),
-        )
-    else:
-        # Return empty arrays with correct shapes
-        return (
-            mx.zeros((0, 4)),
-            mx.zeros((0,)),
-            mx.zeros((0,), dtype=mx.int32),
-        )
+    return (
+        mx.array(filtered_boxes),
+        mx.array(filtered_scores),
+        mx.array(filtered_classes),
+    )
 
 
 if __name__ == "__main__":

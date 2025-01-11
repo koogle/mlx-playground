@@ -115,14 +115,24 @@ def yolo_loss(predictions, targets, model):
     pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))  # [batch,S,S,B,5+C]
 
     # 2. Box predictions with sigmoid for x,y and anchors for w,h
-    pred_xy = mx.sigmoid(mx.clip(pred[..., 0:2], -10, 10))  # Cell-relative [0,1]
-    pred_wh = model.anchors * mx.exp(
-        mx.clip(pred[..., 2:4], -10, 10)
-    )  # Image-relative [0,1]
-    pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -10, 10))  # Object confidence
-    pred_classes = mx.softmax(
-        mx.clip(pred[..., 5:], -10, 10), axis=-1
-    )  # Class probabilities
+    pred_xy = mx.sigmoid(mx.clip(pred[..., 0:2], -10, 10))  # [batch,S,S,B,2]
+
+    # Handle anchor boxes and width/height prediction
+    anchor_wh = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
+    anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,B,2]
+    anchor_wh = mx.expand_dims(anchor_wh, axis=0)  # [1,1,1,B,2]
+    anchor_wh = mx.broadcast_to(anchor_wh, (batch_size, S, S, B, 2))
+
+    # Predict width/height with stricter clipping
+    pred_wh = anchor_wh * mx.exp(
+        mx.clip(pred[..., 2:4], -1.0, 1.0)  # Even more limited range
+    )
+
+    # Clip predicted width/height to prevent extremes
+    pred_wh = mx.clip(pred_wh, eps, 1.0 - eps)
+
+    pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -5, 5))
+    pred_classes = mx.softmax(mx.clip(pred[..., 5:], -10, 10), axis=-1)
 
     # 3. Target processing
     target_xy = mx.expand_dims(targets[..., 0:2], axis=3)  # [batch,S,S,1,2]
@@ -134,21 +144,27 @@ def yolo_loss(predictions, targets, model):
     pred_boxes = mx.concatenate(
         [pred_xy, pred_wh], axis=-1
     )  # [batch,S,S,B,4] (only x,y,w,h)
+
+    # Don't broadcast target_wh yet - keep as [batch,S,S,1,2]
     target_boxes = mx.concatenate(
         [target_xy, target_wh], axis=-1
     )  # [batch,S,S,1,4] (only x,y,w,h)
-    ious = compute_box_iou(pred_boxes, target_boxes)  # [batch,S,S,B]
 
-    # 5. Find responsible predictor
+    # Compute IoU between predictions and targets
+    ious = compute_box_iou(pred_boxes, target_boxes)  # [batch,S,S,B, 1]
+    ious = mx.squeeze(ious, axis=-1)  # [batch,S,S,B]
+
+    # 5. Find responsible predictor (fix dimensions)
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
     box_mask = ious >= best_ious  # [batch,S,S,B]
+    box_mask = mx.expand_dims(box_mask, axis=-1)  # [batch,S,S,B,1] for broadcasting
 
-    # Expand obj_mask for broadcasting with box_mask
+    # Expand obj_mask for broadcasting
     obj_mask = mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,1]
     obj_mask = mx.broadcast_to(obj_mask, (batch_size, S, S, B))  # [batch,S,S,B]
 
-    # Combine masks
-    box_mask = mx.squeeze(box_mask, axis=-1) * obj_mask  # [batch,S,S,B]
+    # Combine masks - no need to squeeze
+    box_mask = box_mask * obj_mask  # [batch,S,S,B]
 
     # 6. Compute losses with detailed debugging
     # Width/height loss analysis
@@ -203,13 +219,13 @@ def yolo_loss(predictions, targets, model):
     wh_weight = 5.0
     conf_weight = 1.0
     class_weight = 1.0
-
     total_loss = (
         xy_weight * xy_loss
         + wh_weight * wh_loss
         + conf_weight * conf_loss
         + class_weight * class_loss
     )
+
 
     # Return with enhanced debugging info
     return mx.mean(total_loss), {

@@ -126,6 +126,7 @@ def train_step(model, batch, optimizer):
 
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
     optimizer.update(model, grads)
+    mx.eval(loss)  # Ensure loss is evaluated
     return loss
 
 
@@ -145,21 +146,17 @@ def validate(model, val_loader):
     model.eval()
     val_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
     num_batches = 0
-    print("\nValidation:")
 
     for batch in val_loader:
         images, targets = batch
         predictions = model(images)
-
-        # Debug prediction statistics
-        analyze_predictions(predictions, targets, model)
-
         loss, components = yolo_loss(predictions, targets, model)
 
-        # Accumulate losses
+        # Accumulate losses properly
         val_losses["total"] += loss.item()
-        for k, v in components.items():
-            val_losses[k] += v
+        for k in components:
+            if k in val_losses:  # Only accumulate basic components
+                val_losses[k] += components[k]
         num_batches += 1
 
     # Calculate averages
@@ -419,7 +416,7 @@ def main():
         start_time = time.time()
 
         if show_batches:
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
+            print(f"Epoch {epoch + 1}/{num_epochs}")
 
         for batch_idx, batch in enumerate(train_loader):
             # Training step
@@ -433,8 +430,11 @@ def main():
 
             # Update epoch metrics
             epoch_losses["total"] += loss.item()
-            for k, v in components.items():
-                epoch_losses[k] += v
+            # Only update the basic loss components
+            for k in ["xy", "wh", "conf", "class", "iou"]:
+                if k in components:
+                    epoch_losses[k] += components[k]
+
             num_batches += 1
 
             # Evaluate immediately to free memory

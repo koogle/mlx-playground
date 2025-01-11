@@ -131,7 +131,7 @@ def yolo_loss(predictions, targets, model):
     # Clip predicted width/height to prevent extremes
     pred_wh = mx.clip(pred_wh, eps, 1.0 - eps)
 
-    pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -10, 10))
+    pred_conf = mx.sigmoid(mx.clip(pred[..., 4], -5, 5))
     pred_classes = mx.softmax(mx.clip(pred[..., 5:], -10, 10), axis=-1)
 
     # 3. Target processing
@@ -156,8 +156,8 @@ def yolo_loss(predictions, targets, model):
 
     # 5. Find responsible predictor (fix dimensions)
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
-    box_mask = ious >= best_ious  # [batch,S,S,B, 1]
-    # box_mask = mx.squeeze(box_mask, axis=-1)  # [batch,S,S,B]
+    box_mask = ious >= best_ious  # [batch,S,S,B]
+    box_mask = mx.expand_dims(box_mask, axis=-1)  # [batch,S,S,B,1] for broadcasting
 
     # Expand obj_mask for broadcasting
     obj_mask = mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,1]
@@ -176,10 +176,10 @@ def yolo_loss(predictions, targets, model):
     centered_error = normalized_wh_error - 0.5
     wh_loss = box_mask * mx.sum(mx.square(centered_error), axis=-1)
 
-    # Confidence loss (use original box_mask)
+    # Confidence loss with better weighting for positive examples
     conf_loss = (
-        box_mask * mx.square(pred_conf - ious)  # Object confidence should match IoU
-        + (1 - box_mask) * mx.square(pred_conf) * 0.1  # Reduce weight of no-object loss
+        box_mask * mx.square(pred_conf - ious) * 2.0  # Increased weight for objects
+        + (1 - box_mask) * mx.square(pred_conf) * 0.1  # Keep background suppressed
     )
 
     # Class loss (use original box_mask)
@@ -188,7 +188,7 @@ def yolo_loss(predictions, targets, model):
     # 7. Compute final loss with rebalanced weights
     xy_weight = 5.0
     wh_weight = 5.0
-    conf_weight = 2.0  # Increased to focus more on confidence
+    conf_weight = 5.0  # Increased from 2.0
     class_weight = 1.0
 
     total_loss = (

@@ -63,18 +63,17 @@ def preprocess_frame(frame, target_size=448):
     return mx.array(batched)
 
 
-def decode_predictions(predictions, model, conf_threshold=0.25):
+def decode_predictions(predictions, model, conf_threshold=0.1):
     """Decode raw predictions to bounding boxes and class predictions."""
     print("\nDecoding predictions:")
     print(f"Raw predictions shape: {predictions.shape}")
 
-    batch_size = predictions.shape[0]
-    S = model.S  # Grid size
-    B = model.B  # Number of boxes per cell
-    C = model.C  # Number of classes
+    S = model.S  # Grid size (7)
+    B = model.B  # Number of boxes per cell (5)
+    C = model.C  # Number of classes (20)
 
-    # Reshape predictions to [batch, S, S, B, 5+C]
-    pred = mx.reshape(predictions, (batch_size, S, S, B, 5 + C))
+    # Reshape predictions to [S, S, B, 5+C]
+    pred = mx.reshape(predictions, (S, S, B, 5 + C))
     mx.eval(pred)
 
     # Extract components
@@ -123,10 +122,12 @@ def decode_predictions(predictions, model, conf_threshold=0.25):
     # Combine confidence with class probability
     scores = pred_conf * class_scores
 
-    # Reshape outputs
-    boxes = mx.reshape(boxes, (batch_size, S * S * B, 4))
-    scores = mx.reshape(scores, (batch_size, S * S * B))
-    class_ids = mx.reshape(class_ids, (batch_size, S * S * B))
+    # Reshape outputs - using tuples for shapes
+    boxes = mx.reshape(boxes, (S * S * B, 4))
+    scores = mx.reshape(scores, (S * S * B,))  # Fixed: Use tuple with single element
+    class_ids = mx.reshape(
+        class_ids, (S * S * B,)
+    )  # Fixed: Use tuple with single element
     mx.eval(boxes, scores, class_ids)
 
     print("\nFinal shapes:")
@@ -565,82 +566,38 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
     return valid_boxes, valid_confidences
 
 
-def process_predictions(predictions, model, conf_thresh=0.2):
-    """Convert raw predictions to boxes with class information"""
-    S = model.S
-    B = model.B
-    C = model.C
-
-    # Reshape predictions to [S,S,B,5+C]
-    predictions = mx.reshape(predictions, (S, S, B, 5 + C))
-
-    # Extract components
-    pred_xy = mx.sigmoid(predictions[..., 0:2])  # Center coordinates
-    pred_wh = predictions[..., 2:4]  # Width/height predictions
-    pred_conf = mx.sigmoid(predictions[..., 4])  # Object confidence
-    pred_classes = mx.softmax(predictions[..., 5:], axis=-1)  # Class probabilities
-
-    # Create grid offsets
-    grid_x, grid_y = mx.meshgrid(
-        mx.arange(S, dtype=mx.float32), mx.arange(S, dtype=mx.float32)
+def process_predictions(predictions, model, conf_threshold=0.1, nms_threshold=0.5):
+    """Process raw predictions into final detections."""
+    boxes, scores, classes = decode_predictions(
+        predictions, model, conf_threshold=conf_threshold
     )
-    grid_xy = mx.stack([grid_x, grid_y], axis=-1)  # [S,S,2]
-    grid_xy = mx.expand_dims(grid_xy, axis=2)  # [S,S,1,2]
-
-    # Convert predictions to global coordinates
-    pred_xy = (pred_xy + grid_xy) / S
-
-    # Scale width/height by anchors
-    anchors = mx.expand_dims(model.anchors, axis=0)  # [1,B,2]
-    anchors = mx.expand_dims(anchors, axis=0)  # [1,1,B,2]
-    pred_wh = anchors * mx.exp(pred_wh) / S
-
-    # Convert to corner format
-    boxes = mx.concatenate(
-        [pred_xy - pred_wh / 2, pred_xy + pred_wh / 2],  # top-left  # bottom-right
-        axis=-1,
-    )
-
-    # Get class predictions
-    class_scores = mx.max(pred_classes, axis=-1)  # Best class probability
-    class_ids = mx.argmax(pred_classes, axis=-1)  # Class with highest probability
-
-    # Combine object confidence with class probability
-    scores = pred_conf * class_scores
 
     # Convert to numpy for filtering
-    boxes_np = boxes.tolist()
-    scores_np = scores.tolist()
-    classes_np = class_ids.tolist()
+    boxes_np = np.array([b.tolist() for b in boxes])
+    scores_np = np.array([s.tolist() for s in scores])
+    classes_np = np.array([c.tolist() for c in classes])
 
-    # Filter by confidence
-    filtered_boxes = []
-    filtered_scores = []
-    filtered_classes = []
+    # Print confidence scores for debugging
+    print("\nRaw confidence scores:")
+    print(f"Min: {scores_np.min():.3f}, Max: {scores_np.max():.3f}")
 
-    # Flatten and filter
-    for i in range(S):
-        for j in range(S):
-            for k in range(B):
-                if scores_np[i][j][k] > conf_thresh:
-                    filtered_boxes.append(boxes_np[i][j][k])
-                    filtered_scores.append(scores_np[i][j][k])
-                    filtered_classes.append(classes_np[i][j][k])
+    # Filter using numpy
+    mask = scores_np > conf_threshold
+    filtered_boxes = boxes_np[mask]
+    filtered_scores = scores_np[mask]
+    filtered_classes = classes_np[mask]
+
+    print(f"Number of boxes above threshold: {len(filtered_scores)}")
+
+    if len(filtered_scores) == 0:
+        return mx.array([]), mx.array([]), mx.array([])
 
     # Convert back to MLX arrays
-    if filtered_boxes:
-        return (
-            mx.array(filtered_boxes),
-            mx.array(filtered_scores),
-            mx.array(filtered_classes),
-        )
-    else:
-        # Return empty arrays with correct shapes
-        return (
-            mx.zeros((0, 4)),
-            mx.zeros((0,)),
-            mx.zeros((0,), dtype=mx.int32),
-        )
+    return (
+        mx.array(filtered_boxes),
+        mx.array(filtered_scores),
+        mx.array(filtered_classes),
+    )
 
 
 if __name__ == "__main__":

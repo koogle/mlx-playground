@@ -150,34 +150,84 @@ def yolo_loss(predictions, targets, model):
     # Combine masks
     box_mask = mx.squeeze(box_mask, axis=-1) * obj_mask  # [batch,S,S,B]
 
-    # 6. Compute losses
-    # Coordinate loss (only for responsible predictors)
-    xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1)
+    # 6. Compute losses with detailed debugging
+    # Width/height loss analysis
+    wh_debug = {
+        "pred_wh_stats": {
+            "min": pred_wh.min().item(),
+            "max": pred_wh.max().item(),
+            "mean": pred_wh.mean().item(),
+        },
+        "target_wh_stats": {
+            "min": target_wh.min().item(),
+            "max": target_wh.max().item(),
+            "mean": target_wh.mean().item(),
+        },
+        "anchor_stats": {
+            "min": model.anchors.min().item(),
+            "max": model.anchors.max().item(),
+            "mean": model.anchors.mean().item(),
+        },
+    }
+
+    # Compute raw width/height differences
+    wh_diff = pred_wh - target_wh
+    wh_debug["raw_diff"] = {
+        "min": wh_diff.min().item(),
+        "max": wh_diff.max().item(),
+        "mean": wh_diff.mean().item(),
+    }
+
+    # Width/height loss with detailed tracking
     wh_loss = box_mask * mx.sum(mx.square(pred_wh - target_wh), axis=-1)
 
-    # Confidence loss
-    conf_loss = (
-        box_mask * mx.square(pred_conf - 1)  # Object confidence loss
-        + (1 - box_mask) * mx.square(pred_conf) * 0.5  # No object confidence loss
-    )
+    # Track loss statistics for objects only
+    active_wh_loss = wh_loss * box_mask
+    wh_debug["loss_stats"] = {
+        "total": mx.sum(wh_loss).item(),
+        "mean_all": mx.mean(wh_loss).item(),
+        "mean_active": (mx.sum(active_wh_loss) / (mx.sum(box_mask) + eps)).item(),
+        "num_active": mx.sum(box_mask).item(),
+    }
 
-    # Class loss (only for cells with objects)
+    # Other losses remain the same
+    xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1)
+    conf_loss = (
+        box_mask * mx.square(pred_conf - 1)
+        + (1 - box_mask) * mx.square(pred_conf) * 0.5
+    )
     class_loss = obj_mask * mx.sum(mx.square(pred_classes - target_classes), axis=-1)
 
     # 7. Compute final loss with weights
+    xy_weight = 5.0
+    wh_weight = 5.0
+    conf_weight = 1.0
+    class_weight = 1.0
+
     total_loss = (
-        5.0 * (xy_loss + wh_loss)  # Coordinate loss weight
-        + conf_loss  # Confidence loss
-        + class_loss  # Class loss
+        xy_weight * xy_loss
+        + wh_weight * wh_loss
+        + conf_weight * conf_loss
+        + class_weight * class_loss
     )
 
-    # Compute mean losses for monitoring
-    num_objects = mx.sum(obj_mask) + eps
-
+    # Return with enhanced debugging info
     return mx.mean(total_loss), {
         "xy": mx.mean(xy_loss).item(),
         "wh": mx.mean(wh_loss).item(),
         "conf": mx.mean(conf_loss).item(),
         "class": mx.mean(class_loss).item(),
-        "iou": mx.mean(mx.squeeze(ious, axis=-1) * box_mask).item(),
+        "iou": mx.mean(ious * box_mask).item(),
+        "debug": {
+            "wh": wh_debug,
+            "iou_stats": {
+                "min": ious.min().item(),
+                "max": ious.max().item(),
+                "mean": ious.mean().item(),
+            },
+            "box_mask_stats": {
+                "active": mx.sum(box_mask).item(),
+                "total": mx.size(box_mask).item(),
+            },
+        },
     }

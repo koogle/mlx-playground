@@ -157,12 +157,10 @@ def yolo_loss(predictions, targets, model):
     # 5. Find responsible predictor (fix dimensions)
     best_ious = mx.max(ious, axis=3, keepdims=True)  # [batch,S,S,1]
     box_mask = ious >= best_ious  # [batch,S,S,B]
-    box_mask = mx.expand_dims(box_mask, axis=-1)  # [batch,S,S,B,1] for broadcasting
 
     # Expand obj_mask for broadcasting
     obj_mask = mx.expand_dims(obj_mask, axis=3)  # [batch,S,S,1]
     obj_mask = mx.broadcast_to(obj_mask, (batch_size, S, S, B))  # [batch,S,S,B]
-    obj_mask = mx.expand_dims(obj_mask, axis=-1)  # [batch,S,S,B,1]
 
     # Combine masks - no need to squeeze
     box_mask = box_mask * obj_mask  # [batch,S,S,B]
@@ -243,7 +241,7 @@ def yolo_loss(predictions, targets, model):
             },
             "box_mask_stats": {
                 "active": mx.sum(box_mask).item(),
-                "total": mx.size(box_mask).item(),
+                "total": len(box_mask),
             },
         },
     }

@@ -566,7 +566,7 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
     return valid_boxes, valid_confidences
 
 
-def process_predictions(predictions, model, conf_threshold=0.1, nms_threshold=0.5):
+def process_predictions(predictions, model, conf_threshold=0.5, nms_threshold=0.5):
     """Process raw predictions into final detections."""
     boxes, scores, classes = decode_predictions(
         predictions, model, conf_threshold=conf_threshold
@@ -580,14 +580,38 @@ def process_predictions(predictions, model, conf_threshold=0.1, nms_threshold=0.
     # Print confidence scores for debugging
     print("\nRaw confidence scores:")
     print(f"Min: {scores_np.min():.3f}, Max: {scores_np.max():.3f}")
+    print(f"Mean confidence: {scores_np.mean():.3f}")
+    print(f"Confidence threshold: {conf_threshold}")
 
-    # Filter using numpy
-    mask = scores_np > conf_threshold
-    filtered_boxes = boxes_np[mask]
-    filtered_scores = scores_np[mask]
-    filtered_classes = classes_np[mask]
+    # Filter by confidence
+    conf_mask = scores_np > conf_threshold
+    filtered_boxes = boxes_np[conf_mask]
+    filtered_scores = scores_np[conf_mask]
+    filtered_classes = classes_np[conf_mask]
 
+    print(f"\nAfter confidence filtering:")
     print(f"Number of boxes above threshold: {len(filtered_scores)}")
+    if len(filtered_scores) > 0:
+        print(
+            f"Remaining confidence range: [{filtered_scores.min():.3f}, {filtered_scores.max():.3f}]"
+        )
+
+    # Additional size-based filtering
+    if len(filtered_scores) > 0:
+        # Calculate box dimensions
+        widths = filtered_boxes[:, 2] - filtered_boxes[:, 0]
+        heights = filtered_boxes[:, 3] - filtered_boxes[:, 1]
+
+        # Filter out unreasonably small or large boxes
+        size_mask = (
+            (widths > 0.03) & (widths < 0.95) & (heights > 0.03) & (heights < 0.95)
+        )
+        filtered_boxes = filtered_boxes[size_mask]
+        filtered_scores = filtered_scores[size_mask]
+        filtered_classes = filtered_classes[size_mask]
+
+        print(f"\nAfter size filtering:")
+        print(f"Final number of boxes: {len(filtered_scores)}")
 
     if len(filtered_scores) == 0:
         return mx.array([]), mx.array([]), mx.array([])

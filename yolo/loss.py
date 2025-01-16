@@ -186,8 +186,6 @@ def yolo_loss(predictions, targets, model):
         },
     }
 
-    print(json.dumps(wh_debug, indent=4, sort_keys=True))
-
     # Compute raw width/height differences
     wh_diff = pred_wh - target_wh
     wh_debug["raw_diff"] = {
@@ -197,16 +195,19 @@ def yolo_loss(predictions, targets, model):
     }
 
     # Width/height loss with detailed tracking
-    wh_loss = box_mask * mx.sum(mx.square(pred_wh - target_wh), axis=-1)
+    wh_loss = box_mask * mx.sum(mx.square(wh_diff), axis=-1)
 
     # Track loss statistics for objects only
-    active_wh_loss = wh_loss * box_mask
     wh_debug["loss_stats"] = {
         "total": mx.sum(wh_loss).item(),
-        "mean_all": mx.mean(wh_loss).item(),
-        "mean_active": (mx.sum(active_wh_loss) / (mx.sum(box_mask) + eps)).item(),
+        "mean_active": (mx.sum(wh_loss) / (mx.sum(box_mask) + eps)).item(),
         "num_active": mx.sum(box_mask).item(),
     }
+
+    if random.random() < 0.01:
+
+        print("WH DEBUG")
+        print(json.dumps(wh_debug, indent=4, sort_keys=True))
 
     # Other losses remain the same
     xy_loss = box_mask * mx.sum(mx.square(pred_xy - target_xy), axis=-1)

@@ -597,7 +597,7 @@ def process_predictions(predictions, model, conf_threshold=0.5, nms_threshold=0.
         )
 
     # Additional size-based filtering
-    if len(filtered_scores) > 0:
+    if len(filtered_scores) > 0 and False:
         # Calculate box dimensions
         widths = filtered_boxes[:, 2] - filtered_boxes[:, 0]
         heights = filtered_boxes[:, 3] - filtered_boxes[:, 1]

@@ -11,8 +11,8 @@ This module implements the YOLOv2 loss function with anchor boxes, including:
 Reference: YOLO9000: Better, Faster, Stronger (https://arxiv.org/abs/1612.08242)
 """
 
+import json
 import mlx.core as mx
-import math
 
 
 def compute_box_iou(boxes1, boxes2):
@@ -167,6 +167,7 @@ def yolo_loss(predictions, targets, model):
 
     # 6. Compute losses with detailed debugging
     # Width/height loss analysis
+
     wh_debug = {
         "pred_wh_stats": {
             "min": pred_wh.min().item(),
@@ -184,6 +185,8 @@ def yolo_loss(predictions, targets, model):
             "mean": model.anchors.mean().item(),
         },
     }
+
+    print(json.dumps(wh_debug, indent=4, sort_keys=True))
 
     # Compute raw width/height differences
     wh_diff = pred_wh - target_wh

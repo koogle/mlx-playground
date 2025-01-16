@@ -12,6 +12,7 @@ Reference: YOLO9000: Better, Faster, Stronger (https://arxiv.org/abs/1612.08242)
 """
 
 import json
+import random
 import mlx.core as mx
 
 
@@ -205,7 +206,6 @@ def yolo_loss(predictions, targets, model):
     }
 
     if random.random() < 0.01:
-
         print("WH DEBUG")
         print(json.dumps(wh_debug, indent=4, sort_keys=True))
 

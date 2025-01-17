@@ -125,16 +125,27 @@ def train_step(model, batch, optimizer):
         predictions = model(images)
         return yolo_loss(predictions, targets, model)
 
-    loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
-    optimizer.update(model, grads)
+    try:
+        loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
+        optimizer.update(model, grads)
 
-    # Evaluate loss and components
-    loss_val, components = loss
-    mx.eval(loss_val)
+        # Evaluate loss and components
+        loss_val, components = loss
+        mx.eval(loss_val)
 
-    # Clear intermediate values
-    del grads
-    return loss_val, components
+        # Check for NaN/Inf
+        if not mx.isfinite(loss_val).all().item():
+            print("Warning: Loss is not finite!")
+            print(f"Loss value: {loss_val.item()}")
+            print("Components:", components)
+
+        # Clear intermediate values
+        del grads
+        return loss_val, components
+    except Exception as e:
+        print(f"Error in training step: {e}")
+        print(f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}")
+        raise
 
 
 def format_loss_components(components):
@@ -354,9 +365,13 @@ def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
 def main():
     args = parse_args()
 
+    print("Initializing model...")
     # Create datasets
     train_dataset = VOCDataset(args.data_dir, "train")
     val_dataset = VOCDataset(args.data_dir, "val")
+
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Val dataset size: {len(val_dataset)}")
 
     # Create data loaders
     train_loader = create_data_loader(
@@ -376,27 +391,34 @@ def main():
     best_val_loss = float("inf")
     last_val_loss = float("inf")
 
-    for epoch in tqdm(range(args.epochs)):
+    print("\nStarting training...")
+    for epoch in range(args.epochs):
+        print(f"\nEpoch {epoch + 1}/{args.epochs}")
 
         # Training
-        epoch_losses, epoch_time = train_epoch(model, train_loader, optimizer, epoch)
+        epoch_losses, epoch_time = train_epoch(
+            model, train_loader, optimizer, epoch, show_batches=True
+        )
+
+        # Print batch-level progress
+        print(f"\nEpoch {epoch + 1} Summary:")
+        print(f"Train Loss: {epoch_losses['total']:.4f}")
+        print(f"Components: {format_loss_components(epoch_losses)}")
+        print(f"Time: {epoch_time:.1f}s")
 
         # Validation
         if (epoch + 1) % val_frequency == 0:
+            print("\nRunning validation...")
             val_loss = validate(model, val_loader)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 save_checkpoint(model, optimizer, epoch + 1, "best")
                 print("New best model saved!")
             last_val_loss = val_loss
-        else:
-            val_loss = last_val_loss
 
-        # Print progress
-        print(f"\nEpoch {epoch + 1}:")
-        print(f"Train Loss: {epoch_losses['total']:.4f}")
-        print(f"Components: {format_loss_components(epoch_losses)}")
-        print(f"Time: {epoch_time:.1f}s")
+        # Save regular checkpoint
+        if (epoch + 1) % 10 == 0:
+            save_checkpoint(model, optimizer, epoch + 1, "regular")
 
 
 if __name__ == "__main__":

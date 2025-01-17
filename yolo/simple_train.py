@@ -2,13 +2,12 @@ import os
 import mlx.core as mx
 import mlx.optimizers as optim
 from model import YOLO
-from data.voc import VOC_CLASSES, VOCDataset, create_data_loader
+from data.voc import VOC_CLASSES, DataLoader, VOCDataset, create_data_loader
 import time
 from tabulate import tabulate
 import argparse
 from pathlib import Path
 from loss import yolo_loss
-from torch.utils.data import DataLoader
 
 
 def bbox_loss(predictions, targets, model):
@@ -128,10 +127,13 @@ def train_step(model, batch, optimizer):
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
     optimizer.update(model, grads)
 
-    # Clear intermediate values to free memory
-    mx.eval(loss)
+    # Evaluate loss and components
+    loss_val, components = loss
+    mx.eval(loss_val)
+
+    # Clear intermediate values
     del grads
-    return loss
+    return loss_val, components
 
 
 def format_loss_components(components):
@@ -315,14 +317,14 @@ def analyze_predictions(predictions, targets, model):
 
 
 def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
-    """Train for one epoch with memory optimizations"""
+    """Train for one epoch"""
     model.train()
     epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
     num_batches = 0
     start_time = time.time()
 
     for batch_idx, batch in enumerate(train_loader):
-        # Run training step
+        # Training step
         loss, components = train_step(model, batch, optimizer)
 
         # Update metrics
@@ -332,16 +334,12 @@ def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
                 epoch_losses[k] += components[k]
         num_batches += 1
 
-        # Free memory after each batch
-        mx.eval(loss)
-        del loss, components
-
-        # Periodically clear MLX's cache
+        # Periodically clear cache
         if batch_idx % 10 == 0:
             mx.clear_cache()
 
-        if show_batches and batch_idx % 10 == 0:  # Reduced logging frequency
-            print(f"Batch {batch_idx}/{len(train_loader)}")
+        if show_batches and batch_idx % 10 == 0:
+            print(f"Batch {batch_idx}: loss={loss.item():.4f}")
 
     # Calculate averages
     for k in epoch_losses:
@@ -353,119 +351,26 @@ def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
 def main():
     args = parse_args()
 
-    # Fixed set of image IDs for development
-    dev_image_ids = [
-        "2008_000008",  # Simple image with a single object
-        "2008_000015",  # Multiple objects, good for testing
-        "2008_000023",  # Different object sizes
-        "2008_000028",  # Interesting composition
-        "2008_000033",  # Multiple object classes
-        "2008_000036",  # Clear object boundaries
-        "2008_000042",  # Good lighting conditions
-        "2008_000045",  # Multiple objects with overlap
-        "2008_000052",  # Different scales
-        "2008_000064",  # Good variety of objects
-    ]
-
-    # Training settings based on mode
-    if args.mode == "dev":
-        # Development settings - use fixed image set
-        batch_size = args.batch_size or 2
-        num_epochs = args.epochs or 200
-        val_frequency = 10
-        train_size = len(dev_image_ids)  # Use all dev images
-        val_size = 2  # Use 2 images for validation
-    else:
-        # Full training settings
-        batch_size = args.batch_size or 16
-        num_epochs = args.epochs or 125
-        val_frequency = 50
-        train_size = None
-        val_size = None
-
-    learning_rate = 1e-4
-
-    # Create datasets
-    train_dataset = VOCDataset(
-        data_dir=args.data_dir,
-        year="2012",
-        image_set="train",
-        augment=args.mode == "full",
+    # Create data loaders using existing function
+    train_loader = create_data_loader(
+        args.data_dir, "train", batch_size=args.batch_size or 32, shuffle=True
     )
 
-    if args.mode == "dev":
-        train_dataset.image_ids = dev_image_ids
-    elif train_size:
-        train_dataset.image_ids = train_dataset.image_ids[:train_size]
-
-    val_dataset = VOCDataset(
-        data_dir=args.data_dir,
-        year="2012",
-        image_set="val",
-        augment=False,
+    val_loader = create_data_loader(
+        args.data_dir, "val", batch_size=args.batch_size or 32, shuffle=False
     )
 
-    if val_size:
-        val_dataset.image_ids = dev_image_ids[
-            :val_size
-        ]  # Use first two dev images for validation
-
-    print(f"\nTraining Configuration:")
-    print(f"Mode: {args.mode}")
-    print(f"Batch Size: {batch_size}")
-    print(f"Epochs: {num_epochs}")
-    print(f"Training Images: {len(train_dataset)}")
-    print(f"Validation Images: {len(val_dataset)}")
-    print(f"Data Augmentation: {args.mode == 'full'}\n")
-
-    # Adjust batch size based on available memory
-    batch_size = 32  # Increase if memory allows
-
-    # Use data prefetching
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=2,  # Adjust based on CPU cores
-        prefetch_factor=2,
-    )
-
-    # Optimize validation frequency
-    val_frequency = 5  # Validate less frequently to save compute
+    # Initialize model and optimizer
+    model = YOLO(S=7, B=5, C=20)
+    optimizer = optim.Adam(learning_rate=1e-4)
 
     # Training loop
-    print("Initializing model...")
-    model = YOLO(S=7, B=5, C=20)
-    optimizer = optim.Adam(learning_rate=learning_rate)
-
-    # Load checkpoint if starting from a specific epoch
-    if args.start_epoch > 0:
-        epoch, _ = load_checkpoint(model, optimizer, "checkpoints", args.start_epoch)
-        print(f"Resuming training from epoch {epoch}")
-    else:
-        epoch = 0
-
-    # Adjust num_epochs to continue training for the specified number of epochs
-    num_epochs += epoch
-
-    # Table setup
-    headers = ["Epoch", "Loss", "XY Loss", "WH Loss", "Val Loss", "Time(s)", "Best"]
-    table = []
-    show_batches = True  # Set to True to see batch details, False for table view
-
+    val_frequency = 5  # Validate every 5 epochs
     best_val_loss = float("inf")
-    last_val_loss = "N/A"  # Store last validation loss
 
-    if show_batches:
-        print("Training on fixed dev set:")
-        for img_id in dev_image_ids:
-            print(f"  {img_id}")
-
-    for epoch in range(epoch, num_epochs):
+    for epoch in range(args.num_epochs):
         # Training
-        epoch_losses, epoch_time = train_epoch(
-            model, train_loader, optimizer, epoch, show_batches
-        )
+        epoch_losses, epoch_time = train_epoch(model, train_loader, optimizer, epoch)
 
         # Clear cache before validation
         mx.clear_cache()
@@ -473,57 +378,16 @@ def main():
         # Validation
         if (epoch + 1) % val_frequency == 0:
             val_loss = validate(model, val_loader)
-            is_best = val_loss < best_val_loss
-            if is_best:
+            if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 save_checkpoint(model, optimizer, epoch + 1, "best")
                 print("New best model saved!")
-        else:
-            val_loss = last_val_loss
-
-        # Add row to table
-        table.append(
-            [
-                epoch + 1,
-                f"{epoch_losses['total']:.4f}",
-                f"{epoch_losses['xy']:.4f}",
-                f"{epoch_losses['wh']:.4f}",
-                f"{epoch_losses['conf']:.4f}",
-                f"{epoch_losses['class']:.4f}",
-                f"{epoch_losses['iou']:.4f}",
-                f"{val_loss:.4f}" if isinstance(val_loss, float) else val_loss,
-                f"{epoch_time:.1f}",
-                "*" if val_loss == best_val_loss else "",
-            ]
-        )
 
         # Print progress
-        if not show_batches or (epoch + 1) % 10 == 0:
-            print("\nTraining Progress:")
-            print(
-                tabulate(
-                    table[-10:],  # Show last 10 epochs
-                    headers=[
-                        "Epoch",
-                        "Loss",
-                        "XY",
-                        "WH",
-                        "Conf",
-                        "Class",
-                        "IoU",
-                        "Val",
-                        "Time",
-                        "Best",
-                    ],
-                    tablefmt="simple",
-                )
-            )
-
-        # Save regular checkpoint
-        if (epoch + 1) % 10 == 0:
-            save_checkpoint(model, optimizer, epoch + 1)
-
-    print("\nTraining completed!")
+        print(f"\nEpoch {epoch + 1}:")
+        print(f"Train Loss: {epoch_losses['total']:.4f}")
+        print(f"Components: {format_loss_components(epoch_losses)}")
+        print(f"Time: {epoch_time:.1f}s")
 
 
 if __name__ == "__main__":

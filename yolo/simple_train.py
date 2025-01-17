@@ -8,6 +8,7 @@ from tabulate import tabulate
 import argparse
 from pathlib import Path
 from loss import yolo_loss
+from torch.utils.data import DataLoader
 
 
 def bbox_loss(predictions, targets, model):
@@ -116,17 +117,20 @@ def calculate_iou(boxes1, boxes2):
 
 
 def train_step(model, batch, optimizer):
-    """Single training step"""
+    """Single training step with memory optimizations"""
     images, targets = batch
 
     def loss_fn(params, images, targets):
         model.update(params)
-        predictions = model(images)  # [batch, S, S, B*(5+C)]
+        predictions = model(images)
         return yolo_loss(predictions, targets, model)
 
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
     optimizer.update(model, grads)
-    mx.eval(loss)  # Ensure loss is evaluated
+
+    # Clear intermediate values to free memory
+    mx.eval(loss)
+    del grads
     return loss
 
 
@@ -310,6 +314,42 @@ def analyze_predictions(predictions, targets, model):
     print(f"\nNumber of objects: {num_objects}")
 
 
+def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
+    """Train for one epoch with memory optimizations"""
+    model.train()
+    epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
+    num_batches = 0
+    start_time = time.time()
+
+    for batch_idx, batch in enumerate(train_loader):
+        # Run training step
+        loss, components = train_step(model, batch, optimizer)
+
+        # Update metrics
+        epoch_losses["total"] += loss.item()
+        for k in ["xy", "wh", "conf", "class", "iou"]:
+            if k in components:
+                epoch_losses[k] += components[k]
+        num_batches += 1
+
+        # Free memory after each batch
+        mx.eval(loss)
+        del loss, components
+
+        # Periodically clear MLX's cache
+        if batch_idx % 10 == 0:
+            mx.clear_cache()
+
+        if show_batches and batch_idx % 10 == 0:  # Reduced logging frequency
+            print(f"Batch {batch_idx}/{len(train_loader)}")
+
+    # Calculate averages
+    for k in epoch_losses:
+        epoch_losses[k] /= num_batches
+
+    return epoch_losses, time.time() - start_time
+
+
 def main():
     args = parse_args()
 
@@ -378,8 +418,20 @@ def main():
     print(f"Validation Images: {len(val_dataset)}")
     print(f"Data Augmentation: {args.mode == 'full'}\n")
 
-    train_loader = create_data_loader(train_dataset, batch_size=batch_size)
-    val_loader = create_data_loader(val_dataset, batch_size=batch_size)
+    # Adjust batch size based on available memory
+    batch_size = 32  # Increase if memory allows
+
+    # Use data prefetching
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=2,  # Adjust based on CPU cores
+        prefetch_factor=2,
+    )
+
+    # Optimize validation frequency
+    val_frequency = 5  # Validate less frequently to save compute
 
     # Training loop
     print("Initializing model...")
@@ -410,40 +462,13 @@ def main():
             print(f"  {img_id}")
 
     for epoch in range(epoch, num_epochs):
-        model.train()
-        epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
-        num_batches = 0
-        start_time = time.time()
+        # Training
+        epoch_losses, epoch_time = train_epoch(
+            model, train_loader, optimizer, epoch, show_batches
+        )
 
-        if show_batches:
-            print(f"Epoch {epoch + 1}/{num_epochs}")
-
-        for batch_idx, batch in enumerate(train_loader):
-            # Training step
-            loss, components = train_step(model, batch, optimizer)
-
-            # Print batch details if enabled
-            # if show_batches:
-            #    print(f"\nBatch {batch_idx}:")
-            #    print(f"Total Loss: {loss.item():.4f}")
-            #    print(f"Components: {format_loss_components(components)}")
-
-            # Update epoch metrics
-            epoch_losses["total"] += loss.item()
-            # Only update the basic loss components
-            for k in ["xy", "wh", "conf", "class", "iou"]:
-                if k in components:
-                    epoch_losses[k] += components[k]
-
-            num_batches += 1
-
-            # Evaluate immediately to free memory
-            mx.eval(loss)
-
-        # Calculate epoch metrics
-        epoch_time = time.time() - start_time
-        for k in epoch_losses:
-            epoch_losses[k] /= num_batches
+        # Clear cache before validation
+        mx.clear_cache()
 
         # Validation
         if (epoch + 1) % val_frequency == 0:

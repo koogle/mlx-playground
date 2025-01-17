@@ -372,7 +372,7 @@ def main():
     val_frequency = 5  # Validate every 5 epochs
     best_val_loss = float("inf")
 
-    for epoch in range(args.num_epochs):
+    for epoch in range(args.epochs):
         # Training
         epoch_losses, epoch_time = train_epoch(model, train_loader, optimizer, epoch)
 

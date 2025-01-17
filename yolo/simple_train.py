@@ -329,44 +329,70 @@ def analyze_predictions(predictions, targets, model):
 
 
 def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
-    """Train for one epoch"""
+    """Train for one epoch with detailed debugging"""
     model.train()
     epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
     num_batches = 0
     start_time = time.time()
 
+    print(f"\nStarting epoch with {len(train_loader)} batches")
+
     for batch_idx, batch in enumerate(train_loader):
-        # Training step
-        loss, components = train_step(model, batch, optimizer)
+        try:
+            # Print batch info
+            images, targets = batch
+            print(f"\nProcessing batch {batch_idx}")
+            print(f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}")
 
-        # Update metrics
-        epoch_losses["total"] += loss.item()
-        for k in ["xy", "wh", "conf", "class", "iou"]:
-            if k in components:
-                epoch_losses[k] += components[k]
-        num_batches += 1
+            # Training step
+            loss, components = train_step(model, batch, optimizer)
 
-        # Ensure evaluation of tensors
-        mx.eval(loss)
-        del loss, components  # Explicitly delete to help with memory
+            # Update metrics
+            current_loss = loss.item()
+            epoch_losses["total"] += current_loss
+            for k in ["xy", "wh", "conf", "class", "iou"]:
+                if k in components:
+                    epoch_losses[k] += components[k]
+            num_batches += 1
 
-        if show_batches and batch_idx % 10 == 0:
-            print(
-                f"Batch {batch_idx}: loss={epoch_losses['total']/max(1,num_batches):.4f}"
-            )
+            # Print detailed batch progress
+            if batch_idx % 5 == 0:  # More frequent updates
+                avg_loss = epoch_losses["total"] / num_batches
+                elapsed_time = time.time() - start_time
+                print(f"\nBatch {batch_idx}/{len(train_loader)}:")
+                print(f"Current loss: {current_loss:.4f}")
+                print(f"Average loss: {avg_loss:.4f}")
+                print(f"Components: {format_loss_components(components)}")
+                print(f"Time elapsed: {elapsed_time:.1f}s")
+                print(f"Memory info: Active tensors: {mx.eval_count()}")
+
+            # Ensure evaluation of tensors
+            mx.eval(loss)
+            del loss, components  # Explicitly delete to help with memory
+
+        except Exception as e:
+            print(f"\nError in batch {batch_idx}:")
+            print(f"Exception: {str(e)}")
+            print(f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}")
+            raise  # Re-raise the exception after printing debug info
 
     # Calculate averages
     for k in epoch_losses:
-        epoch_losses[k] /= num_batches
+        epoch_losses[k] /= max(num_batches, 1)  # Avoid division by zero
 
+    print(f"\nEpoch completed. Processed {num_batches} batches")
     return epoch_losses, time.time() - start_time
 
 
 def main():
     args = parse_args()
 
-    print("Initializing model...")
-    # Create datasets
+    print("\nInitializing training...")
+    print(f"Mode: {args.mode}")
+    print(f"Data directory: {args.data_dir}")
+
+    # Create datasets with debug info
+    print("\nCreating datasets...")
     train_dataset = VOCDataset(args.data_dir, "train")
     val_dataset = VOCDataset(args.data_dir, "val")
 
@@ -377,18 +403,26 @@ def main():
     if args.batch_size:
         batch_size = args.batch_size
     else:
-        batch_size = 2 if args.mode == "dev" else 32  # Small batch for dev mode
+        batch_size = 2 if args.mode == "dev" else 32
 
-    print(f"Using batch size: {batch_size} ({args.mode} mode)")
+    print(f"\nCreating data loaders...")
+    print(f"Batch size: {batch_size}")
+    print(f"Expected batches per epoch: {len(train_dataset) // batch_size}")
 
     # Create data loaders
     train_loader = create_data_loader(
         dataset=train_dataset, batch_size=batch_size, shuffle=True
     )
 
-    val_loader = create_data_loader(
-        dataset=val_dataset, batch_size=batch_size, shuffle=False
-    )
+    # Verify data loader
+    print("\nVerifying data loader...")
+    try:
+        first_batch = next(iter(train_loader))
+        images, targets = first_batch
+        print(f"First batch shapes - Images: {images.shape}, Targets: {targets.shape}")
+    except Exception as e:
+        print(f"Error loading first batch: {str(e)}")
+        raise
 
     # Initialize model and optimizer
     model = YOLO(S=7, B=5, C=20)

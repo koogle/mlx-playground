@@ -261,7 +261,7 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=None,
+        default=125,
         help="Override default number of epochs",
     )
     parser.add_argument(
@@ -334,12 +334,14 @@ def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
                 epoch_losses[k] += components[k]
         num_batches += 1
 
-        # Periodically clear cache
-        if batch_idx % 10 == 0:
-            mx.clear_cache()
+        # Ensure evaluation of tensors
+        mx.eval(loss)
+        del loss, components  # Explicitly delete to help with memory
 
         if show_batches and batch_idx % 10 == 0:
-            print(f"Batch {batch_idx}: loss={loss.item():.4f}")
+            print(
+                f"Batch {batch_idx}: loss={epoch_losses['total']/max(1,num_batches):.4f}"
+            )
 
     # Calculate averages
     for k in epoch_losses:
@@ -371,13 +373,11 @@ def main():
     # Training loop
     val_frequency = 5  # Validate every 5 epochs
     best_val_loss = float("inf")
+    last_val_loss = float("inf")
 
     for epoch in range(args.epochs):
         # Training
         epoch_losses, epoch_time = train_epoch(model, train_loader, optimizer, epoch)
-
-        # Clear cache before validation
-        mx.clear_cache()
 
         # Validation
         if (epoch + 1) % val_frequency == 0:
@@ -386,6 +386,9 @@ def main():
                 best_val_loss = val_loss
                 save_checkpoint(model, optimizer, epoch + 1, "best")
                 print("New best model saved!")
+            last_val_loss = val_loss
+        else:
+            val_loss = last_val_loss
 
         # Print progress
         print(f"\nEpoch {epoch + 1}:")

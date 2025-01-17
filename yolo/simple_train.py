@@ -1,6 +1,7 @@
 import os
 import mlx.core as mx
 import mlx.optimizers as optim
+from tqdm import tqdm
 from model import YOLO
 from data.voc import VOC_CLASSES, DataLoader, VOCDataset, create_data_loader
 import time
@@ -375,7 +376,8 @@ def main():
     best_val_loss = float("inf")
     last_val_loss = float("inf")
 
-    for epoch in range(args.epochs):
+    for epoch in tqdm(range(args.epochs)):
+
         # Training
         epoch_losses, epoch_time = train_epoch(model, train_loader, optimizer, epoch)
 

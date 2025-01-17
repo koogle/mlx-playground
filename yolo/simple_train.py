@@ -328,16 +328,16 @@ def analyze_predictions(predictions, targets, model):
     print(f"\nNumber of objects: {num_objects}")
 
 
-def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
+def train_epoch(model, train_loader, optimizer, batch_size):
     """Train for one epoch with detailed debugging"""
     model.train()
     epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
     num_batches = 0
     start_time = time.time()
 
-    print(f"\nStarting epoch with {len(train_loader)} batches")
+    print(f"\nStarting epoch with {batch_size} batches")
 
-    for batch_idx, batch in enumerate(train_loader):
+    for batch_idx, batch in batch_size:
         try:
             # Print batch info
             images, targets = batch
@@ -438,7 +438,7 @@ def main():
 
         # Training
         epoch_losses, epoch_time = train_epoch(
-            model, train_loader, optimizer, epoch, show_batches=True
+            model, train_loader, optimizer, batch_size=batch_size
         )
 
         # Print batch-level progress

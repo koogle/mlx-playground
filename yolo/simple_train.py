@@ -351,13 +351,17 @@ def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
 def main():
     args = parse_args()
 
-    # Create data loaders using existing function
+    # Create datasets
+    train_dataset = VOCDataset(args.data_dir, "train")
+    val_dataset = VOCDataset(args.data_dir, "val")
+
+    # Create data loaders
     train_loader = create_data_loader(
-        args.data_dir, "train", batch_size=args.batch_size or 32, shuffle=True
+        dataset=train_dataset, batch_size=args.batch_size or 32, shuffle=True
     )
 
     val_loader = create_data_loader(
-        args.data_dir, "val", batch_size=args.batch_size or 32, shuffle=False
+        dataset=val_dataset, batch_size=args.batch_size or 32, shuffle=False
     )
 
     # Initialize model and optimizer

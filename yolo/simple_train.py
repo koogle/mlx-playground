@@ -373,13 +373,21 @@ def main():
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
 
+    # Set batch size based on mode
+    if args.batch_size:
+        batch_size = args.batch_size
+    else:
+        batch_size = 2 if args.mode == "dev" else 32  # Small batch for dev mode
+
+    print(f"Using batch size: {batch_size} ({args.mode} mode)")
+
     # Create data loaders
     train_loader = create_data_loader(
-        dataset=train_dataset, batch_size=args.batch_size or 32, shuffle=True
+        dataset=train_dataset, batch_size=batch_size, shuffle=True
     )
 
     val_loader = create_data_loader(
-        dataset=val_dataset, batch_size=args.batch_size or 32, shuffle=False
+        dataset=val_dataset, batch_size=batch_size, shuffle=False
     )
 
     # Initialize model and optimizer

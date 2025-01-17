@@ -364,7 +364,6 @@ def train_epoch(model, train_loader, optimizer, epoch, show_batches=False):
                 print(f"Average loss: {avg_loss:.4f}")
                 print(f"Components: {format_loss_components(components)}")
                 print(f"Time elapsed: {elapsed_time:.1f}s")
-                print(f"Memory info: Active tensors: {mx.eval_count()}")
 
             # Ensure evaluation of tensors
             mx.eval(loss)

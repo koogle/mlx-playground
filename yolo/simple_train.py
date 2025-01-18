@@ -117,42 +117,24 @@ def calculate_iou(boxes1, boxes2):
 
 
 def train_step(model, batch, optimizer):
-    """Single training step with compile optimization"""
+    """Single training step with parallelization optimizations"""
     images, targets = batch
 
-    @mx.compile  # Compile the training step for better performance
+    @mx.compile(parallel=True)  # Enable parallel execution
     def loss_fn(params, images, targets):
         model.update(params)
         predictions = model(images)
         return yolo_loss(predictions, targets, model)
 
     try:
-        # Capture model and optimizer state for evaluation
-        state = [model.parameters(), optimizer.state]
-
-        # Compute loss and gradients
+        # Compute loss and gradients with larger batch size
         loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
         optimizer.update(model, grads)
-
-        # Evaluate loss, components, and state together
-        loss_val, components = loss
-        mx.eval(loss_val, *state)
-
-        # Check for NaN/Inf
-        if not mx.isfinite(loss_val).all().item():
-            print("Warning: Loss is not finite!")
-            print(f"Loss value: {loss_val.item()}")
-            print("Components:", components)
-
-        # Clear intermediate values
-        del grads, state
-        return loss_val, components
+        mx.eval(loss, grads)  # Ensure parallel evaluation
+        return loss
 
     except Exception as e:
-        print(f"\nError in training step:")
-        print(f"Exception type: {type(e).__name__}")
-        print(f"Exception message: {str(e)}")
-        print(f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}")
+        print(f"\nError in training step: {str(e)}")
         raise
 
 
@@ -387,6 +369,15 @@ def train_epoch(model, train_loader, optimizer, batch_size):
 def main():
     args = parse_args()
 
+    # Enable MLX threading
+    mx.set_default_device(mx.cpu(threads=8))  # Adjust number based on CPU cores
+
+    # Increase batch size for better parallelization
+    if args.batch_size:
+        batch_size = args.batch_size
+    else:
+        batch_size = 8 if args.mode == "dev" else 128  # Increased from 64
+
     print("\nInitializing training...")
     print(f"Mode: {args.mode}")
     print(f"Data directory: {args.data_dir}")
@@ -399,19 +390,16 @@ def main():
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
 
-    # Set batch size based on mode
-    if args.batch_size:
-        batch_size = args.batch_size
-    else:
-        batch_size = 2 if args.mode == "dev" else 64
-
     print(f"\nCreating data loaders...")
     print(f"Batch size: {batch_size}")
     print(f"Expected batches per epoch: {len(train_dataset) // batch_size}")
 
-    # Create data loaders
+    # Create data loaders with parallel processing
     train_loader = create_data_loader(
-        dataset=train_dataset, batch_size=batch_size, shuffle=True
+        dataset=train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=4,  # Enable parallel data loading
     )
 
     # Verify data loader

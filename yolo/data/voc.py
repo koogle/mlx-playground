@@ -355,8 +355,12 @@ class DataLoader:
         return images, targets
 
 
-def create_data_loader(
-    dataset: VOCDataset, batch_size: int, shuffle: bool = True
-) -> DataLoader:
-    """Create batched data loader"""
-    return DataLoader(dataset, batch_size, shuffle)
+def create_data_loader(dataset, batch_size, shuffle=True, num_workers=4):
+    """Create data loader with parallel processing support"""
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        prefetch_factor=2,
+    )

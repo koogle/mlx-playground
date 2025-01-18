@@ -327,20 +327,16 @@ def analyze_predictions(predictions, targets, model):
     print(f"\nNumber of objects: {num_objects}")
 
 
-def train_epoch(model, train_loader, optimizer, batch_size):
+def train_epoch(model, train_loader, optimizer):
     """Train for one epoch with MLX optimizations"""
     model.train()
     epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
     num_batches = 0
     start_time = time.time()
 
-    # Only process batch_size number of batches
-    max_batches = batch_size
-    print(f"\nStarting epoch with {max_batches} batches")
+    print(f"\nStarting epoch with {len(train_loader)} batches")
 
     for batch_idx, batch in enumerate(train_loader):
-        if batch_idx >= max_batches:
-            break
 
         try:
             # Training step
@@ -435,9 +431,7 @@ def main():
         print(f"\nEpoch {epoch + 1}/{args.epochs}")
 
         # Training
-        epoch_losses, epoch_time = train_epoch(
-            model, train_loader, optimizer, batch_size=batch_size
-        )
+        epoch_losses, epoch_time = train_epoch(model, train_loader, optimizer)
 
         # Print batch-level progress
         print(f"\nEpoch {epoch + 1} Summary:")

@@ -369,9 +369,6 @@ def train_epoch(model, train_loader, optimizer, batch_size):
 def main():
     args = parse_args()
 
-    # Enable MLX threading
-    mx.set_default_device(mx.cpu(threads=8))  # Adjust number based on CPU cores
-
     # Increase batch size for better parallelization
     if args.batch_size:
         batch_size = args.batch_size

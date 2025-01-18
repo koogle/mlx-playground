@@ -117,21 +117,26 @@ def calculate_iou(boxes1, boxes2):
 
 
 def train_step(model, batch, optimizer):
-    """Single training step with memory optimizations"""
+    """Single training step with compile optimization"""
     images, targets = batch
 
+    @mx.compile  # Compile the training step for better performance
     def loss_fn(params, images, targets):
         model.update(params)
         predictions = model(images)
         return yolo_loss(predictions, targets, model)
 
     try:
+        # Capture model and optimizer state for evaluation
+        state = [model.parameters(), optimizer.state]
+
+        # Compute loss and gradients
         loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
         optimizer.update(model, grads)
 
-        # Evaluate loss and components
+        # Evaluate loss, components, and state together
         loss_val, components = loss
-        mx.eval(loss_val)
+        mx.eval(loss_val, *state)
 
         # Check for NaN/Inf
         if not mx.isfinite(loss_val).all().item():
@@ -140,10 +145,13 @@ def train_step(model, batch, optimizer):
             print("Components:", components)
 
         # Clear intermediate values
-        del grads
+        del grads, state
         return loss_val, components
+
     except Exception as e:
-        print(f"Error in training step: {e}")
+        print(f"\nError in training step:")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
         print(f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}")
         raise
 
@@ -329,25 +337,21 @@ def analyze_predictions(predictions, targets, model):
 
 
 def train_epoch(model, train_loader, optimizer, batch_size):
-    """Train for one epoch with detailed debugging"""
+    """Train for one epoch with optimized batch processing"""
     model.train()
     epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
     num_batches = 0
     start_time = time.time()
 
-    print(f"\nStarting epoch with {batch_size} batches")
+    print(f"\nStarting epoch with {len(train_loader)} batches")
 
-    for batch_idx, batch in batch_size:
+    # Process batches with better error handling
+    for batch_idx, batch in enumerate(train_loader):
         try:
-            # Print batch info
-            images, targets = batch
-            print(f"\nProcessing batch {batch_idx}")
-            print(f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}")
-
             # Training step
             loss, components = train_step(model, batch, optimizer)
 
-            # Update metrics
+            # Update metrics (after successful step)
             current_loss = loss.item()
             epoch_losses["total"] += current_loss
             for k in ["xy", "wh", "conf", "class", "iou"]:
@@ -355,31 +359,28 @@ def train_epoch(model, train_loader, optimizer, batch_size):
                     epoch_losses[k] += components[k]
             num_batches += 1
 
-            # Print detailed batch progress
-            if batch_idx % 5 == 0:  # More frequent updates
+            # Print progress less frequently
+            if batch_idx % 10 == 0:  # Reduced from 5 to 10
                 avg_loss = epoch_losses["total"] / num_batches
                 elapsed_time = time.time() - start_time
-                print(f"\nBatch {batch_idx}/{len(train_loader)}:")
-                print(f"Current loss: {current_loss:.4f}")
-                print(f"Average loss: {avg_loss:.4f}")
-                print(f"Components: {format_loss_components(components)}")
-                print(f"Time elapsed: {elapsed_time:.1f}s")
+                print(
+                    f"\nBatch {batch_idx}/{len(train_loader)} "
+                    f"(Loss: {current_loss:.4f}, Avg: {avg_loss:.4f}, "
+                    f"Time: {elapsed_time:.1f}s)"
+                )
 
-            # Ensure evaluation of tensors
-            mx.eval(loss)
-            del loss, components  # Explicitly delete to help with memory
+            # Explicit cleanup
+            del loss, components
 
         except Exception as e:
             print(f"\nError in batch {batch_idx}:")
             print(f"Exception: {str(e)}")
-            print(f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}")
-            raise  # Re-raise the exception after printing debug info
+            continue  # Try to continue with next batch instead of crashing
 
     # Calculate averages
     for k in epoch_losses:
-        epoch_losses[k] /= max(num_batches, 1)  # Avoid division by zero
+        epoch_losses[k] /= max(num_batches, 1)
 
-    print(f"\nEpoch completed. Processed {num_batches} batches")
     return epoch_losses, time.time() - start_time
 
 
@@ -402,7 +403,7 @@ def main():
     if args.batch_size:
         batch_size = args.batch_size
     else:
-        batch_size = 2 if args.mode == "dev" else 32
+        batch_size = 2 if args.mode == "dev" else 64
 
     print(f"\nCreating data loaders...")
     print(f"Batch size: {batch_size}")

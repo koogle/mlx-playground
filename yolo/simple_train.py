@@ -355,7 +355,7 @@ def train_epoch(model, train_loader, optimizer):
                 avg_loss = epoch_losses["total"] / num_batches
                 elapsed_time = time.time() - start_time
                 print(
-                    f"\nBatch {batch_idx}/{max_batches} "
+                    f"\nBatch {batch_idx}/{len(train_loader)} "
                     f"(Loss: {current_loss:.4f}, Avg: {avg_loss:.4f}, "
                     f"Time: {elapsed_time:.1f}s)"
                 )

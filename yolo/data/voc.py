@@ -355,12 +355,10 @@ class DataLoader:
         return images, targets
 
 
-def create_data_loader(dataset, batch_size, shuffle=True, num_workers=4):
-    """Create data loader with parallel processing support"""
+def create_data_loader(dataset, batch_size, shuffle=True):
+
     return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
-        num_workers=num_workers,
-        prefetch_factor=2,
     )

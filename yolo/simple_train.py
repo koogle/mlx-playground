@@ -120,7 +120,7 @@ def train_step(model, batch, optimizer):
     """Single training step with parallelization optimizations"""
     images, targets = batch
 
-    @mx.compile(parallel=True)  # Enable parallel execution
+    @mx.compile
     def loss_fn(params, images, targets):
         model.update(params)
         predictions = model(images)
@@ -396,7 +396,6 @@ def main():
         dataset=train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,  # Enable parallel data loading
     )
 
     # Verify data loader

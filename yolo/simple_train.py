@@ -117,24 +117,33 @@ def calculate_iou(boxes1, boxes2):
 
 
 def train_step(model, batch, optimizer):
-    """Single training step with parallelization optimizations"""
+    """Single training step optimized for MLX"""
     images, targets = batch
 
-    @mx.compile
+    @mx.compile  # Use MLX's compile for optimization
     def loss_fn(params, images, targets):
         model.update(params)
         predictions = model(images)
         return yolo_loss(predictions, targets, model)
 
     try:
-        # Compute loss and gradients with larger batch size
+        # Compute loss and gradients
         loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
         optimizer.update(model, grads)
-        mx.eval(loss, grads)  # Ensure parallel evaluation
-        return loss
+
+        # Evaluate model state and loss together for better batching
+        state = [model.parameters(), optimizer.state]
+        loss_val, components = loss
+        mx.eval(loss_val, *state)  # Batch evaluation
+
+        # Clear intermediate values
+        del grads, state
+        return loss_val, components
 
     except Exception as e:
-        print(f"\nError in training step: {str(e)}")
+        print(f"\nError in training step:")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
         raise
 
 
@@ -319,21 +328,25 @@ def analyze_predictions(predictions, targets, model):
 
 
 def train_epoch(model, train_loader, optimizer, batch_size):
-    """Train for one epoch with optimized batch processing"""
+    """Train for one epoch with MLX optimizations"""
     model.train()
     epoch_losses = {"total": 0, "xy": 0, "wh": 0, "conf": 0, "class": 0, "iou": 0}
     num_batches = 0
     start_time = time.time()
 
-    print(f"\nStarting epoch with {len(train_loader)} batches")
+    # Only process batch_size number of batches
+    max_batches = batch_size
+    print(f"\nStarting epoch with {max_batches} batches")
 
-    # Process batches with better error handling
     for batch_idx, batch in enumerate(train_loader):
+        if batch_idx >= max_batches:
+            break
+
         try:
             # Training step
             loss, components = train_step(model, batch, optimizer)
 
-            # Update metrics (after successful step)
+            # Update metrics after successful step
             current_loss = loss.item()
             epoch_losses["total"] += current_loss
             for k in ["xy", "wh", "conf", "class", "iou"]:
@@ -341,12 +354,12 @@ def train_epoch(model, train_loader, optimizer, batch_size):
                     epoch_losses[k] += components[k]
             num_batches += 1
 
-            # Print progress less frequently
-            if batch_idx % 10 == 0:  # Reduced from 5 to 10
+            # Print progress less frequently to reduce overhead
+            if batch_idx % 20 == 0:  # Reduced frequency
                 avg_loss = epoch_losses["total"] / num_batches
                 elapsed_time = time.time() - start_time
                 print(
-                    f"\nBatch {batch_idx}/{len(train_loader)} "
+                    f"\nBatch {batch_idx}/{max_batches} "
                     f"(Loss: {current_loss:.4f}, Avg: {avg_loss:.4f}, "
                     f"Time: {elapsed_time:.1f}s)"
                 )
@@ -357,7 +370,7 @@ def train_epoch(model, train_loader, optimizer, batch_size):
         except Exception as e:
             print(f"\nError in batch {batch_idx}:")
             print(f"Exception: {str(e)}")
-            continue  # Try to continue with next batch instead of crashing
+            continue
 
     # Calculate averages
     for k in epoch_losses:

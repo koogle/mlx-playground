@@ -378,43 +378,63 @@ def train_epoch(model, train_loader, optimizer):
 def main():
     args = parse_args()
 
-    # Increase batch size for better parallelization
-    if args.batch_size:
-        batch_size = args.batch_size
-    else:
-        batch_size = 8 if args.mode == "dev" else 128  # Increased from 64
-
     print("\nInitializing training...")
     print(f"Mode: {args.mode}")
     print(f"Data directory: {args.data_dir}")
 
-    # Create datasets with debug info
+    # Create datasets with size limits for dev mode
     print("\nCreating datasets...")
     train_dataset = VOCDataset(args.data_dir, "train")
     val_dataset = VOCDataset(args.data_dir, "val")
 
+    # Limit dataset size in dev mode
+    if args.mode == "dev":
+        # Take only first 10 images for dev mode
+        dev_size = 10
+        train_dataset.image_ids = train_dataset.image_ids[:dev_size]
+        val_dataset.image_ids = val_dataset.image_ids[:dev_size]
+        print(f"Dev mode: Limited to {dev_size} images")
+
+    # Set appropriate batch size
+    if args.batch_size:
+        batch_size = args.batch_size
+    else:
+        batch_size = 2 if args.mode == "dev" else 128
+
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
-
-    print(f"\nCreating data loaders...")
     print(f"Batch size: {batch_size}")
     print(f"Expected batches per epoch: {len(train_dataset) // batch_size}")
 
-    # Create data loaders with parallel processing
+    # Create data loaders
     train_loader = create_data_loader(
         dataset=train_dataset,
         batch_size=batch_size,
         shuffle=True,
     )
 
-    # Verify data loader
-    print("\nVerifying data loader...")
+    val_loader = create_data_loader(
+        dataset=val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+    )
+
+    # Verify data loaders
+    print("\nVerifying data loaders...")
     try:
         first_batch = next(iter(train_loader))
         images, targets = first_batch
-        print(f"First batch shapes - Images: {images.shape}, Targets: {targets.shape}")
+        print(
+            f"First train batch shapes - Images: {images.shape}, Targets: {targets.shape}"
+        )
+
+        first_val_batch = next(iter(val_loader))
+        val_images, val_targets = first_val_batch
+        print(
+            f"First val batch shapes - Images: {val_images.shape}, Targets: {val_targets.shape}"
+        )
     except Exception as e:
-        print(f"Error loading first batch: {str(e)}")
+        print(f"Error loading batches: {str(e)}")
         raise
 
     # Initialize model and optimizer

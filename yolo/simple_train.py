@@ -316,7 +316,7 @@ def parse_args():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=16,
+        default=32,
         help="Override default batch size",
     )
     parser.add_argument(
@@ -468,7 +468,7 @@ def main():
     if args.batch_size:
         batch_size = args.batch_size
     else:
-        batch_size = 2 if args.mode == "dev" else 16
+        batch_size = 2 if args.mode == "dev" else 32
 
     logging.info(f"Using batch size: {batch_size}")
 

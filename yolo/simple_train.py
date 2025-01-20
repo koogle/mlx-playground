@@ -316,7 +316,7 @@ def parse_args():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=None,
+        default=16,
         help="Override default batch size",
     )
     parser.add_argument(
@@ -464,15 +464,16 @@ def main():
         val_dataset.image_ids = val_dataset.image_ids[:dev_size]
         print(f"Dev mode: Limited to {dev_size} images")
 
-    # Set appropriate batch size
+    # Modify batch size selection
     if args.batch_size:
         batch_size = args.batch_size
     else:
-        batch_size = 2 if args.mode == "dev" else 128
+        batch_size = 2 if args.mode == "dev" else 16
+
+    logging.info(f"Using batch size: {batch_size}")
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
-    print(f"Batch size: {batch_size}")
     print(f"Expected batches per epoch: {len(train_dataset) // batch_size}")
 
     # Create data loaders

@@ -48,20 +48,28 @@ def train_step(model, scheduler, optimizer, images, text_embeddings):
     noisy_images = scheduler.q_sample(images, t, noise=noise)
     print(f"Noisy images shape: {noisy_images.shape}")
 
-    def loss_fn(model_params):
+    def loss_fn(params):
         # Expand timesteps to match model's expected input format
         t_expanded = mx.expand_dims(t, axis=-1)  # [batch_size, 1]
         print(f"Expanded timesteps shape: {t_expanded.shape}")
 
         # Get model prediction
-        predicted_noise = model.apply(model_params, noisy_images, t_expanded)
+        model.update(params)
+        predicted_noise = model(noisy_images, t_expanded)
         print(f"Predicted noise shape: {predicted_noise.shape}")
 
         return diffusion_loss(predicted_noise, noise)
 
-    loss, grads = nn.value_and_grad(loss_fn)(model.parameters())
+    # Compute loss and gradients
+    loss, grads = mx.value_and_grad(loss_fn)(model.parameters())
     optimizer.update(model, grads)
-    mx.eval(model.parameters())
+
+    # Evaluate model state and loss together for better batching
+    state = [model.parameters(), optimizer.state]
+    mx.eval(loss, *state)  # Batch evaluation
+
+    # Clear intermediate values
+    del grads, state
 
     return loss
 

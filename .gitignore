@@ -166,3 +166,5 @@ cython_debug/
 # Data
 yolo/VOCdevkit
 yolo/checkpoints
+
+diffusion/checkpoints

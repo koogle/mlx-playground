@@ -9,6 +9,38 @@ from tabulate import tabulate
 import argparse
 from pathlib import Path
 from loss import yolo_loss
+import psutil  # Add this import
+import gc  # Add this import
+import logging  # Add this import
+from datetime import datetime
+import traceback  # Add this import
+
+
+def setup_logging():
+    """Setup logging configuration"""
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"training_{timestamp}.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
+    )
+    return log_file
+
+
+def get_memory_usage():
+    """Get current memory usage information"""
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    return {
+        "rss": mem_info.rss / (1024 * 1024),  # RSS in MB
+        "vms": mem_info.vms / (1024 * 1024),  # VMS in MB
+        "system_percent": psutil.virtual_memory().percent,
+    }
 
 
 def bbox_loss(predictions, targets, model):
@@ -120,30 +152,52 @@ def train_step(model, batch, optimizer):
     """Single training step optimized for MLX"""
     images, targets = batch
 
-    @mx.compile  # Use MLX's compile for optimization
-    def loss_fn(params, images, targets):
-        model.update(params)
-        predictions = model(images)
-        return yolo_loss(predictions, targets, model)
-
     try:
+        mem_before = get_memory_usage()
+        logging.debug(f"Memory before training step: {mem_before}")
+
+        @mx.compile
+        def loss_fn(params, images, targets):
+            model.update(params)
+            predictions = model(images)
+            return yolo_loss(predictions, targets, model)
+
         # Compute loss and gradients
         loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
+
+        # Log gradient statistics
+        grad_norms = {name: mx.norm(g).item() for name, g in grads.items()}
+        logging.debug(f"Gradient norms: {grad_norms}")
+
         optimizer.update(model, grads)
 
         # Evaluate model state and loss together for better batching
         state = [model.parameters(), optimizer.state]
         loss_val, components = loss
-        mx.eval(loss_val, *state)  # Batch evaluation
+        mx.eval(loss_val, *state)
+
+        mem_after = get_memory_usage()
+        logging.debug(f"Memory after training step: {mem_after}")
+
+        # Memory change logging
+        mem_diff = {k: mem_after[k] - mem_before[k] for k in mem_before}
+        logging.debug(f"Memory change during step: {mem_diff}")
 
         # Clear intermediate values
         del grads, state
+        gc.collect()  # Force garbage collection
+
         return loss_val, components
 
     except Exception as e:
-        print(f"\nError in training step:")
-        print(f"Exception type: {type(e).__name__}")
-        print(f"Exception message: {str(e)}")
+        logging.error(f"\nError in training step:")
+        logging.error(f"Exception type: {type(e).__name__}")
+        logging.error(f"Exception message: {str(e)}")
+        logging.error(f"Traceback: {traceback.format_exc()}")
+        logging.error(f"Memory state: {get_memory_usage()}")
+        logging.error(
+            f"Batch shapes - Images: {images.shape}, Targets: {targets.shape}"
+        )
         raise
 
 
@@ -334,11 +388,18 @@ def train_epoch(model, train_loader, optimizer):
     num_batches = 0
     start_time = time.time()
 
-    print(f"\nStarting epoch with {len(train_loader)} batches")
+    logging.info(f"\nStarting epoch with {len(train_loader)} batches")
+    initial_memory = get_memory_usage()
+    logging.info(f"Initial memory state: {initial_memory}")
 
     for batch_idx, batch in enumerate(train_loader):
-
         try:
+            # Log memory before batch
+            if batch_idx % 10 == 0:  # Log every 10 batches
+                logging.info(
+                    f"Memory state before batch {batch_idx}: {get_memory_usage()}"
+                )
+
             # Training step
             loss, components = train_step(model, batch, optimizer)
 
@@ -350,33 +411,45 @@ def train_epoch(model, train_loader, optimizer):
                     epoch_losses[k] += components[k]
             num_batches += 1
 
-            # Print progress less frequently to reduce overhead
-            if batch_idx % 20 == 0:  # Reduced frequency
+            # Print progress less frequently
+            if batch_idx % 20 == 0:
                 avg_loss = epoch_losses["total"] / num_batches
                 elapsed_time = time.time() - start_time
-                print(
+                mem_usage = get_memory_usage()
+                logging.info(
                     f"\nBatch {batch_idx}/{len(train_loader)} "
                     f"(Loss: {current_loss:.4f}, Avg: {avg_loss:.4f}, "
-                    f"Time: {elapsed_time:.1f}s)"
+                    f"Time: {elapsed_time:.1f}s)\n"
+                    f"Memory Usage: {mem_usage}"
                 )
 
             # Explicit cleanup
             del loss, components
+            if batch_idx % 10 == 0:  # Periodic garbage collection
+                gc.collect()
 
         except Exception as e:
-            print(f"\nError in batch {batch_idx}:")
-            print(f"Exception: {str(e)}")
+            logging.error(f"\nError in batch {batch_idx}:")
+            logging.error(f"Exception: {str(e)}")
+            logging.error(f"Traceback: {traceback.format_exc()}")
+            logging.error(f"Memory state: {get_memory_usage()}")
             continue
 
     # Calculate averages
     for k in epoch_losses:
         epoch_losses[k] /= max(num_batches, 1)
 
+    final_memory = get_memory_usage()
+    logging.info(f"Final memory state: {final_memory}")
+
     return epoch_losses, time.time() - start_time
 
 
 def main():
     args = parse_args()
+    log_file = setup_logging()
+    logging.info(f"Starting training with log file: {log_file}")
+    logging.info(f"Command line arguments: {args}")
 
     print("\nInitializing training...")
     print(f"Mode: {args.mode}")
@@ -472,6 +545,15 @@ def main():
         # Save regular checkpoint
         if (epoch + 1) % 10 == 0:
             save_checkpoint(model, optimizer, epoch + 1, "regular")
+
+    try:
+        # ... existing training loop ...
+        pass
+    except Exception as e:
+        logging.error("Fatal error in training:")
+        logging.error(traceback.format_exc())
+        logging.error(f"Final memory state: {get_memory_usage()}")
+        raise
 
 
 if __name__ == "__main__":

@@ -165,10 +165,6 @@ def train_step(model, batch, optimizer):
         # Compute loss and gradients
         loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), images, targets)
 
-        # Log gradient statistics
-        grad_norms = {name: mx.norm(g).item() for name, g in grads.items()}
-        logging.debug(f"Gradient norms: {grad_norms}")
-
         optimizer.update(model, grads)
 
         # Evaluate model state and loss together for better batching

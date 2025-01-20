@@ -566,7 +566,7 @@ def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
     return valid_boxes, valid_confidences
 
 
-def process_predictions(predictions, model, conf_threshold=0.5, nms_threshold=0.5):
+def process_predictions(predictions, model, conf_threshold=0.15, nms_threshold=0.3):
     """Process raw predictions into final detections."""
     boxes, scores, classes = decode_predictions(
         predictions, model, conf_threshold=conf_threshold

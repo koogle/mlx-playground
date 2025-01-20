@@ -6,13 +6,8 @@ class NoiseScheduler:
     Manages the noise schedule for the diffusion process.
     Implements linear beta schedule as described in the DDPM paper.
     """
-    def __init__(
-        self,
-        num_timesteps=1000,
-        beta_start=1e-4,
-        beta_end=0.02,
-        device=None
-    ):
+
+    def __init__(self, num_timesteps=1000, beta_start=1e-4, beta_end=0.02, device=None):
         self.num_timesteps = num_timesteps
         self.beta_start = beta_start
         self.beta_end = beta_end
@@ -35,13 +30,17 @@ class NoiseScheduler:
         if noise is None:
             noise = mx.random.normal(x_start.shape)
 
+        # Get the appropriate alpha values and reshape for broadcasting
         sqrt_alphas_cumprod_t = self.sqrt_alphas_cumprod[t]
         sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t]
-        
-        return (
-            sqrt_alphas_cumprod_t * x_start
-            + sqrt_one_minus_alphas_cumprod_t * noise
+
+        # Reshape for broadcasting with image dimensions
+        sqrt_alphas_cumprod_t = mx.expand_dims(sqrt_alphas_cumprod_t, axis=(1, 2, 3))
+        sqrt_one_minus_alphas_cumprod_t = mx.expand_dims(
+            sqrt_one_minus_alphas_cumprod_t, axis=(1, 2, 3)
         )
+
+        return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
 
     def p_losses(self, denoise_model, x_start, t, noise=None):
         """Calculate the loss for denoising model training"""
@@ -81,11 +80,7 @@ class NoiseScheduler:
         imgs = []
 
         for i in reversed(range(0, self.num_timesteps)):
-            img = self.p_sample(
-                model, img, 
-                mx.array([i] * b),
-                i
-            )
+            img = self.p_sample(model, img, mx.array([i] * b), i)
             imgs.append(img)
         return imgs
 

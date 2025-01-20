@@ -32,20 +32,31 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
 
 def train_step(model, scheduler, optimizer, images, text_embeddings):
     """Single training step"""
+    # Print shapes for debugging
+    print(f"\nDebug shapes in train_step:")
+    print(f"Images shape: {images.shape}")
+
     # Sample random timesteps
     batch_size = images.shape[0]
     t = mx.random.randint(0, scheduler.num_timesteps, (batch_size,))
+    print(f"Timesteps shape: {t.shape}")
 
     # Add noise to images
     noise = mx.random.normal(images.shape)
+    print(f"Noise shape: {noise.shape}")
+
     noisy_images = scheduler.q_sample(images, t, noise=noise)
+    print(f"Noisy images shape: {noisy_images.shape}")
 
     def loss_fn(model_params):
         # Expand timesteps to match model's expected input format
         t_expanded = mx.expand_dims(t, axis=-1)  # [batch_size, 1]
+        print(f"Expanded timesteps shape: {t_expanded.shape}")
 
         # Get model prediction
         predicted_noise = model.apply(model_params, noisy_images, t_expanded)
+        print(f"Predicted noise shape: {predicted_noise.shape}")
+
         return diffusion_loss(predicted_noise, noise)
 
     loss, grads = nn.value_and_grad(loss_fn)(model.parameters())
@@ -63,23 +74,21 @@ def train_epoch(model, scheduler, train_loader, optimizer):
     start_time = time.time()
 
     for batch_idx, (images, descriptions) in enumerate(train_loader):
-        try:
-            # Training step
-            loss = train_step(model, scheduler, optimizer, images, descriptions)
-            current_loss = loss.item()
-            total_loss += current_loss
-            num_batches += 1
+        # Training step - no try/except, let errors propagate
+        loss = train_step(model, scheduler, optimizer, images, descriptions)
+        current_loss = loss.item()
+        total_loss += current_loss
+        num_batches += 1
 
-            # Print progress
-            if batch_idx % 5 == 0:
-                avg_loss = total_loss / num_batches
-                print(f"\nBatch {batch_idx}/{len(train_loader)}")
-                print(f"Loss: {current_loss:.4f}, Avg Loss: {avg_loss:.4f}")
-                print(f"Sample text: {descriptions[0]}")
-
-        except Exception as e:
-            print(f"Error in batch {batch_idx}: {str(e)}")
-            continue
+        # Print progress
+        if batch_idx % 5 == 0:
+            avg_loss = total_loss / num_batches
+            print(f"\nBatch {batch_idx}/{len(train_loader)}")
+            print(f"Loss: {current_loss:.4f}, Avg Loss: {avg_loss:.4f}")
+            print(f"Sample text: {descriptions[0]}")
+            # Print shapes for debugging
+            print(f"Images shape: {images.shape}")
+            print(f"Current batch size: {images.shape[0]}")
 
     epoch_loss = total_loss / max(num_batches, 1)
     epoch_time = time.time() - start_time
@@ -188,31 +197,38 @@ def main():
     print("\nStarting training...")
     best_loss = float("inf")
 
-    for epoch in range(args.epochs):
-        print(f"\nEpoch {epoch + 1}/{args.epochs}")
+    try:
+        for epoch in range(args.epochs):
+            print(f"\nEpoch {epoch + 1}/{args.epochs}")
 
-        # Training
-        epoch_loss, epoch_time = train_epoch(model, scheduler, train_loader, optimizer)
-
-        print(f"\nEpoch {epoch + 1} Summary:")
-        print(f"Loss: {epoch_loss:.4f}")
-        print(f"Time: {epoch_time:.1f}s")
-
-        # Save checkpoint if best loss
-        if epoch_loss < best_loss:
-            best_loss = epoch_loss
-            save_checkpoint(model, optimizer, epoch + 1, epoch_loss, args.save_dir)
-            print("New best model saved!")
-
-        # Regular checkpoint every 10 epochs
-        if (epoch + 1) % 10 == 0:
-            save_checkpoint(
-                model,
-                optimizer,
-                epoch + 1,
-                epoch_loss,
-                os.path.join(args.save_dir, "regular"),
+            # Training
+            epoch_loss, epoch_time = train_epoch(
+                model, scheduler, train_loader, optimizer
             )
+
+            print(f"\nEpoch {epoch + 1} Summary:")
+            print(f"Loss: {epoch_loss:.4f}")
+            print(f"Time: {epoch_time:.1f}s")
+
+            # Save checkpoint if best loss
+            if epoch_loss < best_loss:
+                best_loss = epoch_loss
+                save_checkpoint(model, optimizer, epoch + 1, epoch_loss, args.save_dir)
+                print("New best model saved!")
+
+            # Regular checkpoint every 10 epochs
+            if (epoch + 1) % 10 == 0:
+                save_checkpoint(
+                    model,
+                    optimizer,
+                    epoch + 1,
+                    epoch_loss,
+                    os.path.join(args.save_dir, "regular"),
+                )
+    except Exception as e:
+        print(f"\nTraining failed with error: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        raise  # Re-raise the exception to see the full traceback
 
 
 if __name__ == "__main__":

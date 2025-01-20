@@ -3,11 +3,12 @@ import time
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
+from pathlib import Path
+import argparse
 from model import UNet
 from scheduler import NoiseScheduler
 from loss import diffusion_loss
 from data.voc import VOCDiffusionDataset, create_data_loader
-import json
 
 
 def save_checkpoint(model, optimizer, epoch, loss, save_dir):
@@ -15,167 +16,200 @@ def save_checkpoint(model, optimizer, epoch, loss, save_dir):
     os.makedirs(save_dir, exist_ok=True)
 
     # Save model weights
-    try:
-        save_path = os.path.join(save_dir, f"diffusion_epoch_{epoch}.npz")
-        model.save_weights(save_path)
-        print(f"Successfully saved model to {save_path}")
-    except Exception as e:
-        print(f"Error saving model state: {str(e)}")
-        raise
+    model_path = os.path.join(save_dir, f"diffusion_epoch_{epoch}.npz")
+    model.save_weights(model_path)
+    print(f"Saved model to {model_path}")
 
     # Save optimizer state
-    try:
-        save_path = os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz")
-        save_dict = {
-            "learning_rate": mx.array(optimizer.learning_rate, dtype=mx.float32),
-            "step": mx.array(optimizer.state.get("step", 0), dtype=mx.int32),
-        }
-        mx.savez(save_path, **save_dict)
-        print(f"Successfully saved optimizer state to {save_path}")
-    except Exception as e:
-        print(f"Error saving optimizer state: {str(e)}")
-        raise
-
-    # Save training info
-    info = {
-        "epoch": epoch,
-        "loss": loss,
-    }
-    info_path = os.path.join(save_dir, f"info_epoch_{epoch}.json")
-    with open(info_path, "w") as f:
-        json.dump(info, f)
-    print(f"Successfully saved training info to {info_path}")
+    optim_path = os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz")
+    mx.savez(
+        optim_path,
+        learning_rate=mx.array(optimizer.learning_rate),
+        step=mx.array(optimizer.state.get("step", 0)),
+    )
+    print(f"Saved optimizer state to {optim_path}")
 
 
-def load_checkpoint(model, optimizer, checkpoint_dir, epoch):
-    """Load model checkpoint"""
-    # Load model weights
-    model_path = os.path.join(checkpoint_dir, f"diffusion_epoch_{epoch}.npz")
-    if os.path.exists(model_path):
-        model.load_weights(model_path)
-        print(f"Successfully loaded model from {model_path}")
-    else:
-        raise FileNotFoundError(f"No model checkpoint found at {model_path}")
-
-    # Load optimizer state
-    optim_path = os.path.join(checkpoint_dir, f"optimizer_epoch_{epoch}.npz")
-    if os.path.exists(optim_path):
-        optim_state = mx.load(optim_path)
-        optimizer.learning_rate = float(optim_state["learning_rate"])
-        optimizer.state["step"] = int(optim_state["step"])
-        print(f"Successfully loaded optimizer state from {optim_path}")
-    else:
-        print(f"No optimizer state found at {optim_path}, using default values")
-
-
-def train_step(model, scheduler, optimizer, images, t):
+def train_step(model, scheduler, optimizer, images, text_embeddings):
     """Single training step"""
+    # Sample random timesteps
+    batch_size = images.shape[0]
+    t = mx.random.randint(0, scheduler.num_timesteps, (batch_size,))
+
+    # Add noise to images
     noise = mx.random.normal(images.shape)
     noisy_images = scheduler.q_sample(images, t, noise=noise)
-    
+
     def loss_fn(model_params):
         predicted_noise = model.apply(model_params, noisy_images, t)
         return diffusion_loss(predicted_noise, noise)
-    
-    loss, grads = nn.value_and_grad(model, loss_fn)(model.parameters())
+
+    loss, grads = nn.value_and_grad(loss_fn)(model.parameters())
     optimizer.update(model, grads)
     mx.eval(model.parameters())
-    
+
     return loss
 
 
-def train(
-    data_dir: str,
-    save_dir: str,
-    image_size: int = 64,
-    batch_size: int = 8,
-    num_epochs: int = 100,
-    learning_rate: float = 1e-4,
-    resume_epoch: int | None = None,
-):
-    """Train diffusion model"""
-    print("Initializing model and optimizer...")
+def train_epoch(model, scheduler, train_loader, optimizer):
+    """Train for one epoch"""
+    model.train()
+    total_loss = 0
+    num_batches = 0
+    start_time = time.time()
+
+    for batch_idx, (images, descriptions) in enumerate(train_loader):
+        try:
+            # Training step
+            loss = train_step(model, scheduler, optimizer, images, descriptions)
+            current_loss = loss.item()
+            total_loss += current_loss
+            num_batches += 1
+
+            # Print progress
+            if batch_idx % 5 == 0:
+                avg_loss = total_loss / num_batches
+                print(f"\nBatch {batch_idx}/{len(train_loader)}")
+                print(f"Loss: {current_loss:.4f}, Avg Loss: {avg_loss:.4f}")
+                print(f"Sample text: {descriptions[0]}")
+
+        except Exception as e:
+            print(f"Error in batch {batch_idx}: {str(e)}")
+            continue
+
+    epoch_loss = total_loss / max(num_batches, 1)
+    epoch_time = time.time() - start_time
+
+    return epoch_loss, epoch_time
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Diffusion Model Training")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="dev",
+        choices=["dev", "full"],
+        help="Training mode: dev (local development) or full (full training)",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default="./VOCdevkit/VOC2012",
+        help="Path to VOC dataset",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Override default batch size",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=100,
+        help="Number of epochs to train",
+    )
+    parser.add_argument(
+        "--save-dir",
+        type=Path,
+        default="./checkpoints/diffusion",
+        help="Directory to save checkpoints",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    print("\nInitializing training...")
+    print(f"Mode: {args.mode}")
+    print(f"Data directory: {args.data_dir}")
+
+    # Set image size and batch size based on mode
+    image_size = 64  # Start with smaller images for faster training
+    batch_size = args.batch_size or (4 if args.mode == "dev" else 32)
+
+    # Create dataset with size limits for dev mode
+    print("\nCreating datasets...")
+    train_dataset = VOCDiffusionDataset(
+        data_dir=args.data_dir, year="2012", image_set="train", img_size=image_size
+    )
+
+    # Limit dataset size in dev mode
+    if args.mode == "dev":
+        dev_size = 10  # Use only 10 images for dev mode
+        train_dataset.image_ids = train_dataset.image_ids[:dev_size]
+        print(f"Dev mode: Limited to {dev_size} images")
+
+    # Create data loader
+    train_loader = create_data_loader(
+        dataset=train_dataset, batch_size=batch_size, shuffle=True
+    )
+
+    print(f"Dataset size: {len(train_dataset)}")
+    print(f"Batch size: {batch_size}")
+    print(f"Expected batches per epoch: {len(train_dataset) // batch_size}")
+
+    # Initialize model, scheduler and optimizer
     model = UNet(
         in_channels=3,
-        model_channels=128,
+        model_channels=64,  # Smaller model for dev mode
         out_channels=3,
-        num_res_blocks=2,
+        num_res_blocks=1,
         attention_levels=[2],
-        channel_mult=(1, 2, 4, 8),
-        time_emb_dim=128
+        channel_mult=(1, 2, 4),
+        time_emb_dim=64,
     )
-    
-    optimizer = optim.Adam(learning_rate=learning_rate)
-    scheduler = NoiseScheduler()
 
-    # Initialize dataset and dataloader
-    print("Setting up dataset...")
-    dataset = VOCDiffusionDataset(data_dir=data_dir, img_size=image_size)
-    dataloader = create_data_loader(dataset, batch_size=batch_size)
-    print(f"Dataset size: {len(dataset)} images")
+    scheduler = NoiseScheduler(
+        num_timesteps=100,  # Fewer timesteps for faster training
+        beta_start=1e-4,
+        beta_end=0.02,
+    )
 
-    # Resume from checkpoint if specified
-    if resume_epoch is not None:
-        load_checkpoint(model, optimizer, save_dir, resume_epoch)
-        start_epoch = resume_epoch + 1
-    else:
-        start_epoch = 0
+    optimizer = optim.Adam(learning_rate=1e-4)
 
-    print("Starting training...")
-    for epoch in range(start_epoch, num_epochs):
-        epoch_loss = 0
-        start_time = time.time()
+    # Verify data loader
+    print("\nVerifying data loader...")
+    try:
+        first_batch = next(iter(train_loader))
+        images, descriptions = first_batch
+        print(f"First batch shapes - Images: {images.shape}")
+        print(f"Sample description: {descriptions[0]}")
+    except Exception as e:
+        print(f"Error loading first batch: {str(e)}")
+        raise
 
-        for batch_idx, (images, descriptions) in enumerate(dataloader):
-            # Sample random timesteps
-            t = mx.random.randint(0, scheduler.num_timesteps, (images.shape[0],))
-            
-            # Training step
-            loss = train_step(model, scheduler, optimizer, images, t)
-            epoch_loss += loss
+    # Training loop
+    print("\nStarting training...")
+    best_loss = float("inf")
 
-            if batch_idx % 10 == 0:
-                print(f"Epoch {epoch}, Batch {batch_idx}/{len(dataloader)}, Loss: {loss:.4f}")
-                print(f"Sample descriptions:")
-                for desc in descriptions[:2]:  # Print first two descriptions
-                    print(f"  - {desc}")
+    for epoch in range(args.epochs):
+        print(f"\nEpoch {epoch + 1}/{args.epochs}")
 
-        epoch_loss /= len(dataloader)
-        epoch_time = time.time() - start_time
-        print(f"Epoch {epoch}: Average Loss = {epoch_loss:.4f}, Time = {epoch_time:.2f}s")
+        # Training
+        epoch_loss, epoch_time = train_epoch(model, scheduler, train_loader, optimizer)
 
-        # Save checkpoint
-        if epoch % 5 == 0:
-            save_checkpoint(model, optimizer, epoch, float(epoch_loss), save_dir)
+        print(f"\nEpoch {epoch + 1} Summary:")
+        print(f"Loss: {epoch_loss:.4f}")
+        print(f"Time: {epoch_time:.1f}s")
 
-        # Generate and save sample images
-        if epoch % 10 == 0:
-            print("Generating samples...")
-            samples = scheduler.sample(model, image_size=image_size, batch_size=4)
-            # TODO: Add image saving logic here
+        # Save checkpoint if best loss
+        if epoch_loss < best_loss:
+            best_loss = epoch_loss
+            save_checkpoint(model, optimizer, epoch + 1, epoch_loss, args.save_dir)
+            print("New best model saved!")
 
-    print("Training completed!")
+        # Regular checkpoint every 10 epochs
+        if (epoch + 1) % 10 == 0:
+            save_checkpoint(
+                model,
+                optimizer,
+                epoch + 1,
+                epoch_loss,
+                os.path.join(args.save_dir, "regular"),
+            )
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Train Diffusion Model")
-    parser.add_argument("--data_dir", type=str, required=True, help="Path to VOC dataset directory")
-    parser.add_argument("--save_dir", type=str, required=True, help="Directory to save checkpoints")
-    parser.add_argument("--image_size", type=int, default=64, help="Size of images")
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
-    parser.add_argument("--num_epochs", type=int, default=100, help="Number of epochs")
-    parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
-    parser.add_argument("--resume_epoch", type=int, help="Resume from epoch")
-
-    args = parser.parse_args()
-    train(
-        data_dir=args.data_dir,
-        save_dir=args.save_dir,
-        image_size=args.image_size,
-        batch_size=args.batch_size,
-        num_epochs=args.num_epochs,
-        learning_rate=args.learning_rate,
-        resume_epoch=args.resume_epoch,
-    )
+    main()

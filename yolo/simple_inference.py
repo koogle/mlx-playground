@@ -42,6 +42,12 @@ def parse_args():
         default="./VOCdevkit/VOC2012",
         help="Path to VOC dataset directory",
     )
+    parser.add_argument(
+        "--conf-threshold",
+        type=float,
+        default=0.2,
+        help="Confidence threshold for filtering predictions",
+    )
     return parser.parse_args()
 
 
@@ -63,7 +69,7 @@ def preprocess_frame(frame, target_size=448):
     return mx.array(batched)
 
 
-def decode_predictions(predictions, model, conf_threshold=0.1):
+def decode_predictions(predictions, model):
     """Decode raw predictions to bounding boxes and class predictions."""
     print("\nDecoding predictions:")
     print(f"Raw predictions shape: {predictions.shape}")
@@ -430,7 +436,6 @@ def main():
 
     last_inference_time = 0
     inference_interval = args.interval
-    last_predictions = None
     show_activations = False
 
     print("Starting inference. Press 'q' to quit, TAB to toggle activation view")
@@ -448,10 +453,11 @@ def main():
                 try:
                     input_tensor = preprocess_frame(frame)
                     predictions = model(input_tensor)
-                    last_predictions = predictions
 
                     # Process predictions
-                    boxes, scores, classes = process_predictions(predictions[0], model)
+                    boxes, scores, classes = process_predictions(
+                        predictions[0], model, conf_threshold=args.conf_threshold
+                    )
 
                     # Convert frame to PIL Image for drawing
                     pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -497,80 +503,9 @@ def main():
         cv2.destroyAllWindows()
 
 
-def filter_boxes(boxes_np, confidences_np=None, conf_threshold=0.25):
-    """Filter boxes using numpy operations"""
-    min_size = 0.05  # Minimum 5% of image size
-    max_size = 0.9  # Maximum 90% of image size
-    max_boxes = 5  # Maximum number of boxes to show
-
-    print("\nFiltering boxes:")
-    print(f"Input boxes shape: {boxes_np}")
-    if confidences_np is not None:
-        print(f"Input confidences shape: {confidences_np}")
-
-    # Convert MLX arrays to numpy if needed
-    if not isinstance(boxes_np, np.ndarray):
-        boxes_np = np.array(boxes_np)
-    if confidences_np is not None and not isinstance(confidences_np, np.ndarray):
-        confidences_np = np.array(confidences_np)
-
-    # Calculate widths and heights
-    widths = boxes_np[:, 2] - boxes_np[:, 0]
-    heights = boxes_np[:, 3] - boxes_np[:, 1]
-    aspect_ratios = np.maximum(widths, heights) / (np.minimum(widths, heights) + 1e-6)
-
-    print("\nBox statistics:")
-    print(f"Width range: [{widths.min():.3f}, {widths.max():.3f}]")
-    print(f"Height range: [{heights.min():.3f}, {heights.max():.3f}]")
-    print(f"Aspect ratio range: [{aspect_ratios.min():.3f}, {aspect_ratios.max():.3f}]")
-
-    # Create mask for valid boxes
-    valid_mask = (
-        (widths > min_size)
-        & (widths < max_size)
-        & (heights > min_size)
-        & (heights < max_size)
-        & (aspect_ratios < 3)
-    )
-
-    if confidences_np is not None:
-        valid_mask = valid_mask & (confidences_np > conf_threshold)
-
-    # Get valid boxes and confidences
-    valid_boxes = boxes_np[valid_mask]
-    valid_confidences = (
-        confidences_np[valid_mask] if confidences_np is not None else None
-    )
-
-    print(f"\nValid boxes after filtering: {len(valid_boxes)}")
-
-    if len(valid_boxes) > 0:
-        # Sort by confidence if available, otherwise by area
-        if valid_confidences is not None:
-            sorted_indices = np.argsort(valid_confidences)[::-1][:max_boxes]
-        else:
-            areas = (valid_boxes[:, 2] - valid_boxes[:, 0]) * (
-                valid_boxes[:, 3] - valid_boxes[:, 1]
-            )
-            sorted_indices = np.argsort(areas)[::-1][:max_boxes]
-
-        valid_boxes = valid_boxes[sorted_indices]
-        valid_confidences = (
-            valid_confidences[sorted_indices] if valid_confidences is not None else None
-        )
-
-        print("\nFinal boxes:")
-        for i, (box, conf) in enumerate(zip(valid_boxes, valid_confidences)):
-            print(f"Box {i}: {box}, confidence: {conf:.3f}")
-
-    return valid_boxes, valid_confidences
-
-
-def process_predictions(predictions, model, conf_threshold=0.15, nms_threshold=0.3):
+def process_predictions(predictions, model, conf_threshold=0.15):
     """Process raw predictions into final detections."""
-    boxes, scores, classes = decode_predictions(
-        predictions, model, conf_threshold=conf_threshold
-    )
+    boxes, scores, classes = decode_predictions(predictions, model)
 
     # Convert to numpy for filtering
     boxes_np = np.array([b.tolist() for b in boxes])
@@ -589,29 +524,12 @@ def process_predictions(predictions, model, conf_threshold=0.15, nms_threshold=0
     filtered_scores = scores_np[conf_mask]
     filtered_classes = classes_np[conf_mask]
 
-    print(f"\nAfter confidence filtering:")
+    print("After confidence filtering:")
     print(f"Number of boxes above threshold: {len(filtered_scores)}")
     if len(filtered_scores) > 0:
         print(
             f"Remaining confidence range: [{filtered_scores.min():.3f}, {filtered_scores.max():.3f}]"
         )
-
-    # Additional size-based filtering
-    if len(filtered_scores) > 0 and False:
-        # Calculate box dimensions
-        widths = filtered_boxes[:, 2] - filtered_boxes[:, 0]
-        heights = filtered_boxes[:, 3] - filtered_boxes[:, 1]
-
-        # Filter out unreasonably small or large boxes
-        size_mask = (
-            (widths > 0.03) & (widths < 0.95) & (heights > 0.03) & (heights < 0.95)
-        )
-        filtered_boxes = filtered_boxes[size_mask]
-        filtered_scores = filtered_scores[size_mask]
-        filtered_classes = filtered_classes[size_mask]
-
-        print(f"\nAfter size filtering:")
-        print(f"Final number of boxes: {len(filtered_scores)}")
 
     if len(filtered_scores) == 0:
         return mx.array([]), mx.array([]), mx.array([])

@@ -34,9 +34,46 @@ class ChessGame:
                     and piece.piece_type == piece_type
                     and piece.color == self.current_turn
                 ):
-                    # TODO: Add proper move validation here
-                    similar_pieces.append((row, col))
+                    # Check if the piece can move to the target square
+                    if self._can_move(piece, (row, col), target_square):
+                        similar_pieces.append((row, col))
         return similar_pieces
+
+    def _can_move(
+        self, piece: Piece, from_square: Tuple[int, int], to_square: Tuple[int, int]
+    ) -> bool:
+        """Check if a piece can move from from_square to to_square."""
+        from_row, from_col = from_square
+        to_row, to_col = to_square
+
+        if piece.piece_type == PieceType.PAWN:
+            # Pawns move differently based on color
+            direction = 1 if piece.color == Color.WHITE else -1
+            start_row = 1 if piece.color == Color.WHITE else 6
+
+            # Check for standard pawn move (must be same column and target square empty)
+            if from_col == to_col and self.board.squares[to_row][to_col] is None:
+                # Can only move forward one square
+                if to_row == from_row + direction:
+                    return True
+                # Initial double move (must be on start row and path must be clear)
+                if (
+                    from_row == start_row
+                    and to_row == from_row + 2 * direction
+                    and self.board.squares[from_row + direction][from_col] is None
+                ):
+                    return True
+                return False  # Any other forward move is invalid
+
+            # Check for capture (must be diagonal and target square must have opponent's piece)
+            if abs(from_col - to_col) == 1 and to_row == from_row + direction:
+                target_piece = self.board.squares[to_row][to_col]
+                return target_piece is not None and target_piece.color != piece.color
+
+            return False  # Any other move is invalid
+
+        # TODO: Add move validation for other piece types
+        return True
 
     def make_move(self, move: str) -> bool:
         """
@@ -77,28 +114,25 @@ class ChessGame:
         if not (0 <= to_col < 8 and 0 <= to_row < 8):
             return False
 
-        # Handle pawn moves
-        if move[0].islower():
-            # Pawn move or capture
-            from_col = ord(move[0]) - ord("a")
-            piece_type = PieceType.PAWN
-            # TODO: Implement pawn move logic
-        else:
-            # Piece move
-            piece_type = {
+        # Determine piece type
+        piece_type = (
+            PieceType.PAWN
+            if move[0].islower()
+            else {
                 "K": PieceType.KING,
                 "Q": PieceType.QUEEN,
                 "R": PieceType.ROOK,
                 "B": PieceType.BISHOP,
                 "N": PieceType.KNIGHT,
             }[move[0]]
+        )
 
-            # Find all pieces of this type that could move to the destination
-            similar_pieces = self._find_similar_pieces(piece_type, (to_row, to_col))
-            if not similar_pieces:
-                return False
+        # Find all pieces of this type that could move to the destination
+        similar_pieces = self._find_similar_pieces(piece_type, (to_row, to_col))
+        if not similar_pieces:
+            return False
 
-            # TODO: Use disambiguation information if provided in the move
+        # TODO: Use disambiguation information if provided in the move
 
         # TODO: Implement proper move validation
         # For now, just move the piece if found

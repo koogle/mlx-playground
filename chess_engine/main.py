@@ -1,8 +1,22 @@
 from game import ChessGame
+import random
+import argparse
 
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Chess game with optional AI opponent")
+    parser.add_argument("--ai", action="store_true", help="Play against AI")
+    args = parser.parse_args()
+
     game = ChessGame()
+
+    # If playing against AI, randomly assign colors
+    ai_color = None
+    if args.ai:
+        ai_color = random.choice([Color.WHITE, Color.BLACK])
+        print(f"\nYou are playing as {'Black' if ai_color == Color.WHITE else 'White'}")
+
     print("Welcome to Chess!")
     print(game)
     print("\nCommands:")
@@ -23,6 +37,22 @@ def main():
             if "Check" in game_state:
                 print(game_state)
 
+            # AI's turn
+            if args.ai and game.get_current_turn() == ai_color:
+                valid_moves = game.get_all_valid_moves()
+                if not valid_moves:
+                    print("No valid moves available!")
+                    break
+
+                ai_move = random.choice(valid_moves)
+                print(f"\nAI plays: {ai_move}")
+
+                if game.make_move(ai_move):
+                    print("\nMove successful!")
+                    print(game)
+                continue
+
+            # Human's turn
             move = input("Enter move: ").strip()
 
             if move.lower() == "quit":

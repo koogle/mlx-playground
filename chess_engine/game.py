@@ -1,5 +1,5 @@
 from board import Board, Color, Piece, PieceType
-from typing import Tuple, List, Optional
+from typing import Tuple, List
 
 
 class ChessGame:

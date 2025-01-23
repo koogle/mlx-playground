@@ -43,37 +43,7 @@ class ChessGame:
         self, piece: Piece, from_square: Tuple[int, int], to_square: Tuple[int, int]
     ) -> bool:
         """Check if a piece can move from from_square to to_square."""
-        from_row, from_col = from_square
-        to_row, to_col = to_square
-
-        if piece.piece_type == PieceType.PAWN:
-            # Pawns move differently based on color
-            direction = 1 if piece.color == Color.WHITE else -1
-            start_row = 1 if piece.color == Color.WHITE else 6
-
-            # Check for standard pawn move (must be same column and target square empty)
-            if from_col == to_col and self.board.squares[to_row][to_col] is None:
-                # Can only move forward one square
-                if to_row == from_row + direction:
-                    return True
-                # Initial double move (must be on start row and path must be clear)
-                if (
-                    from_row == start_row
-                    and to_row == from_row + 2 * direction
-                    and self.board.squares[from_row + direction][from_col] is None
-                ):
-                    return True
-                return False  # Any other forward move is invalid
-
-            # Check for capture (must be diagonal and target square must have opponent's piece)
-            if abs(from_col - to_col) == 1 and to_row == from_row + direction:
-                target_piece = self.board.squares[to_row][to_col]
-                return target_piece is not None and target_piece.color != piece.color
-
-            return False  # Any other move is invalid
-
-        # TODO: Add move validation for other piece types
-        return True
+        return self.board.is_valid_move(from_square, to_square)
 
     def make_move(self, move: str) -> bool:
         """

@@ -10,6 +10,49 @@ class PieceType(Enum):
     QUEEN = 5
     KING = 6
 
+    def get_move_patterns(self) -> List[Tuple[int, int]]:
+        """Returns the basic movement patterns for each piece type."""
+        patterns = {
+            PieceType.PAWN: [],  # Special handling for pawns
+            PieceType.KNIGHT: [
+                (2, 1),
+                (2, -1),
+                (-2, 1),
+                (-2, -1),
+                (1, 2),
+                (1, -2),
+                (-1, 2),
+                (-1, -2),
+            ],
+            PieceType.BISHOP: [(1, 1), (1, -1), (-1, 1), (-1, -1)],
+            PieceType.ROOK: [(1, 0), (-1, 0), (0, 1), (0, -1)],
+            PieceType.KING: [
+                (1, 0),
+                (-1, 0),
+                (0, 1),
+                (0, -1),
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+            ],
+            PieceType.QUEEN: [
+                (1, 0),
+                (-1, 0),
+                (0, 1),
+                (0, -1),
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+            ],
+        }
+        return patterns[self]
+
+    def is_sliding_piece(self) -> bool:
+        """Returns True if the piece can move multiple squares in its direction."""
+        return self in {PieceType.BISHOP, PieceType.ROOK, PieceType.QUEEN}
+
 
 class Color(Enum):
     WHITE = 0
@@ -84,3 +127,116 @@ class Board:
                 row_str += " "
             result.append(row_str)
         return "\n".join(result)
+
+    def is_square_under_attack(self, square: Tuple[int, int], by_color: Color) -> bool:
+        """Check if a square is under attack by any piece of the given color."""
+        row, col = square
+        for r in range(8):
+            for c in range(8):
+                piece = self.squares[r][c]
+                if piece and piece.color == by_color:
+                    if self.is_valid_move((r, c), square, ignore_turn=True):
+                        return True
+        return False
+
+    def is_valid_move(
+        self,
+        from_square: Tuple[int, int],
+        to_square: Tuple[int, int],
+        ignore_turn: bool = False,
+    ) -> bool:
+        """Check if a move is valid according to chess rules."""
+        from_row, from_col = from_square
+        to_row, to_col = to_square
+
+        # Basic bounds checking
+        if not (
+            0 <= from_row < 8
+            and 0 <= from_col < 8
+            and 0 <= to_row < 8
+            and 0 <= to_col < 8
+        ):
+            return False
+
+        piece = self.squares[from_row][from_col]
+        if not piece:
+            return False
+
+        target = self.squares[to_row][to_col]
+        # Can't capture your own piece
+        if target and target.color == piece.color:
+            return False
+
+        # Get the movement vector
+        row_diff = to_row - from_row
+        col_diff = to_col - from_col
+
+        # Handle each piece type
+        if piece.piece_type == PieceType.PAWN:
+            return self._is_valid_pawn_move(from_square, to_square, piece.color)
+
+        # Get the basic movement patterns for this piece
+        patterns = piece.piece_type.get_move_patterns()
+
+        if piece.piece_type == PieceType.KNIGHT:
+            return (row_diff, col_diff) in patterns
+
+        if piece.piece_type.is_sliding_piece():
+            # For sliding pieces, check if movement is along valid direction
+            for pattern in patterns:
+                pattern_row, pattern_col = pattern
+                if row_diff and col_diff:  # Diagonal movement
+                    if abs(row_diff) != abs(col_diff):
+                        continue
+                    step_row = row_diff // abs(row_diff)
+                    step_col = col_diff // abs(col_diff)
+                else:  # Straight movement
+                    if row_diff:
+                        step_row = row_diff // abs(row_diff)
+                        step_col = 0
+                    else:
+                        step_row = 0
+                        step_col = col_diff // abs(col_diff)
+
+                # Check if path is clear
+                curr_row, curr_col = from_row + step_row, from_col + step_col
+                while (curr_row, curr_col) != (to_row, to_col):
+                    if self.squares[curr_row][curr_col] is not None:
+                        return False
+                    curr_row += step_row
+                    curr_col += step_col
+                return True
+
+        if piece.piece_type == PieceType.KING:
+            return (row_diff, col_diff) in patterns
+
+        return False
+
+    def _is_valid_pawn_move(
+        self, from_square: Tuple[int, int], to_square: Tuple[int, int], color: Color
+    ) -> bool:
+        """Check if a pawn move is valid."""
+        from_row, from_col = from_square
+        to_row, to_col = to_square
+
+        direction = 1 if color == Color.WHITE else -1
+        start_row = 1 if color == Color.WHITE else 6
+
+        # Normal move forward
+        if from_col == to_col and self.squares[to_row][to_col] is None:
+            if to_row == from_row + direction:
+                return True
+            # Initial double move
+            if (
+                from_row == start_row
+                and to_row == from_row + 2 * direction
+                and self.squares[from_row + direction][from_col] is None
+            ):
+                return True
+
+        # Capture move
+        if abs(to_col - from_col) == 1 and to_row == from_row + direction:
+            target = self.squares[to_row][to_col]
+            return target is not None and target.color != color
+
+        return False

@@ -139,11 +139,66 @@ class Board:
                         return True
         return False
 
+    def find_king(self, color: Color) -> Optional[Tuple[int, int]]:
+        """Find the position of the king of the given color."""
+        for row in range(8):
+            for col in range(8):
+                piece = self.squares[row][col]
+                if (
+                    piece
+                    and piece.piece_type == PieceType.KING
+                    and piece.color == color
+                ):
+                    return (row, col)
+        return None
+
+    def is_in_check(self, color: Color) -> bool:
+        """Check if the king of the given color is in check."""
+        king_pos = self.find_king(color)
+        if not king_pos:
+            return False
+
+        opponent_color = Color.BLACK if color == Color.WHITE else Color.WHITE
+        return self.is_square_under_attack(king_pos, opponent_color)
+
+    def is_checkmate(self, color: Color) -> bool:
+        """Check if the given color is in checkmate."""
+        if not self.is_in_check(color):
+            return False
+
+        # Try all possible moves for all pieces of this color
+        for from_row in range(8):
+            for from_col in range(8):
+                piece = self.squares[from_row][from_col]
+                if not piece or piece.color != color:
+                    continue
+
+                for to_row in range(8):
+                    for to_col in range(8):
+                        if self.is_valid_move((from_row, from_col), (to_row, to_col)):
+                            # Try the move
+                            original_target = self.squares[to_row][to_col]
+                            self.squares[to_row][to_col] = piece
+                            self.squares[from_row][from_col] = None
+
+                            # Check if this gets us out of check
+                            still_in_check = self.is_in_check(color)
+
+                            # Undo the move
+                            self.squares[from_row][from_col] = piece
+                            self.squares[to_row][to_col] = original_target
+
+                            if not still_in_check:
+                                return False
+
+        return True
+
     def is_valid_move(
         self,
         from_square: Tuple[int, int],
         to_square: Tuple[int, int],
         ignore_turn: bool = False,
+        check_for_check: bool = True,
     ) -> bool:
         """Check if a move is valid according to chess rules."""
         from_row, from_col = from_square
@@ -210,7 +265,23 @@ class Board:
         if piece.piece_type == PieceType.KING:
             return (row_diff, col_diff) in patterns
 
-        return False
+        if check_for_check:
+            # Try the move and see if it leaves/puts the king in check
+            original_target = self.squares[to_row][to_col]
+            self.squares[to_row][to_col] = piece
+            self.squares[from_row][from_col] = None
+
+            # Check if this move puts/leaves own king in check
+            in_check = self.is_in_check(piece.color)
+
+            # Undo the move
+            self.squares[from_row][from_col] = piece
+            self.squares[to_row][to_col] = original_target
+
+            if in_check:
+                return False
+
+        return True
 
     def _is_valid_pawn_move(
         self, from_square: Tuple[int, int], to_square: Tuple[int, int], color: Color

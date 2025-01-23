@@ -12,9 +12,17 @@ def main():
 
     while True:
         try:
+            game_state = game.get_game_state()
+            if "Checkmate" in game_state:
+                print(f"\n{game_state}")
+                break
+
             print(
                 f"\nCurrent turn: {'White' if game.get_current_turn().name == 'WHITE' else 'Black'}"
             )
+            if "Check" in game_state:
+                print(game_state)
+
             move = input("Enter move: ").strip()
 
             if move.lower() == "quit":

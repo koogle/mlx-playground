@@ -43,6 +43,8 @@ def main():
             game_state = game.get_game_state()
             if "Checkmate" in game_state:
                 print(f"\n{game_state}")
+                print("\nFinal game history:")
+                print_move_history(game)
                 break
 
             current_color = game.get_current_turn()
@@ -55,6 +57,8 @@ def main():
             # AI's turn (either in ai mode or auto mode)
             if args.mode == "auto" or (args.mode == "ai" and current_color == ai_color):
                 if not handle_ai_turn(game):
+                    print("\nFinal game history:")
+                    print_move_history(game)
                     break
                 if args.mode == "auto":
                     time.sleep(args.delay)
@@ -62,6 +66,8 @@ def main():
 
             # Human's turn
             if not handle_human_turn(game):
+                print("\nGame aborted. Final game history:")
+                print_move_history(game)
                 break
 
         except (IndexError, ValueError):

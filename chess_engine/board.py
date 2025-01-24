@@ -135,7 +135,8 @@ class Board:
             for c in range(8):
                 piece = self.squares[r][c]
                 if piece and piece.color == by_color:
-                    if self.is_valid_move((r, c), square):
+                    # Pass check_for_check=False to avoid infinite recursion
+                    if self.is_valid_move((r, c), square, check_for_check=False):
                         return True
         return False
 
@@ -159,6 +160,7 @@ class Board:
             return False
 
         opponent_color = Color.BLACK if color == Color.WHITE else Color.WHITE
+        # Check if any opponent piece can attack the king
         return self.is_square_under_attack(king_pos, opponent_color)
 
     def is_checkmate(self, color: Color) -> bool:
@@ -182,11 +184,11 @@ class Board:
                 # Try all possible destination squares
                 for to_row in range(8):
                     for to_col in range(8):
-                        # Skip if the move isn't valid
+                        # Skip if the move isn't valid (without check validation)
                         if not self.is_valid_move(
                             (from_row, from_col),
                             (to_row, to_col),
-                            check_for_check=False,  # Don't check for check here as we'll do it manually
+                            check_for_check=False,
                         ):
                             continue
 
@@ -205,8 +207,7 @@ class Board:
                         if not still_in_check:
                             return False  # Found a legal move that escapes check
 
-        # No legal moves found to escape check
-        return True
+        return True  # No legal moves found to escape check
 
     def is_valid_move(
         self,
@@ -228,6 +229,9 @@ class Board:
         ):
             return False
 
+        if not piece:  # Add this check early
+            return False
+
         target = self.squares[to_row][to_col]
         # Can't capture your own piece
         if target and target.color == piece.color:
@@ -235,6 +239,22 @@ class Board:
 
         # For bishops, rooks, and queens, check if path is clear
         if piece.piece_type in {PieceType.BISHOP, PieceType.ROOK, PieceType.QUEEN}:
+            # Check if the move is valid for the piece type
+            if piece.piece_type == PieceType.BISHOP and abs(to_row - from_row) != abs(
+                to_col - from_col
+            ):
+                return False
+            if piece.piece_type == PieceType.ROOK and not (
+                to_row == from_row or to_col == from_col
+            ):
+                return False
+            if piece.piece_type == PieceType.QUEEN and not (
+                abs(to_row - from_row) == abs(to_col - from_col)
+                or to_row == from_row
+                or to_col == from_col
+            ):
+                return False
+
             row_step = (
                 0
                 if from_row == to_row
@@ -262,6 +282,11 @@ class Board:
             ):
                 return False
 
+        # For king, ensure it moves only one square in any direction
+        if piece.piece_type == PieceType.KING:
+            if abs(to_row - from_row) > 1 or abs(to_col - from_col) > 1:
+                return False
+
         # For pawns, ensure they move forward only (except for captures)
         if piece.piece_type == PieceType.PAWN:
             direction = 1 if piece.color == Color.WHITE else -1
@@ -274,6 +299,12 @@ class Board:
                     1 if piece.color == Color.WHITE else 6
                 ):
                     return False
+                # Check if path is clear for pawn moves
+                if self.squares[to_row][to_col] is not None:
+                    return False
+                if abs(to_row - from_row) == 2:
+                    if self.squares[from_row + direction][from_col] is not None:
+                        return False
             elif abs(from_col - to_col) == 1:  # Capture
                 if abs(to_row - from_row) != 1:
                     return False

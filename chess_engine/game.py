@@ -50,6 +50,8 @@ class ChessGame:
         Make a move using standard algebraic notation (e.g., 'e4', 'Nf3', 'exd5', 'O-O')
         Returns True if the move is valid and was executed
         """
+
+        print("checking move: ", move)
         move = move.strip()
 
         # Handle castling
@@ -235,6 +237,9 @@ class ChessGame:
 
     def get_game_state(self) -> str:
         """Get the current state of the game (check, checkmate, or normal)."""
+        if not self.move_history:  # Game hasn't started yet
+            return "Normal"
+
         if self.board.is_checkmate(self.current_turn):
             winner = "Black" if self.current_turn == Color.WHITE else "White"
             return f"Checkmate! {winner} wins!"

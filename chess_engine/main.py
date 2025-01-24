@@ -71,7 +71,9 @@ def main():
                 print_move_history(game)
                 break
 
-        except (IndexError, ValueError):
+        except (IndexError, ValueError) as e:
+            print(e)
+            e.with_traceback()
             print(
                 "\nInvalid input! Please use standard algebraic notation (e.g., e4, Nf3, exd5)"
             )
@@ -84,7 +86,7 @@ def handle_ai_turn(game):
         return False
 
     ai_move = random.choice(valid_moves)
-    print(f"{ai_move}")
+    print(f"AI move: {ai_move}")
 
     if game.make_move(ai_move):
         print(game)

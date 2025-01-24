@@ -163,8 +163,14 @@ class Board:
 
     def is_checkmate(self, color: Color) -> bool:
         """Check if the given color is in checkmate."""
+        # First verify that the king is in check
         if not self.is_in_check(color):
             return False
+
+        # Get king's position
+        king_pos = self.find_king(color)
+        if not king_pos:
+            return False  # This shouldn't happen in a valid game
 
         # Try all possible moves for all pieces of this color
         for from_row in range(8):
@@ -173,24 +179,33 @@ class Board:
                 if not piece or piece.color != color:
                     continue
 
+                # Try all possible destination squares
                 for to_row in range(8):
                     for to_col in range(8):
-                        if self.is_valid_move((from_row, from_col), (to_row, to_col)):
-                            # Try the move
-                            original_target = self.squares[to_row][to_col]
-                            self.squares[to_row][to_col] = piece
-                            self.squares[from_row][from_col] = None
+                        # Skip if the move isn't valid
+                        if not self.is_valid_move(
+                            (from_row, from_col),
+                            (to_row, to_col),
+                            check_for_check=False,  # Don't check for check here as we'll do it manually
+                        ):
+                            continue
 
-                            # Check if this gets us out of check
-                            still_in_check = self.is_in_check(color)
+                        # Try the move
+                        original_target = self.squares[to_row][to_col]
+                        self.squares[to_row][to_col] = piece
+                        self.squares[from_row][from_col] = None
 
-                            # Undo the move
-                            self.squares[from_row][from_col] = piece
-                            self.squares[to_row][to_col] = original_target
+                        # Check if this gets us out of check
+                        still_in_check = self.is_in_check(color)
 
-                            if not still_in_check:
-                                return False
+                        # Undo the move
+                        self.squares[from_row][from_col] = piece
+                        self.squares[to_row][to_col] = original_target
 
+                        if not still_in_check:
+                            return False  # Found a legal move that escapes check
+
+        # No legal moves found to escape check
         return True
 
     def is_valid_move(
@@ -202,6 +217,7 @@ class Board:
         """Check if a move is valid according to chess rules."""
         from_row, from_col = from_square
         to_row, to_col = to_square
+        piece = self.squares[from_row][from_col]
 
         # Basic bounds checking
         if not (
@@ -212,66 +228,59 @@ class Board:
         ):
             return False
 
-        piece = self.squares[from_row][from_col]
-        if not piece:
-            return False
-
         target = self.squares[to_row][to_col]
         # Can't capture your own piece
         if target and target.color == piece.color:
             return False
 
-        # Get the movement vector
-        row_diff = to_row - from_row
-        col_diff = to_col - from_col
+        # For bishops, rooks, and queens, check if path is clear
+        if piece.piece_type in {PieceType.BISHOP, PieceType.ROOK, PieceType.QUEEN}:
+            row_step = (
+                0
+                if from_row == to_row
+                else (to_row - from_row) // abs(to_row - from_row)
+            )
+            col_step = (
+                0
+                if from_col == to_col
+                else (to_col - from_col) // abs(to_col - from_col)
+            )
 
-        # Handle each piece type
-        if piece.piece_type == PieceType.PAWN:
-            return self._is_valid_pawn_move(from_square, to_square, piece.color)
+            current_row, current_col = from_row + row_step, from_col + col_step
+            while (current_row, current_col) != (to_row, to_col):
+                if self.squares[current_row][current_col] is not None:
+                    return False
+                current_row += row_step
+                current_col += col_step
 
-        # Get the basic movement patterns for this piece
-        patterns = piece.piece_type.get_move_patterns()
-
+        # For knights, ensure they move in L-shape
         if piece.piece_type == PieceType.KNIGHT:
-            return (row_diff, col_diff) in patterns
+            row_diff = abs(to_row - from_row)
+            col_diff = abs(to_col - from_col)
+            if not (
+                (row_diff == 2 and col_diff == 1) or (row_diff == 1 and col_diff == 2)
+            ):
+                return False
 
-        if piece.piece_type.is_sliding_piece():
-            # For sliding pieces, check if movement is along valid direction
-            for pattern in patterns:
-                if row_diff and col_diff:  # Diagonal movement
-                    if abs(row_diff) != abs(col_diff):
-                        continue
-                    step_row = row_diff // abs(row_diff)
-                    step_col = col_diff // abs(col_diff)
-                else:  # Straight movement
-                    if row_diff:
-                        step_row = row_diff // abs(row_diff)
-                        step_col = 0
-                    else:
-                        step_row = 0
-                        step_col = col_diff // abs(col_diff)
-
-                # Check if path is clear and no own pieces are in the way
-                curr_row, curr_col = from_row + step_row, from_col + step_col
-                path_clear = True
-                while (curr_row, curr_col) != (to_row, to_col):
-                    if self.squares[curr_row][curr_col] is not None:
-                        path_clear = False
-                        break
-                    curr_row += step_row
-                    curr_col += step_col
-
-                if path_clear:
-                    # Ensure the final destination is not occupied by own piece
-                    if (
-                        self.squares[to_row][to_col] is None
-                        or self.squares[to_row][to_col].color != piece.color
-                    ):
-                        return True
-        return False
-
-        if piece.piece_type == PieceType.KING:
-            return (row_diff, col_diff) in patterns
+        # For pawns, ensure they move forward only (except for captures)
+        if piece.piece_type == PieceType.PAWN:
+            direction = 1 if piece.color == Color.WHITE else -1
+            if from_col == to_col:  # Normal move
+                if direction * (to_row - from_row) <= 0:
+                    return False
+                if abs(to_row - from_row) > 2:
+                    return False
+                if abs(to_row - from_row) == 2 and from_row != (
+                    1 if piece.color == Color.WHITE else 6
+                ):
+                    return False
+            elif abs(from_col - to_col) == 1:  # Capture
+                if abs(to_row - from_row) != 1:
+                    return False
+                if direction * (to_row - from_row) <= 0:
+                    return False
+                if self.squares[to_row][to_col] is None:  # TODO: Add en passant
+                    return False
 
         if check_for_check:
             # Try the move and see if it leaves/puts the king in check

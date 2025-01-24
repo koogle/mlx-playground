@@ -49,7 +49,8 @@ def main():
 
             current_color = game.get_current_turn()
             print(
-                f"\nCurrent turn: {'White' if current_color == Color.WHITE else 'Black'}"
+                f"\n{'White' if current_color == Color.WHITE else 'Black'}: ",
+                end="",
             )
             if "Check" in game_state:
                 print(game_state)
@@ -83,7 +84,7 @@ def handle_ai_turn(game):
         return False
 
     ai_move = random.choice(valid_moves)
-    print(f"\nAI plays: {ai_move}")
+    print(f"{ai_move}")
 
     if game.make_move(ai_move):
         print(game)

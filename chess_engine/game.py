@@ -46,13 +46,49 @@ class ChessGame:
         return self.board.is_valid_move(from_square, to_square)
 
     def make_move(self, move: str) -> bool:
-        """
-        Make a move using standard algebraic notation (e.g., 'e4', 'Nf3', 'exd5', 'O-O')
-        Returns True if the move is valid and was executed
-        """
-
-        print("checking move: ", move)
+        """Make a move using standard algebraic notation."""
+        print("Parsing move:", move)
         move = move.strip()
+
+        # Handle simple pawn moves (e.g., "e4")
+        if len(move) == 2 and move[0] in "abcdefgh" and move[1] in "12345678":
+            file = ord(move[0]) - ord("a")  # Convert file to 0-7
+            rank = int(move[1]) - 1  # Convert rank to 0-7
+
+            # Find the pawn that can make this move
+            direction = 1 if self.current_turn == Color.WHITE else -1
+            start_rank = 1 if self.current_turn == Color.WHITE else 6
+
+            # Try one square back first
+            from_rank = rank - direction
+            if 0 <= from_rank < 8 and self.board.is_valid_move(
+                (from_rank, file), (rank, file)
+            ):
+                # Execute move
+                piece = self.board.squares[from_rank][file]
+                self.board.squares[rank][file] = piece
+                self.board.squares[from_rank][file] = None
+                self.move_history.append(move)
+                self.current_turn = (
+                    Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+                )
+                return True
+
+            # Try two squares back if it's a possible double move
+            if rank == (3 if self.current_turn == Color.WHITE else 4):
+                from_rank = start_rank
+                if self.board.is_valid_move((from_rank, file), (rank, file)):
+                    # Execute move
+                    piece = self.board.squares[from_rank][file]
+                    self.board.squares[rank][file] = piece
+                    self.board.squares[from_rank][file] = None
+                    self.move_history.append(move)
+                    self.current_turn = (
+                        Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+                    )
+                    return True
+
+            return False
 
         # Handle castling
         if move in ["O-O", "0-0"]:  # Kingside castling
@@ -107,68 +143,68 @@ class ChessGame:
         if not (0 <= to_col < 8 and 0 <= to_row < 8):
             return False
 
-        # Determine piece type
-        piece_type = (
-            PieceType.PAWN
-            if move[0].islower()
-            else {
+        # Determine piece type and find valid source squares
+        if move[0].isupper():  # Non-pawn piece
+            piece_type = {
                 "K": PieceType.KING,
                 "Q": PieceType.QUEEN,
                 "R": PieceType.ROOK,
                 "B": PieceType.BISHOP,
                 "N": PieceType.KNIGHT,
             }[move[0]]
-        )
+            # Find all pieces of this type that could move to the destination
+            source_squares = []
+            for row in range(8):
+                for col in range(8):
+                    piece = self.board.squares[row][col]
+                    if (
+                        piece
+                        and piece.piece_type == piece_type
+                        and piece.color == self.current_turn
+                        and self.board.is_valid_move((row, col), (to_row, to_col))
+                    ):
+                        source_squares.append((row, col))
+        else:  # Pawn move
+            file = ord(move[0]) - ord("a") if is_capture else to_col
+            source_squares = []
+            direction = 1 if self.current_turn == Color.WHITE else -1
+            from_row = to_row - direction
+            if 0 <= from_row < 8:
+                if self.board.is_valid_move((from_row, file), (to_row, to_col)):
+                    source_squares.append((from_row, file))
+            if len(source_squares) == 0 and not is_capture:  # Try double move
+                from_row = 1 if self.current_turn == Color.WHITE else 6
+                if self.board.is_valid_move((from_row, file), (to_row, to_col)):
+                    source_squares.append((from_row, file))
 
-        # Find all pieces of this type that could move to the destination
-        similar_pieces = self._find_similar_pieces(piece_type, (to_row, to_col))
-        if not similar_pieces:
-            return False
+        # Execute the move if exactly one valid source was found
+        if len(source_squares) == 1:
+            from_row, from_col = source_squares[0]
+            piece = self.board.squares[from_row][from_col]
 
-        # Validate move using board's is_valid_move method
-        valid_move = False
-        for from_row, from_col in similar_pieces:
-            if self.board.is_valid_move((from_row, from_col), (to_row, to_col)):
-                valid_move = True
-                piece = self.board.squares[from_row][from_col]
-                captured_piece = self.board.squares[to_row][to_col]
+            # Execute move
+            self.board.squares[to_row][to_col] = piece
+            self.board.squares[from_row][from_col] = None
 
-                # Execute move
-                self.board.squares[to_row][to_col] = piece
-                self.board.squares[from_row][from_col] = None
-
-                # Handle promotion
-                if promotion_piece:
-                    self.board.squares[to_row][to_col] = Piece(
-                        {
-                            "Q": PieceType.QUEEN,
-                            "R": PieceType.ROOK,
-                            "B": PieceType.BISHOP,
-                            "N": PieceType.KNIGHT,
-                        }[promotion_piece],
-                        self.current_turn,
-                    )
-
-                # Check if this move puts opponent in check/checkmate
-                opponent_color = (
-                    Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+            # Handle promotion
+            if promotion_piece:
+                self.board.squares[to_row][to_col] = Piece(
+                    {
+                        "Q": PieceType.QUEEN,
+                        "R": PieceType.ROOK,
+                        "B": PieceType.BISHOP,
+                        "N": PieceType.KNIGHT,
+                    }[promotion_piece],
+                    self.current_turn,
                 )
-                is_check = self.board.is_in_check(opponent_color)
-                is_checkmate = is_check and self.board.is_checkmate(opponent_color)
 
-                # Record move in algebraic notation
-                move_str = move
-                if is_checkmate:
-                    move_str += "#"
-                elif is_check:
-                    move_str += "+"
-                self.move_history.append(move_str)
+            self.move_history.append(move)
+            self.current_turn = (
+                Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+            )
+            return True
 
-                # Switch turns
-                self.current_turn = opponent_color
-                break
-
-        return valid_move
+        return False
 
     def _handle_castling(
         self,
@@ -252,82 +288,57 @@ class ChessGame:
 
     def get_all_valid_moves(self) -> List[str]:
         """Get all valid moves for the current player in algebraic notation."""
-        print(f"\nGetting valid moves for {self.current_turn.name}")
         valid_moves = []
 
-        # Check castling possibilities
-        if self.current_turn == Color.WHITE:
-            king_pos, rook_pos = (0, 4), (0, 7)
-            if self._can_castle(king_pos, rook_pos):
-                valid_moves.append("O-O")
-            king_pos, rook_pos = (0, 4), (0, 0)
-            if self._can_castle(king_pos, rook_pos):
-                valid_moves.append("O-O-O")
-        else:
-            king_pos, rook_pos = (7, 4), (7, 7)
-            if self._can_castle(king_pos, rook_pos):
-                valid_moves.append("O-O")
-            king_pos, rook_pos = (7, 4), (7, 0)
-            if self._can_castle(king_pos, rook_pos):
-                valid_moves.append("O-O-O")
-
-        # Check all possible moves for each piece
+        # Check all pieces of the current color
         for from_row in range(8):
             for from_col in range(8):
                 piece = self.board.squares[from_row][from_col]
                 if not piece or piece.color != self.current_turn:
                     continue
 
-                print(
-                    f"\nChecking moves for {piece.piece_type.name} at {from_row},{from_col}"
-                )
-                for to_row in range(8):
-                    for to_col in range(8):
-                        if self.board.is_valid_move(
-                            (from_row, from_col), (to_row, to_col)
-                        ):
-                            # Convert to algebraic notation
-                            from_square = f"{chr(from_col + ord('a'))}{from_row + 1}"
-                            to_square = f"{chr(to_col + ord('a'))}{to_row + 1}"
-                            print(f"Found valid move: {from_square} to {to_square}")
+                # Get valid moves for this piece
+                moves = self.board.get_piece_moves((from_row, from_col))
 
-                            # Add piece symbol for non-pawns
-                            if piece.piece_type != PieceType.PAWN:
-                                symbol = self._get_piece_symbol(piece)
-                                move = f"{symbol}{to_square}"
-                            else:
-                                move = to_square
+                for to_row, to_col in moves:
+                    # Convert to algebraic notation
+                    from_square = f"{chr(from_col + ord('a'))}{from_row + 1}"
+                    to_square = f"{chr(to_col + ord('a'))}{to_row + 1}"
 
-                            # Check if it's a capture
-                            if self.board.squares[to_row][to_col] is not None:
-                                if piece.piece_type == PieceType.PAWN:
-                                    move = f"{chr(from_col + ord('a'))}x{to_square}"
-                                else:
-                                    move = f"{symbol}x{to_square}"
+                    # Build move string
+                    if piece.piece_type == PieceType.PAWN:
+                        if from_col != to_col:  # Capture
+                            move = f"{chr(from_col + ord('a'))}x{to_square}"
+                        else:
+                            move = to_square
+                    else:
+                        symbol = self._get_piece_symbol(piece)
+                        if self.board.squares[to_row][to_col]:  # Capture
+                            move = f"{symbol}x{to_square}"
+                        else:
+                            move = f"{symbol}{to_square}"
 
-                            # Try the move to see if it results in check/checkmate
-                            original_target = self.board.squares[to_row][to_col]
-                            self.board.squares[to_row][to_col] = piece
-                            self.board.squares[from_row][from_col] = None
+                    # Check if move results in check/checkmate
+                    self.board.squares[to_row][to_col] = piece
+                    self.board.squares[from_row][from_col] = None
 
-                            opponent_color = (
-                                Color.BLACK
-                                if self.current_turn == Color.WHITE
-                                else Color.WHITE
-                            )
-                            if self.board.is_in_check(opponent_color):
-                                if self.board.is_checkmate(opponent_color):
-                                    move += "#"
-                                else:
-                                    move += "+"
+                    opponent_color = (
+                        Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+                    )
+                    if self.board.is_in_check(opponent_color):
+                        if self.board.is_checkmate(opponent_color):
+                            move += "#"
+                        else:
+                            move += "+"
 
-                            # Undo the move
-                            self.board.squares[from_row][from_col] = piece
-                            self.board.squares[to_row][to_col] = original_target
+                    # Undo the move
+                    self.board.squares[from_row][from_col] = piece
+                    self.board.squares[to_row][to_col] = self.board.squares[to_row][
+                        to_col
+                    ]
 
-                            valid_moves.append(move)
+                    valid_moves.append(move)
 
-        print(f"Found {len(valid_moves)} valid moves: {valid_moves}")
         return valid_moves
 
     def _can_castle(self, king_pos: Tuple[int, int], rook_pos: Tuple[int, int]) -> bool:

@@ -128,13 +128,17 @@ class Board:
             result.append(row_str)
         return "\n".join(result)
 
-    def is_square_under_attack(self, square: Tuple[int, int], by_color: Color) -> bool:
+    def is_square_under_attack(
+        self, square: Tuple[int, int], by_color: Color, ignore_king: bool = False
+    ) -> bool:
         """Check if a square is under attack by any piece of the given color."""
         row, col = square
         for r in range(8):
             for c in range(8):
                 piece = self.squares[r][c]
                 if piece and piece.color == by_color:
+                    if ignore_king and piece.piece_type == PieceType.KING:
+                        continue
                     # Pass check_for_check=False to avoid infinite recursion
                     if self.is_valid_move((r, c), square, check_for_check=False):
                         return True
@@ -160,8 +164,8 @@ class Board:
             return False
 
         opponent_color = Color.BLACK if color == Color.WHITE else Color.WHITE
-        # Check if any opponent piece can attack the king
-        return self.is_square_under_attack(king_pos, opponent_color)
+        is_check = self.is_square_under_attack(king_pos, opponent_color)
+        return is_check
 
     def is_checkmate(self, color: Color) -> bool:
         """Check if the given color is in checkmate."""
@@ -220,6 +224,21 @@ class Board:
         to_row, to_col = to_square
         piece = self.squares[from_row][from_col]
 
+        # For debugging pawns
+        if piece and piece.piece_type == PieceType.PAWN:
+            print(f"\nDebug pawn move from {from_square} to {to_square}")
+            print(f"Direction: {'up' if piece.color == Color.WHITE else 'down'}")
+            print(
+                f"Move type: {'capture' if abs(from_col - to_col) == 1 else 'forward'}"
+            )
+            if from_col == to_col:  # Normal move
+                print(f"Row diff: {to_row - from_row}")
+                print(
+                    f"Target square occupied: {self.squares[to_row][to_col] is not None}"
+                )
+            else:  # Capture move
+                print(f"Target piece: {self.squares[to_row][to_col]}")
+
         # Basic bounds checking
         if not (
             0 <= from_row < 8
@@ -229,7 +248,7 @@ class Board:
         ):
             return False
 
-        if not piece:  # Add this check early
+        if not piece:
             return False
 
         target = self.squares[to_row][to_col]
@@ -237,24 +256,20 @@ class Board:
         if target and target.color == piece.color:
             return False
 
-        # For bishops, rooks, and queens, check if path is clear
+        # For bishops, rooks, and queens, check if path is clear and move is valid
         if piece.piece_type in {PieceType.BISHOP, PieceType.ROOK, PieceType.QUEEN}:
             # Check if the move is valid for the piece type
-            if piece.piece_type == PieceType.BISHOP and abs(to_row - from_row) != abs(
-                to_col - from_col
-            ):
+            is_diagonal = abs(to_row - from_row) == abs(to_col - from_col)
+            is_straight = to_row == from_row or to_col == from_col
+
+            if piece.piece_type == PieceType.BISHOP and not is_diagonal:
                 return False
-            if piece.piece_type == PieceType.ROOK and not (
-                to_row == from_row or to_col == from_col
-            ):
+            if piece.piece_type == PieceType.ROOK and not is_straight:
                 return False
-            if piece.piece_type == PieceType.QUEEN and not (
-                abs(to_row - from_row) == abs(to_col - from_col)
-                or to_row == from_row
-                or to_col == from_col
-            ):
+            if piece.piece_type == PieceType.QUEEN and not (is_diagonal or is_straight):
                 return False
 
+            # Check if path is clear
             row_step = (
                 0
                 if from_row == to_row
@@ -274,7 +289,7 @@ class Board:
                 current_col += col_step
 
         # For knights, ensure they move in L-shape
-        if piece.piece_type == PieceType.KNIGHT:
+        elif piece.piece_type == PieceType.KNIGHT:
             row_diff = abs(to_row - from_row)
             col_diff = abs(to_col - from_col)
             if not (
@@ -283,44 +298,59 @@ class Board:
                 return False
 
         # For king, ensure it moves only one square in any direction
-        if piece.piece_type == PieceType.KING:
+        elif piece.piece_type == PieceType.KING:
             if abs(to_row - from_row) > 1 or abs(to_col - from_col) > 1:
                 return False
 
         # For pawns, ensure they move forward only (except for captures)
-        if piece.piece_type == PieceType.PAWN:
+        elif piece.piece_type == PieceType.PAWN:
             direction = 1 if piece.color == Color.WHITE else -1
             if from_col == to_col:  # Normal move
                 if direction * (to_row - from_row) <= 0:
+                    print("Failed: Wrong direction")
                     return False
                 if abs(to_row - from_row) > 2:
-                    return False
-                if abs(to_row - from_row) == 2 and from_row != (
-                    1 if piece.color == Color.WHITE else 6
-                ):
-                    return False
-                # Check if path is clear for pawn moves
-                if self.squares[to_row][to_col] is not None:
+                    print("Failed: Too far")
                     return False
                 if abs(to_row - from_row) == 2:
-                    if self.squares[from_row + direction][from_col] is not None:
+                    if from_row != (1 if piece.color == Color.WHITE else 6):
+                        print("Failed: Double move not from starting position")
                         return False
+                    if self.squares[from_row + direction][from_col] is not None:
+                        print("Failed: Path blocked for double move")
+                        return False
+                if self.squares[to_row][to_col] is not None:
+                    print("Failed: Target square occupied")
+                    return False
             elif abs(from_col - to_col) == 1:  # Capture
                 if abs(to_row - from_row) != 1:
+                    print("Failed: Invalid capture distance")
                     return False
                 if direction * (to_row - from_row) <= 0:
+                    print("Failed: Wrong capture direction")
                     return False
-                if self.squares[to_row][to_col] is None:  # TODO: Add en passant
+                if self.squares[to_row][to_col] is None:
+                    print("Failed: No piece to capture")
                     return False
 
+        # Check if move would leave/put own king in check
         if check_for_check:
-            # Try the move and see if it leaves/puts the king in check
+            # Try the move
             original_target = self.squares[to_row][to_col]
             self.squares[to_row][to_col] = piece
             self.squares[from_row][from_col] = None
 
             # Check if this move puts/leaves own king in check
-            in_check = self.is_in_check(piece.color)
+            king_pos = self.find_king(piece.color)
+            if king_pos:
+                opponent_color = (
+                    Color.BLACK if piece.color == Color.WHITE else Color.WHITE
+                )
+                in_check = self.is_square_under_attack(
+                    king_pos, opponent_color, ignore_king=True
+                )
+            else:
+                in_check = False
 
             # Undo the move
             self.squares[from_row][from_col] = piece

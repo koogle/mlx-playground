@@ -252,6 +252,7 @@ class ChessGame:
 
     def get_all_valid_moves(self) -> List[str]:
         """Get all valid moves for the current player in algebraic notation."""
+        print(f"\nGetting valid moves for {self.current_turn.name}")
         valid_moves = []
 
         # Check castling possibilities
@@ -277,6 +278,9 @@ class ChessGame:
                 if not piece or piece.color != self.current_turn:
                     continue
 
+                print(
+                    f"\nChecking moves for {piece.piece_type.name} at {from_row},{from_col}"
+                )
                 for to_row in range(8):
                     for to_col in range(8):
                         if self.board.is_valid_move(
@@ -285,6 +289,7 @@ class ChessGame:
                             # Convert to algebraic notation
                             from_square = f"{chr(from_col + ord('a'))}{from_row + 1}"
                             to_square = f"{chr(to_col + ord('a'))}{to_row + 1}"
+                            print(f"Found valid move: {from_square} to {to_square}")
 
                             # Add piece symbol for non-pawns
                             if piece.piece_type != PieceType.PAWN:
@@ -322,6 +327,7 @@ class ChessGame:
 
                             valid_moves.append(move)
 
+        print(f"Found {len(valid_moves)} valid moves: {valid_moves}")
         return valid_moves
 
     def _can_castle(self, king_pos: Tuple[int, int], rook_pos: Tuple[int, int]) -> bool:

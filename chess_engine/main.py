@@ -1,3 +1,4 @@
+from board import Color
 from game import ChessGame
 import random
 import argparse
@@ -48,7 +49,6 @@ def main():
                 print(f"\nAI plays: {ai_move}")
 
                 if game.make_move(ai_move):
-                    print("\nMove successful!")
                     print(game)
                 continue
 
@@ -72,7 +72,6 @@ def main():
                 continue
 
             if game.make_move(move):
-                print("\nMove successful!")
                 print(game)
             else:
                 print("\nInvalid move! Try again.")

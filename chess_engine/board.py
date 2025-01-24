@@ -135,7 +135,7 @@ class Board:
             for c in range(8):
                 piece = self.squares[r][c]
                 if piece and piece.color == by_color:
-                    if self.is_valid_move((r, c), square, ignore_turn=True):
+                    if self.is_valid_move((r, c), square):
                         return True
         return False
 
@@ -197,7 +197,6 @@ class Board:
         self,
         from_square: Tuple[int, int],
         to_square: Tuple[int, int],
-        ignore_turn: bool = False,
         check_for_check: bool = True,
     ) -> bool:
         """Check if a move is valid according to chess rules."""
@@ -239,7 +238,6 @@ class Board:
         if piece.piece_type.is_sliding_piece():
             # For sliding pieces, check if movement is along valid direction
             for pattern in patterns:
-                pattern_row, pattern_col = pattern
                 if row_diff and col_diff:  # Diagonal movement
                     if abs(row_diff) != abs(col_diff):
                         continue
@@ -253,14 +251,24 @@ class Board:
                         step_row = 0
                         step_col = col_diff // abs(col_diff)
 
-                # Check if path is clear
+                # Check if path is clear and no own pieces are in the way
                 curr_row, curr_col = from_row + step_row, from_col + step_col
+                path_clear = True
                 while (curr_row, curr_col) != (to_row, to_col):
                     if self.squares[curr_row][curr_col] is not None:
-                        return False
+                        path_clear = False
+                        break
                     curr_row += step_row
                     curr_col += step_col
-                return True
+
+                if path_clear:
+                    # Ensure the final destination is not occupied by own piece
+                    if (
+                        self.squares[to_row][to_col] is None
+                        or self.squares[to_row][to_col].color != piece.color
+                    ):
+                        return True
+        return False
 
         if piece.piece_type == PieceType.KING:
             return (row_diff, col_diff) in patterns

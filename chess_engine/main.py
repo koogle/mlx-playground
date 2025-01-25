@@ -30,33 +30,37 @@ def main():
 
     game = ChessGame()
 
+    print("Welcome to Chess!")
+    if args.mode != "auto":
+        print("\nCommands:")
+        print("- Standard algebraic notation: e4, Nf3, exd5, O-O")
+        print("- 'history' to show move history")
+        print("- 'quit' to exit")
+
     # Load game history if provided
     if args.history:
         try:
             with open(args.history, "r") as f:
                 history = f.read()
+            print("\nLoading game history...")
             if game.load_game_history(history):
-                print("Game loaded successfully!")
+                print("\nGame loaded successfully!")
+                print("\nCurrent position:")
+                print(game)
             else:
                 print("Failed to load game history")
                 return
         except FileNotFoundError:
             print(f"History file not found: {args.history}")
             return
+    else:
+        print(game)  # Print initial board state
 
     # If playing against AI, randomly assign colors
     ai_color = None
     if args.mode == "ai":
         ai_color = random.choice([Color.WHITE, Color.BLACK])
         print(f"\nYou are playing as {'Black' if ai_color == Color.WHITE else 'White'}")
-
-    print("Welcome to Chess!")
-    print(game)
-    if args.mode != "auto":
-        print("\nCommands:")
-        print("- Standard algebraic notation: e4, Nf3, exd5, O-O")
-        print("- 'history' to show move history")
-        print("- 'quit' to exit")
 
     while True:
         try:

@@ -44,7 +44,9 @@ class ChessGame:
         self, piece: Piece, from_square: Tuple[int, int], to_square: Tuple[int, int]
     ) -> bool:
         """Check if a piece can move from from_square to to_square."""
-        return self.board.is_valid_move(from_square, to_square)
+        attack_info = self.board.get_attack_info(piece.color)
+        valid_moves = self.board.get_valid_moves(from_square, attack_info)
+        return to_square in valid_moves
 
     def get_all_valid_moves(self) -> List[str]:
         """Get all valid moves in algebraic notation."""
@@ -55,8 +57,11 @@ class ChessGame:
             else self.board.black_pieces
         )
 
+        # Get attack info once for all pieces
+        attack_info = self.board.get_attack_info(self.current_turn)
+
         for piece, pos in pieces:
-            moves = self.board.get_valid_moves(pos)
+            moves = self.board.get_valid_moves(pos, attack_info)
             for move in moves:
                 move_str = self._move_to_algebraic(pos, move, piece)
                 valid_moves.append(move_str)
@@ -97,7 +102,8 @@ class ChessGame:
             return False
 
         # Check if move is valid
-        valid_moves = self.board.get_valid_moves(from_pos)
+        attack_info = self.board.get_attack_info(piece.color)
+        valid_moves = self.board.get_valid_moves(from_pos, attack_info)
         if to_pos not in valid_moves:
             return False
 

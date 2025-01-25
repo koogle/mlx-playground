@@ -76,8 +76,6 @@ def main():
                 f"\n{'White' if current_color == Color.WHITE else 'Black'}: ",
                 end="",
             )
-            if "Check" in game_state:
-                print(game_state)
 
             # AI's turn (either in ai mode or auto mode)
             if args.mode == "auto" or (args.mode == "ai" and current_color == ai_color):
@@ -106,21 +104,36 @@ def main():
 def handle_ai_turn(game):
     valid_moves = game.get_all_valid_moves()
     if not valid_moves:
-        print("No valid moves available!")
+        state = game.get_game_state()
+        if "Checkmate" in state:
+            print(f"\n{state}")
+        else:
+            print("No valid moves available! Stalemate!")
         return False
 
+    # Choose and make the move
     ai_move = random.choice(valid_moves)
     print(f"AI move: {ai_move}")
-
-    # Only continue if the move was successful
     if not game.make_move(ai_move):
+        # If move fails, get fresh valid moves after board update
         print("\nERROR: AI made an invalid move!")
-        game.DEBUG = True  # Enable debug only after invalid move
-        game.make_move(ai_move)  # Retry with debug enabled
-        game.DEBUG = False  # Disable debug again
+        print("\nValid moves by piece:")
+        pieces = (
+            game.board.white_pieces
+            if game.current_turn == Color.WHITE
+            else game.board.black_pieces
+        )
+        # Get fresh attack info and valid moves
+        attack_info = game.board.get_attack_info(game.current_turn)
+        for piece, pos in pieces:
+            moves = game.board.get_valid_moves(pos, attack_info)
+            if moves:
+                print(
+                    f"{piece.piece_type} at {chr(ord('a') + pos[1])}{pos[0] + 1}: {[game._move_to_algebraic(pos, m, piece) for m in moves]}"
+                )
         return False
 
-    print(game.board)  # Always show board after move
+    print(game.board)
     state = game.get_game_state()
     if state != "Normal":
         print(state)

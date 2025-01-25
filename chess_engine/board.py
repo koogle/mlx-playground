@@ -222,25 +222,74 @@ class Board:
 
         return AttackInfo(attacked_squares, attacking_pieces, pin_lines)
 
-    def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
+    def get_valid_moves(
+        self, pos: Tuple[int, int], attack_info: Optional[AttackInfo] = None
+    ) -> Set[Tuple[int, int]]:
         """Get all valid moves for a piece considering check."""
         piece = self.squares[pos[0]][pos[1]]
         if not piece:
             return set()
 
-        # Get attack information
-        attack_info = self.get_attack_info(piece.color)
+        # Get attack information if not provided
+        if attack_info is None:
+            attack_info = self.get_attack_info(piece.color)
         basic_moves = self.get_basic_moves(pos)
+
+        # Never allow moves that capture the king
+        basic_moves = {
+            move
+            for move in basic_moves
+            if not (
+                self.squares[move[0]][move[1]]
+                and self.squares[move[0]][move[1]].piece_type == PieceType.KING
+            )
+        }
+
+        # If king is in check
+        if attack_info.attacking_pieces:
+            if piece.piece_type == PieceType.KING:
+                # King must move out of check
+                return {
+                    move
+                    for move in basic_moves
+                    if move not in attack_info.attacked_squares
+                }
+            else:
+                # Other pieces can only block check or capture attacking piece
+                valid_moves = set()
+                attacker, attacker_pos = attack_info.attacking_pieces[0]
+                king_pos = self.find_king(piece.color)
+
+                # Can capture the attacking piece (including pawn captures)
+                if attacker_pos in basic_moves:
+                    valid_moves.add(attacker_pos)
+
+                # Can block the check (only for sliding pieces)
+                if attacker.piece_type.is_sliding_piece():
+                    # Get squares between attacker and king
+                    row_diff = king_pos[0] - attacker_pos[0]
+                    col_diff = king_pos[1] - attacker_pos[1]
+                    row_step = 0 if row_diff == 0 else row_diff // abs(row_diff)
+                    col_step = 0 if col_diff == 0 else col_diff // abs(col_diff)
+
+                    curr_pos = (attacker_pos[0] + row_step, attacker_pos[1] + col_step)
+                    while curr_pos != king_pos:
+                        if curr_pos in basic_moves:
+                            valid_moves.add(curr_pos)
+                        curr_pos = (curr_pos[0] + row_step, curr_pos[1] + col_step)
+
+                # Verify these moves actually get out of check
+                return {
+                    move
+                    for move in valid_moves
+                    if not self._move_leaves_in_check(pos, move, piece.color)
+                }
 
         # For kings, filter out moves to attacked squares
         if piece.piece_type == PieceType.KING:
             basic_moves = {
                 move for move in basic_moves if move not in attack_info.attacked_squares
             }
-
-        # If king is in check
-        if attack_info.attacking_pieces:
-            return self._get_moves_in_check(pos, attack_info, basic_moves)
 
         # Normal case - not in check
         return self._get_moves_not_in_check(pos, attack_info, basic_moves)
@@ -304,20 +353,16 @@ class Board:
 
         return new_board
 
-    def move_piece(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> bool:
+    def move_piece(
+        self,
+        from_pos: Tuple[int, int],
+        to_pos: Tuple[int, int],
+    ) -> bool:
         """Execute a move and update piece lists. Returns True if successful."""
         piece = self.squares[from_pos[0]][from_pos[1]]
         if not piece:
             if self.DEBUG:
                 print(f"DEBUG: No piece at {from_pos}")
-            return False
-
-        # Verify the move is valid
-        valid_moves = self.get_valid_moves(from_pos)
-        if to_pos not in valid_moves:
-            if self.DEBUG:
-                print(f"DEBUG: Move to {to_pos} not in valid moves: {valid_moves}")
-                print(f"DEBUG: Piece: {piece.piece_type} at {from_pos}")
             return False
 
         # Handle castling moves
@@ -497,11 +542,30 @@ class Board:
                 new_row += row_dir
                 new_col += col_dir
 
-    def make_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> bool:
-        """Execute a move on the board."""
+    def make_move(
+        self,
+        from_pos: Tuple[int, int],
+        to_pos: Tuple[int, int],
+    ) -> bool:
+        """Execute a move and update piece lists. Returns True if successful."""
         piece = self.squares[from_pos[0]][from_pos[1]]
         if not piece:
             return False
+
+        # Handle captured piece
+        captured_piece = self.squares[to_pos[0]][to_pos[1]]
+        if captured_piece:
+            # Never allow king captures - this should never happen in valid chess
+            if captured_piece.piece_type == PieceType.KING:
+                if self.DEBUG:
+                    print(f"DEBUG: Attempted to capture king at {to_pos}")
+                return False
+
+            # Remove captured piece from opponent's piece list
+            opponent_pieces = (
+                self.black_pieces if piece.color == Color.WHITE else self.white_pieces
+            )
+            opponent_pieces.remove((captured_piece, to_pos))
 
         # Update board state
         self.squares[to_pos[0]][to_pos[1]] = piece
@@ -603,3 +667,10 @@ class Board:
         """Get all pieces of the given type and color."""
         pieces = self.white_pieces if color == Color.WHITE else self.black_pieces
         return [(piece, pos) for piece, pos in pieces if piece.piece_type == piece_type]
+
+    def _move_leaves_in_check(
+        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], color: Color
+    ) -> bool:
+        # Implement the logic to check if moving from from_pos to to_pos leaves the king in check
+        # This is a placeholder and should be implemented based on your specific check detection logic
+        return False

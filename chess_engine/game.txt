@@ -1,0 +1,14 @@
+1. d4 h6
+2. Be3 d6
+3. f4 h5
+4. Bc1 c6
+5. Nf3 Bh3
+6. Kd2 Bf5
+7. Na3 Be6
+8. g3 Qb6
+9. Ne1 c5
+10. b3 Qxb3
+11. d5 Bc8
+12. Bb2 Nh6
+13. Bg2 Kd8
+14. Be4 Qe3

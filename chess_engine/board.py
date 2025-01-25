@@ -251,36 +251,43 @@ class Board:
         # Get basic valid moves for the piece
         valid_moves = piece.get_valid_moves(pos, self)
 
-        if self.DEBUG and piece.piece_type == PieceType.KING:
-            print(f"Basic king moves from {pos}: {valid_moves}")
-
-        # Filter moves that would leave king in check
         if check_for_check:
             filtered_moves = []
-            for move in valid_moves:
-                # Make temporary move
-                original_target = self.squares[move[0]][move[1]]
-                self.squares[move[0]][move[1]] = piece
-                self.squares[pos[0]][pos[1]] = None
 
-                # Check if king would be in check
-                if not self.is_in_check(piece.color):
-                    filtered_moves.append(move)
-                elif self.DEBUG:
-                    print(f"Debug: Move from {pos} to {move} causes check")
-                    target_piece = self.squares[move[0]][move[1]]
-                    if target_piece:
-                        print(
-                            f"Target square contains: {target_piece.piece_type} of color {target_piece.color}"
-                        )
-                    attacking_pieces = self._get_attacking_pieces(
-                        move, Color.WHITE if piece.color == Color.BLACK else Color.WHITE
-                    )
-                    print(f"Square {move} is attacked by: {attacking_pieces}")
+            # If king is in check, only allow moves that resolve the check
+            if self.is_in_check(piece.color):
+                for move in valid_moves:
+                    # Make temporary move
+                    original_target = self.squares[move[0]][move[1]]
+                    self.squares[move[0]][move[1]] = piece
+                    self.squares[pos[0]][pos[1]] = None
 
-                # Undo temporary move
-                self.squares[pos[0]][pos[1]] = piece
-                self.squares[move[0]][move[1]] = original_target
+                    # Check if this move resolves the check
+                    if not self.is_in_check(piece.color):
+                        filtered_moves.append(move)
+                    elif self.DEBUG:
+                        print(f"Debug: Move from {pos} to {move} doesn't resolve check")
+
+                    # Undo temporary move
+                    self.squares[pos[0]][pos[1]] = piece
+                    self.squares[move[0]][move[1]] = original_target
+            else:
+                # Normal case - filter moves that would put/leave king in check
+                for move in valid_moves:
+                    # Make temporary move
+                    original_target = self.squares[move[0]][move[1]]
+                    self.squares[move[0]][move[1]] = piece
+                    self.squares[pos[0]][pos[1]] = None
+
+                    # Check if this move would put own king in check
+                    if not self.is_in_check(piece.color):
+                        filtered_moves.append(move)
+                    elif self.DEBUG:
+                        print(f"Debug: Move from {pos} to {move} causes check")
+
+                    # Undo temporary move
+                    self.squares[pos[0]][pos[1]] = piece
+                    self.squares[move[0]][move[1]] = original_target
 
             valid_moves = filtered_moves
 
@@ -391,17 +398,15 @@ class Board:
         if not self.is_in_check(color):
             return False
 
-        # Get all pieces of the current color
-        pieces = self.white_pieces if color == Color.WHITE else self.black_pieces
+        # Find the king
+        king_pos = self.find_king(color)
+        if not king_pos:
+            return False
 
-        # Check if any piece has a legal move
-        for piece, pos in pieces:
-            valid_moves = self.get_valid_moves(pos)
-            if valid_moves:
-                return False
-
-        # No legal moves and in check = checkmate
-        return True
+        # If king has no valid moves and is in check, it's checkmate
+        # (get_valid_moves already filters moves that don't resolve check)
+        valid_king_moves = self.get_valid_moves(king_pos)
+        return len(valid_king_moves) == 0
 
     def is_stalemate(self, color: Color) -> bool:
         """Check if the given color is in stalemate."""

@@ -70,6 +70,12 @@ def main():
                 print("\nFinal game history:")
                 print_move_history(game)
                 break
+            elif game.board.is_draw():
+                print("\nGame is a draw!")
+                print("Reason: Insufficient material or stalemate")
+                print("\nFinal game history:")
+                print_move_history(game)
+                break
 
             current_color = game.get_current_turn()
             print(
@@ -109,6 +115,12 @@ def handle_ai_turn(game):
             print(f"\n{state}")
         else:
             print("No valid moves available! Stalemate!")
+        return False
+
+    # Check for draw conditions
+    if game.board.is_draw():
+        print("\nGame is a draw!")
+        print("Reason: Insufficient material or stalemate")
         return False
 
     # Choose and make the move

@@ -433,27 +433,30 @@ class Board:
         if self.is_stalemate(Color.WHITE) or self.is_stalemate(Color.BLACK):
             return True
 
-        # 2. Insufficient material - only check when both sides have very few pieces
+        # 2. Insufficient material
         white_pieces = self.white_pieces
         black_pieces = self.black_pieces
 
+        # Only check insufficient material if both sides have very few pieces
         if len(white_pieces) <= 2 and len(black_pieces) <= 2:
             # King vs King
             if len(white_pieces) == 1 and len(black_pieces) == 1:
                 return True
 
-            # King and Bishop/Knight vs King
+            # King and minor piece vs King
             if (len(white_pieces) == 2 and len(black_pieces) == 1) or (
                 len(white_pieces) == 1 and len(black_pieces) == 2
             ):
                 for pieces in [white_pieces, black_pieces]:
                     if len(pieces) == 2:
-                        piece_type = (
-                            pieces[0][0].piece_type
-                            if pieces[0][0].piece_type != PieceType.KING
-                            else pieces[1][0].piece_type
+                        non_king_piece = next(
+                            p for p, _ in pieces if p.piece_type != PieceType.KING
                         )
-                        if piece_type in {PieceType.BISHOP, PieceType.KNIGHT}:
+                        # Only Knight or Bishop alone is insufficient
+                        if non_king_piece.piece_type in {
+                            PieceType.BISHOP,
+                            PieceType.KNIGHT,
+                        }:
                             return True
 
             # King and Bishop vs King and Bishop (same colored squares)
@@ -467,7 +470,6 @@ class Board:
                     None,
                 )
                 if white_bishop and black_bishop:
-                    # Check if bishops are on same colored squares
                     white_pos = next(
                         pos
                         for p, pos in white_pieces
@@ -483,6 +485,7 @@ class Board:
                     ) % 2:
                         return True
 
+        # If we have more pieces, it's not a material-based draw
         return False
 
     def _find_pin_lines(

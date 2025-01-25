@@ -205,7 +205,13 @@ class ChessGame:
 
         # Add capture symbol if needed
         target = self.board.squares[to_pos[0]][to_pos[1]]
-        capture = "x" if target else ""
+        capture = ""
+        if target:
+            # For pawns, include the file of origin
+            if piece.piece_type == PieceType.PAWN:
+                capture = files[from_pos[1]] + "x"
+            else:
+                capture = "x"
 
         # Add destination square
         destination = files[to_pos[1]] + ranks[to_pos[0]]

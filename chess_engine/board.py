@@ -423,10 +423,34 @@ class Board:
         to_row, to_col = to_square
         piece = self.squares[from_row][from_col]
 
-        # Try the move
+        # Store original state
         original_target = self.squares[to_row][to_col]
+        original_piece_list = (
+            self.white_pieces.copy()
+            if color == Color.WHITE
+            else self.black_pieces.copy()
+        )
+        original_opponent_list = (
+            self.black_pieces.copy()
+            if color == Color.WHITE
+            else self.white_pieces.copy()
+        )
+
+        # Try the move
         self.squares[to_row][to_col] = piece
         self.squares[from_row][from_col] = None
+
+        # Update piece lists
+        piece_list = self.white_pieces if color == Color.WHITE else self.black_pieces
+        piece_list.remove((piece, from_square))
+        piece_list.append((piece, to_square))
+
+        # If capturing, remove captured piece from opponent's list
+        if original_target:
+            opponent_list = (
+                self.black_pieces if color == Color.WHITE else self.white_pieces
+            )
+            opponent_list.remove((original_target, to_square))
 
         # Check if this move puts/leaves own king in check
         king_pos = self.find_king(color)
@@ -437,9 +461,15 @@ class Board:
                 king_pos, opponent_color, ignore_king=True
             )
 
-        # Undo the move
+        # Restore original state
         self.squares[from_row][from_col] = piece
         self.squares[to_row][to_col] = original_target
+        if color == Color.WHITE:
+            self.white_pieces = original_piece_list
+            self.black_pieces = original_opponent_list
+        else:
+            self.black_pieces = original_piece_list
+            self.white_pieces = original_opponent_list
 
         return in_check
 

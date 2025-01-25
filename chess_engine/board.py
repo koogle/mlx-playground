@@ -433,48 +433,55 @@ class Board:
         if self.is_stalemate(Color.WHITE) or self.is_stalemate(Color.BLACK):
             return True
 
-        # 2. Insufficient material
+        # 2. Insufficient material - only check when both sides have very few pieces
         white_pieces = self.white_pieces
         black_pieces = self.black_pieces
 
-        # King vs King
-        if len(white_pieces) == 1 and len(black_pieces) == 1:
-            return True
+        if len(white_pieces) <= 2 and len(black_pieces) <= 2:
+            # King vs King
+            if len(white_pieces) == 1 and len(black_pieces) == 1:
+                return True
 
-        # King and Bishop/Knight vs King
-        if (len(white_pieces) == 2 and len(black_pieces) == 1) or (
-            len(white_pieces) == 1 and len(black_pieces) == 2
-        ):
-            for pieces in [white_pieces, black_pieces]:
-                if len(pieces) == 2:
-                    piece_type = (
-                        pieces[0][0].piece_type
-                        if pieces[0][0].piece_type != PieceType.KING
-                        else pieces[1][0].piece_type
+            # King and Bishop/Knight vs King
+            if (len(white_pieces) == 2 and len(black_pieces) == 1) or (
+                len(white_pieces) == 1 and len(black_pieces) == 2
+            ):
+                for pieces in [white_pieces, black_pieces]:
+                    if len(pieces) == 2:
+                        piece_type = (
+                            pieces[0][0].piece_type
+                            if pieces[0][0].piece_type != PieceType.KING
+                            else pieces[1][0].piece_type
+                        )
+                        if piece_type in {PieceType.BISHOP, PieceType.KNIGHT}:
+                            return True
+
+            # King and Bishop vs King and Bishop (same colored squares)
+            if len(white_pieces) == 2 and len(black_pieces) == 2:
+                white_bishop = next(
+                    (p for p, _ in white_pieces if p.piece_type == PieceType.BISHOP),
+                    None,
+                )
+                black_bishop = next(
+                    (p for p, _ in black_pieces if p.piece_type == PieceType.BISHOP),
+                    None,
+                )
+                if white_bishop and black_bishop:
+                    # Check if bishops are on same colored squares
+                    white_pos = next(
+                        pos
+                        for p, pos in white_pieces
+                        if p.piece_type == PieceType.BISHOP
                     )
-                    if piece_type in {PieceType.BISHOP, PieceType.KNIGHT}:
+                    black_pos = next(
+                        pos
+                        for p, pos in black_pieces
+                        if p.piece_type == PieceType.BISHOP
+                    )
+                    if (white_pos[0] + white_pos[1]) % 2 == (
+                        black_pos[0] + black_pos[1]
+                    ) % 2:
                         return True
-
-        # King and Bishop vs King and Bishop (same colored squares)
-        if len(white_pieces) == 2 and len(black_pieces) == 2:
-            white_bishop = next(
-                (p for p, _ in white_pieces if p.piece_type == PieceType.BISHOP), None
-            )
-            black_bishop = next(
-                (p for p, _ in black_pieces if p.piece_type == PieceType.BISHOP), None
-            )
-            if white_bishop and black_bishop:
-                # Check if bishops are on same colored squares
-                white_pos = next(
-                    pos for p, pos in white_pieces if p.piece_type == PieceType.BISHOP
-                )
-                black_pos = next(
-                    pos for p, pos in black_pieces if p.piece_type == PieceType.BISHOP
-                )
-                if (white_pos[0] + white_pos[1]) % 2 == (
-                    black_pos[0] + black_pos[1]
-                ) % 2:
-                    return True
 
         return False
 
@@ -578,8 +585,20 @@ class Board:
         piece_list.remove((piece, from_pos))
         piece_list.append((piece, to_pos))
 
-        piece.has_moved = True
+        # Handle pawn promotion
+        if piece.piece_type == PieceType.PAWN:
+            # Check if pawn reached the opposite end
+            promotion_rank = 7 if piece.color == Color.WHITE else 0
+            if to_pos[0] == promotion_rank:
+                # Create new queen
+                promoted_queen = Piece(PieceType.QUEEN, piece.color)
+                # Update board
+                self.squares[to_pos[0]][to_pos[1]] = promoted_queen
+                # Update piece list
+                piece_list.remove((piece, to_pos))
+                piece_list.append((promoted_queen, to_pos))
 
+        piece.has_moved = True
         return True
 
     def __str__(self) -> str:

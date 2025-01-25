@@ -73,17 +73,71 @@ class ChessGame:
         self, move: str
     ) -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
         """Parse a move in algebraic notation and return (from_pos, to_pos)."""
-        # Handle simple pawn moves
-        if len(move) == 2 and move[0] in "abcdefgh" and move[1] in "12345678":
-            file = ord(move[0]) - ord("a")
-            rank = int(move[1]) - 1
+        move = move.strip()
+
+        # Handle castling
+        if move in ["O-O", "0-0", "O-O-O", "0-0-0"]:
+            king_pieces = self.board.get_pieces_by_type(
+                self.current_turn, PieceType.KING
+            )
+            if not king_pieces:
+                return None, None
+            king_pos = king_pieces[0][1]
+            target_col = 6 if move in ["O-O", "0-0"] else 2
+            target_row = 0 if self.current_turn == Color.WHITE else 7
+            return king_pos, (target_row, target_col)
+
+        # Remove capture and check symbols
+        move = move.replace("x", "").rstrip("+#")
+
+        # Get destination square
+        dest_square = move[-2:]
+        to_col = ord(dest_square[0]) - ord("a")
+        to_row = int(dest_square[1]) - 1
+        if not (0 <= to_row < 8 and 0 <= to_col < 8):
+            return None, None
+        to_pos = (to_row, to_col)
+
+        # Handle pawn moves
+        if len(move) == 2 or (len(move) == 3 and move[0] in "abcdefgh"):
+            # Simple pawn move or pawn capture
+            source_file = ord(move[0]) - ord("a") if len(move) == 3 else to_col
             pawns = self.board.get_pieces_by_type(self.current_turn, PieceType.PAWN)
+            valid_sources = []
             for pawn, pos in pawns:
-                if (rank, file) in self.board.get_valid_moves(pos):
-                    return pos, (rank, file)
+                if pos[1] == source_file and to_pos in self.board.get_valid_moves(pos):
+                    valid_sources.append(pos)
+            if len(valid_sources) == 1:
+                return valid_sources[0], to_pos
             return None, None
 
-        # Handle other moves similarly...
+        # Handle piece moves
+        if move[0] in "KQRBN":
+            piece_type = {
+                "K": PieceType.KING,
+                "Q": PieceType.QUEEN,
+                "R": PieceType.ROOK,
+                "B": PieceType.BISHOP,
+                "N": PieceType.KNIGHT,
+            }[move[0]]
+
+            # Get all pieces of this type
+            pieces = self.board.get_pieces_by_type(self.current_turn, piece_type)
+            valid_sources = []
+
+            # Check which pieces can make this move
+            for piece, pos in pieces:
+                if to_pos in self.board.get_valid_moves(pos):
+                    valid_sources.append(pos)
+
+            if len(valid_sources) == 1:
+                return valid_sources[0], to_pos
+            else:
+                raise ValueError(
+                    f"Multiple pieces of type {piece_type} can move to {to_pos}"
+                )
+
+        return None, None
 
     def get_current_turn(self) -> Color:
         return self.current_turn

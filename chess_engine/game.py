@@ -48,27 +48,37 @@ class ChessGame:
 
     def make_move(self, move: str) -> bool:
         """Make a move using standard algebraic notation."""
-        from_pos, to_pos = self._parse_move(move)
-        if not from_pos or not to_pos:
-            return False
+        try:
+            # Handle special commands
+            if move.lower() == "random":
+                return self.make_ai_move()
 
-        # Validate move
-        piece = self.board.squares[from_pos[0]][from_pos[1]]
-        if not piece or piece.color != self.current_turn:
-            return False
+            # Parse and validate the move
+            from_pos, to_pos = self._parse_move(move)
+            if not from_pos or not to_pos:
+                return False
 
-        # Check if move is valid
-        valid_moves = self.board.get_valid_moves(from_pos)
-        if to_pos not in valid_moves:
-            return False
+            # Validate move
+            piece = self.board.squares[from_pos[0]][from_pos[1]]
+            if not piece or piece.color != self.current_turn:
+                return False
 
-        # Execute move
-        self.board.move_piece(from_pos, to_pos)
-        self.move_history.append(move)
-        self.current_turn = (
-            Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
-        )
-        return True
+            # Check if move is valid
+            valid_moves = self.board.get_valid_moves(from_pos)
+            if to_pos not in valid_moves:
+                return False
+
+            # Execute move
+            self.board.move_piece(from_pos, to_pos)
+            self.move_history.append(move)
+            self.current_turn = (
+                Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+            )
+            return True
+
+        except (ValueError, IndexError, KeyError, AttributeError):
+            # Handle any parsing errors or invalid input
+            return False
 
     def _parse_move(
         self, move: str
@@ -245,3 +255,57 @@ class ChessGame:
         )
 
         return True
+
+    def _format_move(
+        self, piece: Piece, from_pos: Tuple[int, int], to_pos: Tuple[int, int]
+    ) -> str:
+        """Convert a move into standard algebraic notation."""
+        # Handle castling
+        if piece.piece_type == PieceType.KING and abs(from_pos[1] - to_pos[1]) == 2:
+            return "O-O" if to_pos[1] > from_pos[1] else "O-O-O"
+
+        # Get basic move components
+        piece_symbol = self._get_piece_symbol(piece)
+        from_square = chr(from_pos[1] + ord("a")) + str(from_pos[0] + 1)
+        to_square = chr(to_pos[1] + ord("a")) + str(to_pos[0] + 1)
+
+        # Check if move is a capture
+        target = self.board.squares[to_pos[0]][to_pos[1]]
+        is_capture = target is not None
+
+        # Special handling for pawns
+        if piece.piece_type == PieceType.PAWN:
+            if is_capture:
+                return f"{chr(from_pos[1] + ord('a'))}x{to_square}"
+            return to_square
+
+        # Handle piece moves
+        move = piece_symbol
+
+        # Check if we need to disambiguate the move
+        similar_pieces = self.board.get_pieces_by_type(piece.color, piece.piece_type)
+        disambiguation_needed = False
+        for other_piece, other_pos in similar_pieces:
+            if other_pos != from_pos and to_pos in self.board.get_valid_moves(
+                other_pos
+            ):
+                disambiguation_needed = True
+                break
+
+        if disambiguation_needed:
+            move += from_square
+
+        # Add capture symbol if needed
+        if is_capture:
+            move += "x"
+
+        move += to_square
+
+        # Add check/checkmate symbol
+        opponent_color = Color.BLACK if piece.color == Color.WHITE else Color.WHITE
+        if self.board.is_checkmate(opponent_color):
+            move += "#"
+        elif self.board.is_in_check(opponent_color):
+            move += "+"
+
+        return move

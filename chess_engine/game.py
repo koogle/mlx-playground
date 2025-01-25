@@ -94,62 +94,30 @@ class ChessGame:
             return None, None
         to_pos = (to_row, to_col)
 
-        # Handle pawn moves
-        if len(move) == 2:  # Simple pawn move like "e4"
-            # Find pawn that can move to this square
-            direction = 1 if self.current_turn == Color.WHITE else -1
-            possible_rows = [to_row - direction]
-            if (self.current_turn == Color.WHITE and to_row == 3) or (
-                self.current_turn == Color.BLACK and to_row == 4
-            ):
-                possible_rows.append(to_row - 2 * direction)
+        # Determine piece type
+        piece_type = {
+            "K": PieceType.KING,
+            "Q": PieceType.QUEEN,
+            "R": PieceType.ROOK,
+            "B": PieceType.BISHOP,
+            "N": PieceType.KNIGHT,
+        }.get(move[0], PieceType.PAWN)
 
-            for from_row in possible_rows:
-                if 0 <= from_row < 8:
-                    piece = self.board.squares[from_row][to_col]
-                    if (
-                        piece
-                        and piece.piece_type == PieceType.PAWN
-                        and piece.color == self.current_turn
-                        and to_pos in self.board.get_valid_moves((from_row, to_col))
-                    ):
-                        return (from_row, to_col), to_pos
-            return None, None
+        # For pawn captures, use the source file
+        source_file = None
+        if piece_type == PieceType.PAWN and len(move) == 3 and move[0] in "abcdefgh":
+            source_file = ord(move[0]) - ord("a")
 
-        elif len(move) == 3 and move[0] in "abcdefgh":  # Pawn capture like "exd5"
-            from_col = ord(move[0]) - ord("a")
-            if not (0 <= from_col < 8):
-                return None, None
+        # Get all pieces of this type
+        pieces = self.board.get_pieces_by_type(self.current_turn, piece_type)
 
-            # Find pawn that can capture to this square
-            direction = 1 if self.current_turn == Color.WHITE else -1
-            from_row = to_row - direction
-            if 0 <= from_row < 8:
-                piece = self.board.squares[from_row][from_col]
-                if (
-                    piece
-                    and piece.piece_type == PieceType.PAWN
-                    and piece.color == self.current_turn
-                    and to_pos in self.board.get_valid_moves((from_row, from_col))
-                ):
-                    return (from_row, from_col), to_pos
-            return None, None
-
-        # Handle piece moves
-        if move[0] in "KQRBN":
-            piece_type = {
-                "K": PieceType.KING,
-                "Q": PieceType.QUEEN,
-                "R": PieceType.ROOK,
-                "B": PieceType.BISHOP,
-                "N": PieceType.KNIGHT,
-            }[move[0]]
-
-            # Find all pieces of this type that can move to the target square
-            pieces = self.board.get_pieces_by_type(self.current_turn, piece_type)
-            for piece, from_pos in pieces:
-                if to_pos in self.board.get_valid_moves(from_pos):
-                    return from_pos, to_pos
+        # Find piece that can make this move
+        for piece, from_pos in pieces:
+            if to_pos in self.board.get_valid_moves(from_pos):
+                # For pawns with source file, check column matches
+                if source_file is not None and from_pos[1] != source_file:
+                    continue
+                return from_pos, to_pos
 
         return None, None
 

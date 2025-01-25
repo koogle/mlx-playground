@@ -112,8 +112,18 @@ def handle_ai_turn(game):
     ai_move = random.choice(valid_moves)
     print(f"AI move: {ai_move}")
 
-    if game.make_move(ai_move):
-        print(game)
+    # Only continue if the move was successful
+    if not game.make_move(ai_move):
+        print("\nERROR: AI made an invalid move!")
+        game.DEBUG = True  # Enable debug only after invalid move
+        game.make_move(ai_move)  # Retry with debug enabled
+        game.DEBUG = False  # Disable debug again
+        return False
+
+    print(game.board)  # Always show board after move
+    state = game.get_game_state()
+    if state != "Normal":
+        print(state)
     return True
 
 

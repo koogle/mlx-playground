@@ -3,6 +3,7 @@ from game import ChessGame
 import random
 import argparse
 import time
+import sys
 
 
 def main():
@@ -20,9 +21,28 @@ def main():
         default=1.0,
         help="Delay between moves in auto mode (seconds)",
     )
+    parser.add_argument(
+        "--history",
+        type=str,
+        help="Load and replay a game from a history file",
+    )
     args = parser.parse_args()
 
     game = ChessGame()
+
+    # Load game history if provided
+    if args.history:
+        try:
+            with open(args.history, "r") as f:
+                history = f.read()
+            if game.load_game_history(history):
+                print("Game loaded successfully!")
+            else:
+                print("Failed to load game history")
+                return
+        except FileNotFoundError:
+            print(f"History file not found: {args.history}")
+            return
 
     # If playing against AI, randomly assign colors
     ai_color = None

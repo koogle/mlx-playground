@@ -199,6 +199,8 @@ class Piece:
 
 
 class Board:
+    DEBUG = False  # Class variable to control debug output
+
     def __init__(self):
         self.squares: List[List[Optional[Piece]]] = [
             [None for _ in range(8)] for _ in range(8)
@@ -249,15 +251,53 @@ class Board:
         # Get basic valid moves for the piece
         valid_moves = piece.get_valid_moves(pos, self)
 
+        if self.DEBUG and piece.piece_type == PieceType.KING:
+            print(f"Basic king moves from {pos}: {valid_moves}")
+
         # Filter moves that would leave king in check
         if check_for_check:
-            valid_moves = [
-                move
-                for move in valid_moves
-                if not self._move_causes_check(pos, move, piece.color)
-            ]
+            filtered_moves = []
+            for move in valid_moves:
+                # Make temporary move
+                original_target = self.squares[move[0]][move[1]]
+                self.squares[move[0]][move[1]] = piece
+                self.squares[pos[0]][pos[1]] = None
+
+                # Check if king would be in check
+                if not self.is_in_check(piece.color):
+                    filtered_moves.append(move)
+                elif self.DEBUG:
+                    print(f"Debug: Move from {pos} to {move} causes check")
+                    target_piece = self.squares[move[0]][move[1]]
+                    if target_piece:
+                        print(
+                            f"Target square contains: {target_piece.piece_type} of color {target_piece.color}"
+                        )
+                    attacking_pieces = self._get_attacking_pieces(
+                        move, Color.WHITE if piece.color == Color.BLACK else Color.WHITE
+                    )
+                    print(f"Square {move} is attacked by: {attacking_pieces}")
+
+                # Undo temporary move
+                self.squares[pos[0]][pos[1]] = piece
+                self.squares[move[0]][move[1]] = original_target
+
+            valid_moves = filtered_moves
 
         return valid_moves
+
+    def _get_attacking_pieces(
+        self, square: Tuple[int, int], color: Color
+    ) -> List[Tuple[Piece, Tuple[int, int]]]:
+        """Get all pieces of given color that attack a square."""
+        attacking_pieces = []
+        pieces = self.white_pieces if color == Color.WHITE else self.black_pieces
+
+        for piece, pos in pieces:
+            if square in piece.get_valid_moves(pos, self):
+                attacking_pieces.append((piece.piece_type, pos))
+
+        return attacking_pieces
 
     def move_piece(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> None:
         """Execute a move and update piece lists."""
@@ -314,6 +354,20 @@ class Board:
         self.squares[from_row][from_col] = None
         piece.has_moved = True
 
+        # Handle pawn promotion
+        if piece.piece_type == PieceType.PAWN and (
+            (piece.color == Color.WHITE and to_row == 7)
+            or (piece.color == Color.BLACK and to_row == 0)
+        ):
+            # Promote to queen by default
+            new_piece = Piece(PieceType.QUEEN, piece.color)
+            piece_list = (
+                self.white_pieces if piece.color == Color.WHITE else self.black_pieces
+            )
+            piece_list.remove((piece, to_pos))
+            piece_list.append((new_piece, to_pos))
+            self.squares[to_row][to_col] = new_piece
+
     def find_king(self, color: Color) -> Optional[Tuple[int, int]]:
         """Find the position of the king of the given color."""
         pieces = self.white_pieces if color == Color.WHITE else self.black_pieces
@@ -333,15 +387,102 @@ class Board:
 
     def is_checkmate(self, color: Color) -> bool:
         """Check if the given color is in checkmate."""
+        # First verify the king is in check
         if not self.is_in_check(color):
             return False
 
-        # Check if any piece has valid moves
+        # Get all pieces of the current color
         pieces = self.white_pieces if color == Color.WHITE else self.black_pieces
+
+        # Check if any piece has a legal move
         for piece, pos in pieces:
-            if self.get_valid_moves(pos):
+            valid_moves = self.get_valid_moves(pos)
+            if valid_moves:
                 return False
+
+        # No legal moves and in check = checkmate
         return True
+
+    def is_stalemate(self, color: Color) -> bool:
+        """Check if the given color is in stalemate."""
+        # First verify the king is NOT in check
+        if self.is_in_check(color):
+            return False
+
+        # Find the king
+        king_pos = self.find_king(color)
+        if not king_pos:
+            return False
+
+        # Get all valid moves for the king
+        king = self.squares[king_pos[0]][king_pos[1]]
+        valid_king_moves = self.get_valid_moves(king_pos)
+
+        # If king has no valid moves but is not in check, check if any other piece can move
+        if not valid_king_moves:
+            # Get all pieces of the current color except king
+            pieces = self.white_pieces if color == Color.WHITE else self.black_pieces
+            for piece, pos in pieces:
+                if piece.piece_type != PieceType.KING:
+                    if self.get_valid_moves(pos):
+                        # Some piece can move
+                        return False
+            # No piece can move and king has no moves but is not in check - it's stalemate
+            return True
+
+        # King has valid moves, not stalemate
+        return False
+
+    def is_draw(self) -> bool:
+        """Check if the game is a draw according to chess rules."""
+        # 1. Stalemate
+        if self.is_stalemate(Color.WHITE) or self.is_stalemate(Color.BLACK):
+            return True
+
+        # 2. Insufficient material
+        white_pieces = self.white_pieces
+        black_pieces = self.black_pieces
+
+        # King vs King
+        if len(white_pieces) == 1 and len(black_pieces) == 1:
+            return True
+
+        # King and Bishop/Knight vs King
+        if (len(white_pieces) == 2 and len(black_pieces) == 1) or (
+            len(white_pieces) == 1 and len(black_pieces) == 2
+        ):
+            for pieces in [white_pieces, black_pieces]:
+                if len(pieces) == 2:
+                    piece_type = (
+                        pieces[0][0].piece_type
+                        if pieces[0][0].piece_type != PieceType.KING
+                        else pieces[1][0].piece_type
+                    )
+                    if piece_type in {PieceType.BISHOP, PieceType.KNIGHT}:
+                        return True
+
+        # King and Bishop vs King and Bishop (same colored squares)
+        if len(white_pieces) == 2 and len(black_pieces) == 2:
+            white_bishop = next(
+                (p for p, _ in white_pieces if p.piece_type == PieceType.BISHOP), None
+            )
+            black_bishop = next(
+                (p for p, _ in black_pieces if p.piece_type == PieceType.BISHOP), None
+            )
+            if white_bishop and black_bishop:
+                # Check if bishops are on same colored squares
+                white_pos = next(
+                    pos for p, pos in white_pieces if p.piece_type == PieceType.BISHOP
+                )
+                black_pos = next(
+                    pos for p, pos in black_pieces if p.piece_type == PieceType.BISHOP
+                )
+                if (white_pos[0] + white_pos[1]) % 2 == (
+                    black_pos[0] + black_pos[1]
+                ) % 2:
+                    return True
+
+        return False
 
     def is_square_under_attack(
         self, square: Tuple[int, int], by_color: Color, ignore_king: bool = False
@@ -445,11 +586,9 @@ class Board:
         piece_list.remove((piece, from_square))
         piece_list.append((piece, to_square))
 
-        # If capturing, remove captured piece from opponent's list
+        # If capturing, remove captured piece from opponent's list BEFORE checking for check
+        opponent_list = self.black_pieces if color == Color.WHITE else self.white_pieces
         if original_target:
-            opponent_list = (
-                self.black_pieces if color == Color.WHITE else self.white_pieces
-            )
             opponent_list.remove((original_target, to_square))
 
         # Check if this move puts/leaves own king in check
@@ -457,9 +596,7 @@ class Board:
         in_check = False
         if king_pos:
             opponent_color = Color.BLACK if color == Color.WHITE else Color.WHITE
-            in_check = self.is_square_under_attack(
-                king_pos, opponent_color, ignore_king=True
-            )
+            in_check = self.is_square_under_attack(king_pos, opponent_color)
 
         # Restore original state
         self.squares[from_row][from_col] = piece
@@ -532,37 +669,38 @@ class Board:
     def get_piece_moves(
         self, from_square: Tuple[int, int], check_for_check: bool = True
     ) -> List[Tuple[int, int]]:
-        """Get all valid moves for a piece at the given square."""
-        from_row, from_col = from_square
-        piece = self.squares[from_row][from_col]
+        """Get all valid moves for a piece at the given position."""
+        row, col = from_square
+        piece = self.squares[row][col]
         if not piece:
             return []
 
         valid_moves = []
 
         if piece.piece_type == PieceType.PAWN:
-            # Pawn moves
             direction = 1 if piece.color == Color.WHITE else -1
-            start_row = 1 if piece.color == Color.WHITE else 6
+            one_forward = row + direction
 
-            # Forward moves
-            one_forward = from_row + direction
-            if 0 <= one_forward < 8 and self.squares[one_forward][from_col] is None:
-                valid_moves.append((one_forward, from_col))
-                # Initial two-square move
-                if from_row == start_row:
-                    two_forward = from_row + 2 * direction
-                    if self.squares[two_forward][from_col] is None:
-                        valid_moves.append((two_forward, from_col))
+            # Check forward moves only if within bounds
+            if 0 <= one_forward < 8:
+                if self.squares[one_forward][col] is None:
+                    valid_moves.append((one_forward, col))
+                    # Initial two-square move
+                    if not piece.has_moved:
+                        two_forward = row + 2 * direction
+                        if (
+                            0 <= two_forward < 8
+                            and self.squares[two_forward][col] is None
+                        ):
+                            valid_moves.append((two_forward, col))
 
-            # Captures
-            for col_offset in [-1, 1]:
-                new_col = from_col + col_offset
-                if 0 <= new_col < 8:
-                    target_square = (one_forward, new_col)
-                    target = self.squares[one_forward][new_col]
-                    if target and target.color != piece.color:
-                        valid_moves.append(target_square)
+                # Captures
+                for col_offset in [-1, 1]:
+                    new_col = col + col_offset
+                    if 0 <= new_col < 8:  # Check column bounds
+                        target = self.squares[one_forward][new_col]
+                        if target and target.color != piece.color:
+                            valid_moves.append((one_forward, new_col))
 
         elif piece.piece_type == PieceType.KNIGHT:
             # Knight moves
@@ -576,7 +714,7 @@ class Board:
                 (-1, 2),
                 (-1, -2),
             ]:
-                new_row, new_col = from_row + row_offset, from_col + col_offset
+                new_row, new_col = row + row_offset, col + col_offset
                 if 0 <= new_row < 8 and 0 <= new_col < 8:
                     target = self.squares[new_row][new_col]
                     if not target or target.color != piece.color:
@@ -591,7 +729,7 @@ class Board:
                 directions.extend([(0, 1), (0, -1), (1, 0), (-1, 0)])
 
             for row_dir, col_dir in directions:
-                new_row, new_col = from_row + row_dir, from_col + col_dir
+                new_row, new_col = row + row_dir, col + col_dir
                 while 0 <= new_row < 8 and 0 <= new_col < 8:
                     target = self.squares[new_row][new_col]
                     if not target:
@@ -609,7 +747,7 @@ class Board:
                 for col_offset in [-1, 0, 1]:
                     if row_offset == 0 and col_offset == 0:
                         continue
-                    new_row, new_col = from_row + row_offset, from_col + col_offset
+                    new_row, new_col = row + row_offset, col + col_offset
                     if 0 <= new_row < 8 and 0 <= new_col < 8:
                         target = self.squares[new_row][new_col]
                         if not target or target.color != piece.color:

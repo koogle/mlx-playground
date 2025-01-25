@@ -56,28 +56,45 @@ class ChessGame:
             # Parse and validate the move
             from_pos, to_pos = self._parse_move(move)
             if not from_pos or not to_pos:
+                print("DEBUG: Invalid move parsing")
                 return False
+
+            # Validate that current player is not in check before making move
+            if self.board.is_in_check(self.current_turn):
+                print(f"DEBUG: {self.current_turn} is in check!")
 
             # Validate move
             piece = self.board.squares[from_pos[0]][from_pos[1]]
             if not piece or piece.color != self.current_turn:
+                print("DEBUG: Invalid piece or wrong color")
                 return False
 
             # Check if move is valid
             valid_moves = self.board.get_valid_moves(from_pos)
             if to_pos not in valid_moves:
+                print(
+                    f"DEBUG: Move {from_pos} to {to_pos} not in valid moves: {valid_moves}"
+                )
                 return False
 
             # Execute move
             self.board.move_piece(from_pos, to_pos)
+
+            # Validate that move didn't leave/put own king in check
+            if self.board.is_in_check(self.current_turn):
+                print(f"DEBUG: Move would leave/put own king in check")
+                # Undo the move
+                self.board.move_piece(to_pos, from_pos)
+                return False
+
             self.move_history.append(move)
             self.current_turn = (
                 Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
             )
             return True
 
-        except (ValueError, IndexError, KeyError, AttributeError):
-            # Handle any parsing errors or invalid input
+        except (ValueError, IndexError, KeyError, AttributeError) as e:
+            print(f"DEBUG: Exception in make_move: {e}")
             return False
 
     def _parse_move(
@@ -136,15 +153,16 @@ class ChessGame:
         return self.current_turn
 
     def get_game_state(self) -> str:
-        """Get the current state of the game (check, checkmate, or normal)."""
-        if not self.move_history:  # Game hasn't started yet
-            return "Normal"
-
+        """Get the current state of the game."""
         if self.board.is_checkmate(self.current_turn):
             winner = "Black" if self.current_turn == Color.WHITE else "White"
             return f"Checkmate! {winner} wins!"
         elif self.board.is_in_check(self.current_turn):
             return "Check!"
+        elif self.board.is_draw():
+            return "Draw!"
+        elif self.board.is_stalemate(self.current_turn):
+            return "Stalemate! Game is a draw!"
         return "Normal"
 
     def __str__(self):
@@ -309,3 +327,58 @@ class ChessGame:
             move += "+"
 
         return move
+
+    def get_game_history_str(self) -> str:
+        """Get the game history as a formatted string."""
+        if not self.move_history:
+            return "No moves played"
+
+        # Format moves in pairs with move numbers
+        formatted_moves = []
+        for i in range(0, len(self.move_history), 2):
+            move_num = i // 2 + 1
+            white_move = self.move_history[i]
+            black_move = (
+                self.move_history[i + 1] if i + 1 < len(self.move_history) else ""
+            )
+            formatted_moves.append(f"{move_num}. {white_move} {black_move}")
+
+        return "\n".join(formatted_moves)
+
+    def load_game_history(self, history_str: str) -> bool:
+        """Load and replay a game from a history string."""
+        # Reset the game
+        self.__init__()
+
+        try:
+            # Parse moves from history string
+            moves = []
+            for line in history_str.strip().split("\n"):
+                if not line or line.startswith("Move history:"):
+                    continue
+                # Extract move number and moves
+                parts = line.split(".")
+                if len(parts) != 2:
+                    continue
+                # Split moves, handling potential single move at end
+                move_parts = parts[1].strip().split()
+                moves.extend(move_parts)
+
+            # Replay moves
+            for move in moves:
+                if not self.make_move(move):
+                    print(f"Failed to replay move: {move}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            print(f"Error loading game history: {e}")
+            self.__init__()  # Reset on error
+            return False
+
+    def __str__(self) -> str:
+        """String representation including board and game history."""
+        board_str = str(self.board)
+        history_str = self.get_game_history_str()
+        return f"{board_str}\n\nMove history:\n{history_str}"

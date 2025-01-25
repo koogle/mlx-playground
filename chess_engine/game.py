@@ -1,5 +1,6 @@
 from board import Board, Color, Piece, PieceType
 from typing import Tuple, List, Optional
+import random
 
 
 class ChessGame:
@@ -208,5 +209,39 @@ class ChessGame:
                 Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE,
             ):
                 return False
+
+        return True
+
+    def make_ai_move(self) -> bool:
+        """Make a random valid move for the current player."""
+        # Get all pieces of current color
+        pieces = self.board.get_pieces(self.current_turn)
+
+        # Collect all valid moves
+        possible_moves = []
+        for piece, from_pos in pieces:
+            valid_moves = self.board.get_valid_moves(from_pos)
+            for to_pos in valid_moves:
+                possible_moves.append((from_pos, to_pos))
+
+        # If no valid moves, game is over
+        if not possible_moves:
+            return False
+
+        # Choose a random move
+        from_pos, to_pos = random.choice(possible_moves)
+
+        # Execute the move
+        self.board.move_piece(from_pos, to_pos)
+
+        # Update game state
+        self.move_history.append(
+            self._format_move(
+                self.board.squares[to_pos[0]][to_pos[1]], from_pos, to_pos
+            )
+        )
+        self.current_turn = (
+            Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+        )
 
         return True

@@ -216,7 +216,15 @@ class ChessGame:
         # Add destination square
         destination = files[to_pos[1]] + ranks[to_pos[0]]
 
-        return f"{piece_symbol}{capture}{destination}"
+        # Add promotion indicator
+        promotion = ""
+        if piece.piece_type == PieceType.PAWN:
+            if (piece.color == Color.WHITE and to_pos[0] == 7) or (
+                piece.color == Color.BLACK and to_pos[0] == 0
+            ):
+                promotion = "=Q"  # Default to queen promotion
+
+        return f"{piece_symbol}{capture}{destination}{promotion}"
 
     def load_game_history(self, history_str: str) -> bool:
         """Load and replay a game from a history string."""

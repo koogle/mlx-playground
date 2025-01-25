@@ -63,6 +63,7 @@ class Piece:
     def __init__(self, piece_type: PieceType, color: Color):
         self.piece_type = piece_type
         self.color = color
+        self.has_moved = False
 
     def __str__(self):
         # Unicode chess pieces
@@ -82,19 +83,86 @@ class Piece:
         }
         return unicode_pieces[(self.piece_type, self.color)]
 
+    def get_valid_moves(
+        self, pos: Tuple[int, int], board: "Board"
+    ) -> List[Tuple[int, int]]:
+        """Get all valid moves for this piece from the given position."""
+        row, col = pos
+        valid_moves = []
+
+        if self.piece_type == PieceType.PAWN:
+            direction = 1 if self.color == Color.WHITE else -1
+            start_row = 1 if self.color == Color.WHITE else 6
+
+            # Forward moves
+            one_forward = row + direction
+            if 0 <= one_forward < 8 and board.squares[one_forward][col] is None:
+                valid_moves.append((one_forward, col))
+                # Initial two-square move
+                if not self.has_moved:
+                    two_forward = row + 2 * direction
+                    if 0 <= two_forward < 8 and board.squares[two_forward][col] is None:
+                        valid_moves.append((two_forward, col))
+
+            # Captures
+            for col_offset in [-1, 1]:
+                new_col = col + col_offset
+                if 0 <= new_col < 8 and 0 <= one_forward < 8:
+                    target = board.squares[one_forward][new_col]
+                    if target and target.color != self.color:
+                        valid_moves.append((one_forward, new_col))
+
+        elif self.piece_type == PieceType.KNIGHT:
+            for row_offset, col_offset in self.piece_type.get_move_patterns():
+                new_row, new_col = row + row_offset, col + col_offset
+                if 0 <= new_row < 8 and 0 <= new_col < 8:
+                    target = board.squares[new_row][new_col]
+                    if not target or target.color != self.color:
+                        valid_moves.append((new_row, new_col))
+
+        elif self.piece_type.is_sliding_piece():
+            for row_dir, col_dir in self.piece_type.get_move_patterns():
+                new_row, new_col = row + row_dir, col + col_dir
+                while 0 <= new_row < 8 and 0 <= new_col < 8:
+                    target = board.squares[new_row][new_col]
+                    if not target:
+                        valid_moves.append((new_row, new_col))
+                    else:
+                        if target.color != self.color:
+                            valid_moves.append((new_row, new_col))
+                        break
+                    new_row += row_dir
+                    new_col += col_dir
+
+        elif self.piece_type == PieceType.KING:
+            for row_offset, col_offset in self.piece_type.get_move_patterns():
+                new_row, new_col = row + row_offset, col + col_offset
+                if 0 <= new_row < 8 and 0 <= new_col < 8:
+                    target = board.squares[new_row][new_col]
+                    if not target or target.color != self.color:
+                        valid_moves.append((new_row, new_col))
+
+        return valid_moves
+
 
 class Board:
     def __init__(self):
         self.squares: List[List[Optional[Piece]]] = [
             [None for _ in range(8)] for _ in range(8)
         ]
+        self.white_pieces: List[Tuple[Piece, Tuple[int, int]]] = []  # (piece, position)
+        self.black_pieces: List[Tuple[Piece, Tuple[int, int]]] = []
         self.initialize_board()
 
     def initialize_board(self):
         # Initialize pawns
         for col in range(8):
-            self.squares[1][col] = Piece(PieceType.PAWN, Color.WHITE)
-            self.squares[6][col] = Piece(PieceType.PAWN, Color.BLACK)
+            white_pawn = Piece(PieceType.PAWN, Color.WHITE)
+            black_pawn = Piece(PieceType.PAWN, Color.BLACK)
+            self.squares[1][col] = white_pawn
+            self.squares[6][col] = black_pawn
+            self.white_pieces.append((white_pawn, (1, col)))
+            self.black_pieces.append((black_pawn, (6, col)))
 
         # Initialize other pieces
         piece_order = [
@@ -109,8 +177,63 @@ class Board:
         ]
 
         for col in range(8):
-            self.squares[0][col] = Piece(piece_order[col], Color.WHITE)
-            self.squares[7][col] = Piece(piece_order[col], Color.BLACK)
+            white_piece = Piece(piece_order[col], Color.WHITE)
+            black_piece = Piece(piece_order[col], Color.BLACK)
+            self.squares[0][col] = white_piece
+            self.squares[7][col] = black_piece
+            self.white_pieces.append((white_piece, (0, col)))
+            self.black_pieces.append((black_piece, (7, col)))
+
+    def get_valid_moves(self, pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """Get all valid moves for a piece at the given position."""
+        row, col = pos
+        piece = self.squares[row][col]
+        if not piece:
+            return []
+
+        # Get basic valid moves for the piece
+        valid_moves = piece.get_valid_moves(pos, self)
+
+        # Filter moves that would leave king in check
+        return [
+            move
+            for move in valid_moves
+            if not self._move_causes_check(pos, move, piece.color)
+        ]
+
+    def move_piece(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> None:
+        """Execute a move and update piece lists."""
+        from_row, from_col = from_pos
+        to_row, to_col = to_pos
+        piece = self.squares[from_row][from_col]
+
+        if not piece:
+            return
+
+        # Remove captured piece if any
+        captured = self.squares[to_row][to_col]
+        if captured:
+            piece_list = (
+                self.white_pieces
+                if captured.color == Color.WHITE
+                else self.black_pieces
+            )
+            self._remove_piece(captured)
+
+        # Update piece position
+        self._update_piece_position(piece, from_pos, to_pos)
+        piece.has_moved = True
+
+    def get_pieces(self, color: Color) -> List[Tuple[Piece, Tuple[int, int]]]:
+        """Get all pieces of the given color with their positions."""
+        return self.white_pieces if color == Color.WHITE else self.black_pieces
+
+    def get_pieces_by_type(
+        self, color: Color, piece_type: PieceType
+    ) -> List[Tuple[Piece, Tuple[int, int]]]:
+        """Get all pieces of the given color and type with their positions."""
+        pieces = self.get_pieces(color)
+        return [(piece, pos) for piece, pos in pieces if piece.piece_type == piece_type]
 
     def __str__(self):
         result = []
@@ -523,3 +646,13 @@ class Board:
         self.squares[to_row][to_col] = original_target
 
         return in_check
+
+    def _remove_piece(self, piece: Piece):
+        # Implementation of _remove_piece method
+        pass
+
+    def _update_piece_position(
+        self, piece: Piece, from_pos: Tuple[int, int], to_pos: Tuple[int, int]
+    ):
+        # Implementation of _update_piece_position method
+        pass

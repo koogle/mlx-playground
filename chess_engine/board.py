@@ -92,7 +92,6 @@ class Piece:
 
         if self.piece_type == PieceType.PAWN:
             direction = 1 if self.color == Color.WHITE else -1
-            start_row = 1 if self.color == Color.WHITE else 6
 
             # Forward moves
             one_forward = row + direction
@@ -107,9 +106,9 @@ class Piece:
             # Captures
             for col_offset in [-1, 1]:
                 new_col = col + col_offset
-                if 0 <= new_col < 8 and 0 <= one_forward < 8:
+                if 0 <= new_col < 8 and 0 <= one_forward < 8:  # Check board boundaries
                     target = board.squares[one_forward][new_col]
-                    if target and target.color != self.color:
+                    if target and target.color != self.color:  # Enemy piece present
                         valid_moves.append((one_forward, new_col))
 
         elif self.piece_type == PieceType.KNIGHT:
@@ -348,13 +347,72 @@ class Board:
         self, square: Tuple[int, int], by_color: Color, ignore_king: bool = False
     ) -> bool:
         """Check if a square is under attack by any piece of the given color."""
+        target_row, target_col = square
         pieces = self.white_pieces if by_color == Color.WHITE else self.black_pieces
-        for piece, pos in pieces:
+
+        for piece, (row, col) in pieces:
             if ignore_king and piece.piece_type == PieceType.KING:
                 continue
-            # Get moves without checking for check to avoid infinite recursion
-            if square in piece.get_valid_moves(pos, self):
-                return True
+
+            # Pawn attacks
+            if piece.piece_type == PieceType.PAWN:
+                direction = 1 if piece.color == Color.WHITE else -1
+                attack_row = row + direction
+                if attack_row == target_row:
+                    if abs(col - target_col) == 1:
+                        return True
+
+            # Knight attacks
+            elif piece.piece_type == PieceType.KNIGHT:
+                row_diff = abs(row - target_row)
+                col_diff = abs(col - target_col)
+                if (row_diff == 2 and col_diff == 1) or (
+                    row_diff == 1 and col_diff == 2
+                ):
+                    return True
+
+            # Sliding pieces (Bishop, Rook, Queen)
+            elif piece.piece_type.is_sliding_piece():
+                # Get the direction from the piece to the target
+                row_dir = (
+                    0
+                    if row == target_row
+                    else (target_row - row) // abs(target_row - row)
+                )
+                col_dir = (
+                    0
+                    if col == target_col
+                    else (target_col - col) // abs(target_col - col)
+                )
+
+                # Check if the direction is valid for this piece
+                if piece.piece_type == PieceType.ROOK and row_dir != 0 and col_dir != 0:
+                    continue
+                if piece.piece_type == PieceType.BISHOP and (
+                    row_dir == 0 or col_dir == 0
+                ):
+                    continue
+
+                # Check if path is clear
+                curr_row, curr_col = row + row_dir, col + col_dir
+                path_clear = True
+                while curr_row != target_row or curr_col != target_col:
+                    if not (0 <= curr_row < 8 and 0 <= curr_col < 8):
+                        path_clear = False
+                        break
+                    if self.squares[curr_row][curr_col] is not None:
+                        path_clear = False
+                        break
+                    curr_row += row_dir
+                    curr_col += col_dir
+                if path_clear:
+                    return True
+
+            # King attacks
+            elif piece.piece_type == PieceType.KING:
+                if abs(row - target_row) <= 1 and abs(col - target_col) <= 1:
+                    return True
+
         return False
 
     def _move_causes_check(

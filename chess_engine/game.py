@@ -365,10 +365,15 @@ class ChessGame:
                 moves.extend(move_parts)
 
             # Replay moves
-            for move in moves:
+            print("\nReplaying game history:")
+            for i, move in enumerate(moves):
                 if not self.make_move(move):
                     print(f"Failed to replay move: {move}")
                     return False
+
+                # Print board state after each move
+                print(f"\nMove {i+1}: {move}")
+                print(self.board)
 
             return True
 

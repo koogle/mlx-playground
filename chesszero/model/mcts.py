@@ -1,5 +1,52 @@
+import math
+import numpy as np
+from chess_engine.board import Board
+from config.model_config import ModelConfig
+from utils.board_utils import encode_board, decode_policy
+
+
 class Node:
     """Tree node storing state, prior probabilities, visit counts, and Q-values"""
+
+    def __init__(self, board: Board, parent=None, prior=0.0):
+        self.board = board
+        self.parent = parent
+        self.prior = prior
+        self.children = {}  # (from_pos, to_pos) -> Node
+        self.visit_count = 0
+        self.value_sum = 0
+        self.is_expanded = False
+
+    def value(self):
+        if self.visit_count == 0:
+            return 0
+        return self.value_sum / self.visit_count
+
+    def select_child(self, c_puct):
+        """Select child with highest UCB score"""
+        best_score = float("-inf")
+        best_move = None
+
+        for move, child in self.children.items():
+            # UCB score = Q + U
+            # Q = child value
+            # U = prior * sqrt(parent visits) / (1 + child visits)
+            q_value = (
+                -child.value()
+            )  # Negative because value is from opponent's perspective
+            u_value = (
+                c_puct
+                * child.prior
+                * math.sqrt(self.visit_count)
+                / (1 + child.visit_count)
+            )
+            score = q_value + u_value
+
+            if score > best_score:
+                best_score = score
+                best_move = move
+
+        return best_move, self.children[best_move]
 
 
 class MCTS:
@@ -10,3 +57,86 @@ class MCTS:
     - Backup using value estimates
     - Tree reuse between moves
     """
+
+    def __init__(self, model, config: ModelConfig):
+        self.model = model
+        self.config = config
+
+    def get_move(self, board: Board):
+        """Run MCTS and return best move"""
+        root = Node(board)
+
+        # Run simulations
+        for _ in range(self.config.n_simulations):
+            node = root
+            search_path = [node]
+
+            # Selection
+            while node.is_expanded:
+                move, node = node.select_child(self.config.c_puct)
+                search_path.append(node)
+
+            # Expansion and evaluation
+            value = self.expand_and_evaluate(node)
+
+            # Backup
+            self.backup(search_path, value)
+
+        # Select move with highest visit count
+        visit_counts = np.array([child.visit_count for child in root.children.values()])
+        moves = list(root.children.keys())
+
+        # Temperature parameter controls exploration vs exploitation
+        if len(moves) == 0:
+            return None
+
+        probs = visit_counts ** (1 / self.config.temperature)
+        probs = probs / np.sum(probs)
+        move_idx = np.random.choice(len(moves), p=probs)
+
+        return moves[move_idx]
+
+    def expand_and_evaluate(self, node: Node):
+        """Expand node and return value estimate"""
+        # Get model predictions
+        encoded_board = encode_board(node.board)
+        policy, value = self.model(encoded_board[None, ...])
+
+        # Convert policy to moves
+        moves = decode_policy(policy[0])
+
+        # Add children for all legal moves
+        pieces = (
+            node.board.white_pieces
+            if node.board.current_turn == Color.WHITE
+            else node.board.black_pieces
+        )
+
+        for piece, from_pos in pieces:
+            valid_moves = node.board.get_valid_moves(from_pos)
+            for to_pos in valid_moves:
+                # Find policy probability for this move
+                move_idx = self.encode_move(from_pos, to_pos)
+                prior = policy[0, move_idx] if move_idx < len(policy[0]) else 0.0
+
+                # Create child node
+                child_board = node.board.copy()
+                child_board.move_piece(from_pos, to_pos)
+                node.children[(from_pos, to_pos)] = Node(child_board, node, prior)
+
+        node.is_expanded = True
+        return value[0]
+
+    def backup(self, search_path, value):
+        """Update statistics of all nodes in search path"""
+        for node in search_path:
+            node.visit_count += 1
+            node.value_sum += value
+            value = -value  # Value flips for opponent
+
+    def encode_move(self, from_pos, to_pos):
+        """Convert move to policy index"""
+        # This is a simplified version - we'll need to handle all move types properly
+        from_square = from_pos[0] * 8 + from_pos[1]
+        to_square = to_pos[0] * 8 + to_pos[1]
+        return from_square * 64 + to_square

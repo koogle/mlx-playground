@@ -37,11 +37,11 @@ def encode_board(board: Board) -> mx.array:
             if piece:
                 channel = piece_to_channel.get((piece.piece_type, piece.color))
                 if channel is not None:
-                    encoded = encoded.at[channel, row, col].set(1)
+                    encoded[channel, row, col] = 1
 
     # Encode current turn
     if board.current_turn == Color.WHITE:
-        encoded = encoded.at[12].set(mx.ones((8, 8)))
+        encoded[12] = mx.ones((8, 8))
 
     # Encode castling rights (simplified version)
     for row in [0, 7]:
@@ -50,9 +50,9 @@ def encode_board(board: Board) -> mx.array:
             rook_kingside = board.squares[row][7]
             rook_queenside = board.squares[row][0]
             if rook_kingside and not rook_kingside.has_moved:
-                encoded = encoded.at[13, row, 4:8].set(1)
+                encoded[13, row, 4:8] = 1
             if rook_queenside and not rook_queenside.has_moved:
-                encoded = encoded.at[13, row, 0:5].set(1)
+                encoded[13, row, 0:5] = 1
 
     return encoded  # Shape: [14, 8, 8] in NCHW format
 

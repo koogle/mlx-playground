@@ -3,6 +3,7 @@ import mlx.optimizers as optim
 from model.network import ChessNet
 from config.model_config import ModelConfig
 from evaluate import evaluate_against_random
+from model.self_play import generate_games, create_batches
 
 
 def train():

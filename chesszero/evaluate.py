@@ -1,5 +1,5 @@
 from typing import Tuple
-import numpy as np
+from chess_engine.board import Color
 from chess_engine.game import ChessGame
 from utils.random_player import RandomPlayer
 from model.mcts import MCTS

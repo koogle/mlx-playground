@@ -1,51 +1,63 @@
-import numpy as np
+import mlx.core as mx
 from chess_engine.board import Board, Color, PieceType
 
 
-def encode_board(board: Board) -> np.ndarray:
+def encode_board(board: Board) -> mx.array:
     """
-    Encode the chess board state into the neural network input format
-
-    Returns:
-        np.ndarray: Encoded board state with shape (8, 8, 119)
+    Encode the chess board as a 14-channel 8x8 array.
+    Channels are:
+    0-5: White pieces (Pawn, Knight, Bishop, Rook, Queen, King)
+    6-11: Black pieces (Pawn, Knight, Bishop, Rook, Queen, King)
+    12: Current turn (1 for white, 0 for black)
+    13: Castle rights (simplified - 1 where castling is possible)
     """
-    planes = np.zeros((8, 8, 119), dtype=np.float32)
+    # Initialize 14-channel board representation
+    encoded = mx.zeros((14, 8, 8))
 
-    # Current position - 6 pieces x 2 colors x 8 history positions = 96 planes
-    history_offset = 0
-    for piece_type in PieceType:
-        for color in Color:
-            # Get all pieces of this type and color
-            pieces = board.get_pieces_by_type(color, piece_type)
-            for piece, pos in pieces:
-                planes[pos[0], pos[1], history_offset] = 1
-            history_offset += 1
+    # Map piece types to channel indices
+    piece_to_channel = {
+        (PieceType.PAWN, Color.WHITE): 0,
+        (PieceType.KNIGHT, Color.WHITE): 1,
+        (PieceType.BISHOP, Color.WHITE): 2,
+        (PieceType.ROOK, Color.WHITE): 3,
+        (PieceType.QUEEN, Color.WHITE): 4,
+        (PieceType.KING, Color.WHITE): 5,
+        (PieceType.PAWN, Color.BLACK): 6,
+        (PieceType.KNIGHT, Color.BLACK): 7,
+        (PieceType.BISHOP, Color.BLACK): 8,
+        (PieceType.ROOK, Color.BLACK): 9,
+        (PieceType.QUEEN, Color.BLACK): 10,
+        (PieceType.KING, Color.BLACK): 11,
+    }
 
-    # Castling rights - 4 planes
-    if board.squares[0][4] and not board.squares[0][4].has_moved:  # White king
-        if board.squares[0][7] and not board.squares[0][7].has_moved:  # White kingside
-            planes[:, :, 96] = 1
-        if board.squares[0][0] and not board.squares[0][0].has_moved:  # White queenside
-            planes[:, :, 97] = 1
+    # Encode pieces
+    for row in range(8):
+        for col in range(8):
+            piece = board.squares[row][col]
+            if piece:
+                channel = piece_to_channel.get((piece.piece_type, piece.color))
+                if channel is not None:
+                    encoded = encoded.at[channel, row, col].set(1)
 
-    if board.squares[7][4] and not board.squares[7][4].has_moved:  # Black king
-        if board.squares[7][7] and not board.squares[7][7].has_moved:  # Black kingside
-            planes[:, :, 98] = 1
-        if board.squares[7][0] and not board.squares[7][0].has_moved:  # Black queenside
-            planes[:, :, 99] = 1
-
-    # Additional features - 19 planes
-    # Color to move
+    # Encode current turn
     if board.current_turn == Color.WHITE:
-        planes[:, :, 100] = 1
+        encoded = encoded.at[12].set(mx.ones((8, 8)))
 
-    # Move count and repetition planes would be added here
-    # Additional game state planes would be added here
+    # Encode castling rights (simplified version)
+    for row in [0, 7]:
+        king = board.squares[row][4]
+        if king and not king.has_moved:
+            rook_kingside = board.squares[row][7]
+            rook_queenside = board.squares[row][0]
+            if rook_kingside and not rook_kingside.has_moved:
+                encoded = encoded.at[13, row, 4:8].set(1)
+            if rook_queenside and not rook_queenside.has_moved:
+                encoded = encoded.at[13, row, 0:5].set(1)
 
-    return planes
+    return encoded  # Shape: [14, 8, 8] in NCHW format
 
 
-def decode_policy(policy_output: np.ndarray) -> list:
+def decode_policy(policy_output: mx.array) -> list:
     """
     Convert policy network output into a list of legal moves with probabilities
 

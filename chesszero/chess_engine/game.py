@@ -5,7 +5,6 @@ from typing import Tuple, List, Optional
 class ChessGame:
     def __init__(self):
         self.board = Board()
-        self.current_turn = Color.WHITE
         self.move_history: List[str] = []
         self.DEBUG = False
 
@@ -33,7 +32,7 @@ class ChessGame:
                 if (
                     piece
                     and piece.piece_type == piece_type
-                    and piece.color == self.current_turn
+                    and piece.color == self.board.current_turn
                 ):
                     # Check if the piece can move to the target square
                     if self._can_move(piece, (row, col), target_square):
@@ -53,12 +52,12 @@ class ChessGame:
         valid_moves = []
         pieces = (
             self.board.white_pieces
-            if self.current_turn == Color.WHITE
+            if self.board.current_turn == Color.WHITE
             else self.board.black_pieces
         )
 
         # Get attack info once for all pieces
-        attack_info = self.board.get_attack_info(self.current_turn)
+        attack_info = self.board.get_attack_info(self.board.current_turn)
 
         for piece, pos in pieces:
             moves = self.board.get_valid_moves(pos, attack_info)
@@ -79,7 +78,7 @@ class ChessGame:
 
         # Verify it's the correct player's turn
         piece = self.board.squares[from_pos[0]][from_pos[1]]
-        if not piece or piece.color != self.current_turn:
+        if not piece or piece.color != self.board.current_turn:
             if self.DEBUG:
                 print(f"\nDEBUG: Wrong player's turn or no piece at {from_pos}")
             return False
@@ -98,7 +97,7 @@ class ChessGame:
     def _try_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> bool:
         """Attempt to make a move and validate it."""
         piece = self.board.squares[from_pos[0]][from_pos[1]]
-        if not piece or piece.color != self.current_turn:
+        if not piece or piece.color != self.board.current_turn:
             return False
 
         # Check if move is valid
@@ -108,11 +107,7 @@ class ChessGame:
             return False
 
         # Make the move
-        self.board.move_piece(from_pos, to_pos)
-        self.current_turn = (
-            Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
-        )
-        return True
+        return self.board.move_piece(from_pos, to_pos)
 
     def _parse_move(
         self, move_str: str
@@ -122,10 +117,10 @@ class ChessGame:
 
         # Handle castling
         if move in ["O-O", "0-0"]:  # Kingside castling
-            row = 0 if self.current_turn == Color.WHITE else 7
+            row = 0 if self.board.current_turn == Color.WHITE else 7
             return (row, 4), (row, 6)
         elif move in ["O-O-O", "0-0-0"]:  # Queenside castling
-            row = 0 if self.current_turn == Color.WHITE else 7
+            row = 0 if self.board.current_turn == Color.WHITE else 7
             return (row, 4), (row, 2)
 
         # Remove capture and check symbols
@@ -154,7 +149,7 @@ class ChessGame:
             source_file = ord(move[0]) - ord("a")
 
         # Get all pieces of this type
-        pieces = self.board.get_pieces_by_type(self.current_turn, piece_type)
+        pieces = self.board.get_pieces_by_type(self.board.current_turn, piece_type)
 
         # Find piece that can make this move
         for piece, from_pos in pieces:
@@ -167,19 +162,19 @@ class ChessGame:
         return None, None
 
     def get_current_turn(self) -> Color:
-        return self.current_turn
+        return self.board.current_turn
 
     def get_game_state(self) -> str:
         """Get the current state of the game."""
-        if self.board.is_checkmate(self.current_turn):
-            winner = "Black" if self.current_turn == Color.WHITE else "White"
+        if self.board.is_checkmate(self.board.current_turn):
+            winner = "Black" if self.board.current_turn == Color.WHITE else "White"
             return f"Checkmate! {winner} wins!"
-        elif self.board.is_in_check(self.current_turn):
-            player = "White" if self.current_turn == Color.WHITE else "Black"
+        elif self.board.is_in_check(self.board.current_turn):
+            player = "White" if self.board.current_turn == Color.WHITE else "Black"
             return f"Check! {player} is in check!"
         elif self.board.is_draw():
             return "Draw!"
-        elif self.board.is_stalemate(self.current_turn):
+        elif self.board.is_stalemate(self.board.current_turn):
             return "Stalemate! Game is a draw!"
         return "Normal"
 

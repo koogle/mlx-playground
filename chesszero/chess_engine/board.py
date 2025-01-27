@@ -90,6 +90,7 @@ class Board:
         ]
         self.white_pieces: List[Tuple[Piece, Tuple[int, int]]] = []
         self.black_pieces: List[Tuple[Piece, Tuple[int, int]]] = []
+        self.current_turn = Color.WHITE  # Add current turn tracking
         self.initialize_board()
 
     def initialize_board(self):
@@ -329,6 +330,7 @@ class Board:
         """Create a deep copy of the board for move simulation."""
         new_board = Board.__new__(Board)  # Create new board without initialization
         new_board.squares = [[None for _ in range(8)] for _ in range(8)]
+        new_board.current_turn = self.current_turn  # Copy current turn
 
         # Copy pieces and their positions
         new_board.white_pieces = []
@@ -602,6 +604,12 @@ class Board:
                 piece_list.append((promoted_queen, to_pos))
 
         piece.has_moved = True
+
+        # Update current turn after successful move
+        self.current_turn = (
+            Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+        )
+
         return True
 
     def __str__(self) -> str:

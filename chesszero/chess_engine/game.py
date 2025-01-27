@@ -1,4 +1,4 @@
-from board import Board, Color, Piece, PieceType
+from .board import Board, Color, Piece, PieceType
 from typing import Tuple, List, Optional
 
 

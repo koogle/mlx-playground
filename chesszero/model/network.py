@@ -9,9 +9,9 @@ class ResidualBlock(nn.Module):
     def __init__(self, n_filters: int):
         super().__init__()
         self.conv1 = nn.Conv2d(n_filters, n_filters, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(n_filters)
+        self.bn1 = nn.BatchNorm(n_filters)
         self.conv2 = nn.Conv2d(n_filters, n_filters, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(n_filters)
+        self.bn2 = nn.BatchNorm(n_filters)
 
     def __call__(self, x):
         identity = x
@@ -40,7 +40,7 @@ class ChessNet(nn.Module):
         self.conv_input = nn.Conv2d(
             config.input_shape[-1], config.n_filters, kernel_size=3, padding=1
         )
-        self.bn_input = nn.BatchNorm2d(config.n_filters)
+        self.bn_input = nn.BatchNorm(config.n_filters)
 
         # Residual tower
         self.residual_tower = nn.Sequential(
@@ -49,12 +49,12 @@ class ChessNet(nn.Module):
 
         # Policy head
         self.policy_conv = nn.Conv2d(config.n_filters, 32, kernel_size=3, padding=1)
-        self.policy_bn = nn.BatchNorm2d(32)
+        self.policy_bn = nn.BatchNorm(32)
         self.policy_fc = nn.Linear(32 * 8 * 8, config.policy_output_dim)
 
         # Value head
         self.value_conv = nn.Conv2d(config.n_filters, 32, kernel_size=3, padding=1)
-        self.value_bn = nn.BatchNorm2d(32)
+        self.value_bn = nn.BatchNorm(32)
         self.value_fc1 = nn.Linear(32 * 8 * 8, 256)
         self.value_fc2 = nn.Linear(256, 1)
 

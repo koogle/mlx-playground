@@ -31,20 +31,21 @@ class RandomPlayer:
             print(
                 f"Current turn: {'White' if board.current_turn == Color.WHITE else 'Black'}"
             )
-            print("Pieces for current player:")
-            pieces = (
-                board.white_pieces
-                if board.current_turn == Color.WHITE
-                else board.black_pieces
-            )
-            for piece, pos in pieces:
-                print(f"{piece.piece_type} at {pos}")
             return None
 
-        # Select random move in algebraic notation
-        move_str = random.choice(valid_moves)
+        # Keep trying moves until we find one that parses correctly
+        while valid_moves:
+            # Select random move in algebraic notation
+            move_str = random.choice(valid_moves)
+            from_pos, to_pos = game._parse_move(move_str)
 
-        # Parse the move back into coordinates
-        from_pos, to_pos = game._parse_move(move_str)
+            if from_pos and to_pos:  # If move parsed successfully
+                return (from_pos, to_pos)
 
-        return (from_pos, to_pos) if from_pos and to_pos else None
+            # Remove failed move and try another
+            valid_moves.remove(move_str)
+            print(f"Failed to parse move: {move_str}")
+
+        print("Failed to parse any moves!")
+        print("Available moves were:", valid_moves)
+        return None

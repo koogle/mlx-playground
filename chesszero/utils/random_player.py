@@ -25,6 +25,20 @@ class RandomPlayer:
         valid_moves = game.get_all_valid_moves()
 
         if not valid_moves:
+            print("\nNo valid moves found!")
+            print("Current board state:")
+            print(board)
+            print(
+                f"Current turn: {'White' if board.current_turn == Color.WHITE else 'Black'}"
+            )
+            print("Pieces for current player:")
+            pieces = (
+                board.white_pieces
+                if board.current_turn == Color.WHITE
+                else board.black_pieces
+            )
+            for piece, pos in pieces:
+                print(f"{piece.piece_type} at {pos}")
             return None
 
         # Select random move in algebraic notation

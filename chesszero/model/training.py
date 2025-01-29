@@ -92,10 +92,26 @@ class Trainer:
     def train_on_batch(self, batch):
         """Train on a single batch of data"""
         states, policies, values = batch
-        # Ensure model is in training mode
-        self.model.train()
-        loss = self.model.loss_fn(states, policies, values)
-        self.optimizer.step(loss)
+
+        @mx.compile
+        def loss_fn(params, states, policies, values):
+            self.model.update(params)
+            pred_policies, pred_values = self.model(states)
+            policy_loss = -mx.mean(policies * mx.log(pred_policies + 1e-8))
+            value_loss = mx.mean((values - pred_values) ** 2)
+            return policy_loss + value_loss
+
+        # Compute loss and gradients
+        loss, grads = mx.value_and_grad(loss_fn)(
+            self.model.parameters(), states, policies, values
+        )
+
+        # Update model using gradients
+        self.optimizer.update(self.model, grads)
+
+        # Evaluate to get actual loss value
+        mx.eval(loss)
+
         return loss.item()
 
     def evaluate(self, n_games: int = 100) -> float:

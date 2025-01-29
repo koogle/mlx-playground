@@ -130,6 +130,9 @@ class ChessGame:
         self, move_str: str
     ) -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
         """Parse algebraic notation into board coordinates."""
+        if not move_str:
+            return None, None
+
         move = move_str.strip()
 
         # Handle castling
@@ -140,16 +143,46 @@ class ChessGame:
             row = 0 if self.board.current_turn == Color.WHITE else 7
             return (row, 4), (row, 2)
 
+        # Handle standard moves (e.g., "e2e4" or "e7e8")
+        if len(move) >= 4:
+            try:
+                from_file = ord(move[0]) - ord("a")
+                from_rank = int(move[1]) - 1
+                to_file = ord(move[2]) - ord("a")
+                to_rank = int(move[3]) - 1
+
+                # Validate coordinates
+                if (
+                    0 <= from_file < 8
+                    and 0 <= from_rank < 8
+                    and 0 <= to_file < 8
+                    and 0 <= to_rank < 8
+                ):
+                    # Handle promotion if present (e.g., "e7e8Q")
+                    if len(move) == 5 and move[4] in ["Q", "R", "B", "N"]:
+                        # Promotion piece is handled by the board logic
+                        return (from_rank, from_file), (to_rank, to_file)
+                    elif len(move) == 4:
+                        return (from_rank, from_file), (to_rank, to_file)
+            except (ValueError, IndexError):
+                pass
+
         # Remove capture and check symbols
         move = move.replace("x", "").rstrip("+#")
 
         # Get destination square
-        dest_square = move[-2:]
-        to_col = ord(dest_square[0]) - ord("a")
-        to_row = int(dest_square[1]) - 1
-        if not (0 <= to_row < 8 and 0 <= to_col < 8):
+        if len(move) < 2:
             return None, None
-        to_pos = (to_row, to_col)
+
+        dest_square = move[-2:]
+        try:
+            to_col = ord(dest_square[0]) - ord("a")
+            to_row = int(dest_square[1]) - 1
+            if not (0 <= to_row < 8 and 0 <= to_col < 8):
+                return None, None
+            to_pos = (to_row, to_col)
+        except (ValueError, IndexError):
+            return None, None
 
         # Determine piece type
         piece_type = {

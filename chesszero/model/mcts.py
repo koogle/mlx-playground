@@ -63,38 +63,29 @@ class MCTS:
         self.config = config
 
     def get_move(self, board: Board):
-        """Run MCTS and return best move"""
-        root = Node(board)
-
+        """Get the best move for the current position after running MCTS"""
         # Run simulations
+        root = Node(board)
         for _ in range(self.config.n_simulations):
             node = root
-            search_path = [node]
-
-            # Selection
-            while node.is_expanded:
-                move, node = node.select_child(self.config.c_puct)
-                search_path.append(node)
-
-            # Expansion and evaluation
             value = self.expand_and_evaluate(node)
 
-            # Backup
-            self.backup(search_path, value)
+        # Select move based on visit counts
+        move_probs = np.zeros(self.config.policy_output_dim)
+        for child in root.children:
+            move_probs[child.move_index] = child.visit_count
+        move_probs = move_probs / np.sum(move_probs)
 
-        # Select move with highest visit count
-        visit_counts = np.array([child.visit_count for child in root.children.values()])
-        moves = list(root.children.keys())
+        # Select move (during training, sample from distribution)
+        move_idx = np.random.choice(len(move_probs), p=move_probs)
+        selected_move = self.decode_move(move_idx, board)
 
-        # Temperature parameter controls exploration vs exploitation
-        if len(moves) == 0:
-            return None
+        # Print move info
+        print(f"\nPosition evaluation: {root.value():.3f}")
+        print(f"Selected move: {selected_move}")
+        print(f"Move probability: {move_probs[move_idx]:.3f}")
 
-        probs = visit_counts ** (1 / self.config.temperature)
-        probs = probs / np.sum(probs)
-        move_idx = np.random.choice(len(moves), p=probs)
-
-        return moves[move_idx]
+        return selected_move
 
     def expand_and_evaluate(self, node: Node):
         """Expand node and return value estimate"""

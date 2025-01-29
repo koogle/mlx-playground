@@ -274,3 +274,21 @@ class ChessGame:
                 history.append(f"{move_num}. {self.move_history[i]}")
 
         return "\n".join(history)
+
+    def is_over(self) -> bool:
+        """Check if the game is over (checkmate, stalemate, or draw)"""
+        state = self.get_game_state()
+        return state != "Normal"
+
+    def get_result(self) -> float:
+        """Get the game result from current player's perspective
+        Returns:
+            1.0 for win
+            -1.0 for loss
+            0.0 for draw
+        """
+        state = self.get_game_state()
+        if "Checkmate" in state:
+            # If current player is checkmated, they lost
+            return -1.0 if "wins" in state else 1.0
+        return 0.0  # Draw or stalemate

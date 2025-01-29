@@ -8,6 +8,7 @@ from model.mcts import MCTS
 from utils.random_player import RandomPlayer
 from utils.board_utils import encode_board
 from config.model_config import ModelConfig
+import numpy as np
 
 
 class Trainer:
@@ -73,35 +74,40 @@ class Trainer:
         return games_data
 
     def play_self_play_game(self) -> Optional[Tuple]:
-        """Play a single game of self-play and return the training data"""
+        """Play a single game of self-play"""
         game = ChessGame()
         states, policies, values = [], [], []
 
-        while True:
-            # Store current state
-            states.append(encode_board(game.board))
+        print("\nStarting new self-play game")
+        print("---------------------------")
+
+        while not game.is_over():
+            print(f"\nMove {len(game.move_history) + 1}")
+            print(game.board)  # Print current position
 
             # Get move from MCTS
             move = self.mcts.get_move(game.board)
-            if not move:
-                break
 
-            # Store policy (visit count distribution)
-            policy = self.get_policy_distribution(move)
+            # Store game state and policy
+            encoded_state = encode_board(game.board)
+            policy = np.zeros(self.config.policy_output_dim)
+            move_idx = self.mcts.encode_move(move)
+            policy[move_idx] = 1.0
+
+            states.append(encoded_state)
             policies.append(policy)
 
             # Make move
-            game.make_move(move[0], move[1])
+            game.make_move(move)
 
-            # Check game end
-            state = game.get_game_state()
-            if state != "Normal":
-                value = self.get_game_outcome(state)
-                # Fill in values for all positions
-                values = [value * ((-1) ** i) for i in range(len(states))]
-                return states, policies, values
+        # Game is over - get result
+        result = game.get_result()
+        print(f"\nGame over. Result: {result}")
 
-        return None
+        # Fill in the values array based on game result
+        values = [result if i % 2 == 0 else -result for i in range(len(states))]
+
+        return states, policies, values
 
     def get_policy_distribution(self, root_node):
         """Convert MCTS visit counts to policy distribution"""

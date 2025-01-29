@@ -22,7 +22,7 @@ class Node:
     def value(self):
         """Get the average value of this node"""
         if self.visit_count == 0:
-            return 0.0
+            return 0.0  # Return neutral value if unvisited
         return self.value_sum / self.visit_count
 
     def select_child(self, c_puct):
@@ -32,18 +32,19 @@ class Node:
 
         best_score = float("-inf")
         best_move = None
+
+        # Add small epsilon to avoid division by zero
         total_visits = max(1, self.visit_count)  # Ensure at least 1 visit
 
         for move, child in self.children.items():
             # Negative because value is from opponent's perspective
-            q_value = float(-child.value() if child.visit_count > 0 else 0)
+            q_value = -child.value() if child.visit_count > 0 else 0
 
-            # Calculate exploration bonus
-            u_value = float(
+            # Calculate exploration bonus with protection against zero visits
+            u_value = (
                 c_puct * child.prior * math.sqrt(total_visits) / (1 + child.visit_count)
             )
 
-            # Combine Q-value and exploration bonus
             score = q_value + u_value
 
             if score > best_score:
@@ -75,73 +76,113 @@ class MCTS:
         self.model.eval()
         try:
             root = Node(board)
+
+            # First expand root node
             value = self.expand_and_evaluate(root)
-            if not root.children:
+            if not root.children:  # No valid moves at root
                 return None
 
-            # Run simulations with early stopping
-            n_sims = min(100, self.config.n_simulations)  # Reduced simulation count
-            for idx in range(n_sims):
-                # Selection with depth limit
-                node = root
-                search_path = [node]
-                depth = 0
-                max_depth = 15  # Further reduced max depth
-
-                # Fast selection loop
-                while node.is_expanded and depth < max_depth:
-                    # Get best child using PUCT
-                    best_score = float("-inf")
-                    best_move = None
-                    best_child = None
-
-                    # Single pass through children
-                    for move, child in node.children.items():
-                        q_value = -child.value() if child.visit_count > 0 else 0
-                        u_value = (
-                            self.config.c_puct
-                            * child.prior
-                            * (math.sqrt(node.visit_count) / (1 + child.visit_count))
+            selected_move = None
+            # Run simulations
+            # pbar = tqdm(range(self.config.n_simulations), desc="Running simulations")
+            for idx in range(self.config.n_simulations):
+                try:
+                    # Early stopping checks
+                    if idx > 20:  # Only check after some initial simulations
+                        best_child = None
+                        total_visits = sum(
+                            child.visit_count for child in root.children.values()
                         )
-                        score = q_value + u_value
 
-                        if score > best_score:
-                            best_score = score
-                            best_move = move
-                            best_child = child
+                        # Skip early stopping check if no visits yet
+                        if total_visits == 0:
+                            continue
+                        # Check if one move is dominating
+                        for move, child in root.children.items():
+                            visit_ratio = child.visit_count / total_visits
+                            if visit_ratio > 0.9:  # 90% of visits
+                                best_child = child
+                                if child.visit_count > 50:  # Ensure enough exploration
+                                    selected_move = move
+                                    # pbar.close()
+                                    break
 
-                    if not best_child:
+                        # Check if best line is clearly better
+                        if (
+                            best_child and best_child.value() > 0.9
+                        ):  # Clear winning position
+                            selected_move = move
+                            # pbar.close()
+                            break
+
+                    # Selection
+                    node = root
+                    search_path = [node]
+
+                    while node.is_expanded:
+                        move, child = node.select_child(self.config.c_puct)
+                        if not move:  # No valid moves
+                            break
+                        node = child
+                        search_path.append(node)
+
+                    # Expansion and evaluation
+                    if not node.is_expanded:
+                        try:
+                            value = self.expand_and_evaluate(node)
+                        except Exception as e:
+                            print(f"Error during expansion: {e}")
+                            # Use parent's value as fallback
+                            value = -node.parent.value() if node.parent else 0
+
+                        if not node.children:  # No valid moves
+                            value = -1  # Loss position
+
+                    # Backup
+                    self.backup(search_path, value)
+
+                    # Check for single legal move
+                    if len(root.children) == 1:
+                        selected_move = next(iter(root.children.keys()))
+                        # pbar.close()
                         break
 
-                    node = best_child
-                    search_path.append(node)
-                    depth += 1
+                except Exception as e:
+                    import traceback
 
-                # Expansion and evaluation
-                if not node.is_expanded and depth < max_depth:
-                    value = self.expand_and_evaluate(node)
-                    if not node.children:
-                        value = -1
+                    print(f"Error during simulation {idx}: {e}")
+                    print(traceback.format_exc())
+                    continue  # Skip this simulation if there's an error
 
-                # Backup
-                self.backup(search_path, value)
+            # If we didn't select a move through early stopping, use visit counts
+            if not selected_move and root.children:
+                # Find the most visited move
+                max_visits = -1
+                for move, child in root.children.items():
+                    if child.visit_count > max_visits:
+                        max_visits = child.visit_count
+                        selected_move = move
 
-                # Early stopping - check less frequently
-                if idx > 20 and idx % 5 == 0:
-                    best_visits = max(
-                        child.visit_count for child in root.children.values()
-                    )
-                    total_visits = sum(
-                        child.visit_count for child in root.children.values()
-                    )
+            if not selected_move:
+                # Fallback to random legal move if everything else fails
+                moves = list(root.children.keys())
+                if moves:
+                    selected_move = moves[0]
+                else:
+                    return None
 
-                    if total_visits > 0 and best_visits / total_visits > 0.75:
-                        break
+            # Print move info
+            best_child = root.children[selected_move]
+            total_visits = sum(child.visit_count for child in root.children.values())
 
-            # Return most visited move
-            return max(root.children.items(), key=lambda x: x[1].visit_count)[0]
+            # print(f"\nPosition evaluation: {float(root.value()):.3f}")
+            # print(f"Selected move: {selected_move}")
+            # print(f"Move visits: {best_child.visit_count}")
+            # print(f"Move confidence: {best_child.visit_count/total_visits:.1%}")
 
+            return selected_move
         finally:
+            # Restore training mode
             self.model.train()
 
     def expand_and_evaluate(self, node: Node):

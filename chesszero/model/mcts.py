@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from chess_engine.board import Board
+from chess_engine.board import Board, Color
 from config.model_config import ModelConfig
 from utils.board_utils import encode_board, decode_policy
 

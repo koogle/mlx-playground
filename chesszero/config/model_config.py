@@ -44,4 +44,4 @@ class ModelConfig:
     n_history_moves: int = 8  # Number of previous board states to include
 
     # Debug options
-    debug: bool = False  # Print debug information including tensor shapes
+    debug: bool = True  # Print debug information including tensor shapes

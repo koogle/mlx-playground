@@ -44,7 +44,6 @@ class ChessNet(nn.Module):
         self.config = config
 
         # Input convolution block
-        # For Conv2d weights shape is (out_channels, in_channels, kernel_h, kernel_w)
         self.conv_input = nn.Conv2d(
             in_channels=14,  # Input channels for chess board encoding
             out_channels=config.n_filters,
@@ -103,18 +102,11 @@ class ChessNet(nn.Module):
         self.update(tree_map_with_path(init_fn, self.parameters()))
 
     def __call__(self, x: mx.array) -> Tuple[mx.array, mx.array]:
-        # Input shape should be [batch_size, channels, height, width]
-        if len(x.shape) == 3:
-            x = mx.expand_dims(x, axis=0)  # Add batch dimension
-
-        # Convert to NCHW format if in NHWC
-        if x.shape[-1] == 14:  # If channels are last
-            x = mx.transpose(x, (0, 3, 1, 2))  # NHWC -> NCHW
-
-        # Expected shape at this point: [batch_size, 14, 8, 8]
-        # Debug shape
-        if self.config.debug:
-            print(f"Input shape: {x.shape}")
+        # Input comes as [batch_size, channels, height, width] from encode_board
+        # Convert to NHWC format for MLX Conv2d
+        x = mx.transpose(
+            x, (0, 2, 3, 1)
+        )  # [batch, channels, height, width] -> [batch, height, width, channels]
 
         # Input block
         x = self.conv_input(x)  # Shape: [batch_size, n_filters, 8, 8]

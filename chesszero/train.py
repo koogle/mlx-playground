@@ -5,7 +5,7 @@ from model.training import Trainer
 def main():
     # Initialize
     config = ModelConfig()
-    trainer = Trainer(config)
+    trainer = Trainer(config, start_with_random=True)
 
     # Start training
     trainer.train()

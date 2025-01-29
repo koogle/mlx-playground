@@ -5,7 +5,11 @@ from chess_engine.board import Color
 from chess_engine.game import ChessGame
 from model.network import ChessNet
 from model.mcts import MCTS
-from model.self_play import generate_games, create_batches
+from model.self_play import (
+    generate_games,
+    create_batches,
+    generate_random_opponent_games,
+)
 from utils.random_player import RandomPlayer
 from utils.board_utils import encode_board
 from config.model_config import ModelConfig
@@ -15,7 +19,7 @@ import numpy as np
 class Trainer:
     """Handles training, self-play, and evaluation of the chess model"""
 
-    def __init__(self, config: ModelConfig):
+    def __init__(self, config: ModelConfig, start_with_random: bool = False):
         self.config = config
         self.model = ChessNet(config)
         self.optimizer = optim.SGD(
@@ -24,6 +28,8 @@ class Trainer:
             weight_decay=config.weight_decay,
         )
         self.mcts = MCTS(self.model, config)
+        self.start_with_random = start_with_random
+        self.random_player = RandomPlayer()
 
     def train(self, n_epochs: Optional[int] = None):
         """Main training loop"""
@@ -32,9 +38,15 @@ class Trainer:
         for epoch in range(n_epochs):
             print(f"\nEpoch {epoch + 1}/{n_epochs}")
 
-            # Generate self-play games
-            print("Generating self-play games...")
-            games = generate_games(self.mcts, self.config)
+            # Generate training games
+            print("Generating training games...")
+            if (
+                self.start_with_random and epoch < 5
+            ):  # Use random opponent for first 5 epochs
+                print("Playing against random opponent for initial training...")
+                games = generate_random_opponent_games(self.mcts, self.config)
+            else:
+                games = generate_games(self.mcts, self.config)
 
             # Train on game data
             print("Training on game data...")

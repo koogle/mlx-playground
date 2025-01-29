@@ -1,5 +1,7 @@
 import numpy as np
 from chess_engine.game import ChessGame
+from chess_engine.board import Color
+from utils.random_player import RandomPlayer
 from model.mcts import MCTS
 from utils.board_utils import encode_board
 from typing import List, Tuple
@@ -85,3 +87,60 @@ def create_batches(games: List[Tuple], batch_size: int):
         values = mx.array(values)
 
         yield states, policies, values
+
+
+def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
+    """Generate games playing against a random opponent"""
+    games_data = []
+    random_player = RandomPlayer()
+
+    for game_idx in range(config.n_games_per_iteration):
+        if game_idx % 10 == 0:
+            print(f"Generating game {game_idx + 1}/{config.n_games_per_iteration}")
+
+        # Play as both white and black alternately
+        color = Color.WHITE if game_idx % 2 == 0 else Color.BLACK
+        game = ChessGame()
+        states, policies, values = [], [], []
+
+        print(f"\nStarting new game as {'White' if color == Color.WHITE else 'Black'}")
+        print("---------------------------")
+
+        while not game.is_over():
+            print(f"\nMove {len(game.move_history) + 1}")
+            print(game.board)  # Print current position
+            current_state = encode_board(game.board)
+
+            if game.get_current_turn() == color:
+                # MCTS player's turn
+                print("MCTS player's turn")
+                move = mcts.get_move(game.board)
+                policy = np.zeros(config.policy_output_dim)
+                move_idx = mcts.encode_move(move[0], move[1])
+                policy[move_idx] = 1.0
+
+                states.append(current_state)
+                policies.append(policy)
+            else:
+                # Random player's turn
+                print("Random player's turn")
+                move = random_player.select_move(game.board)
+
+            print(f"Move from {move[0]} to {move[1]}")
+            game.make_move_coords(move[0], move[1], f"{move[0]}{move[1]}")
+
+        # Game is over - get result
+        result = game.get_result()
+        print(f"\nGame over. Result: {result}")
+
+        # Adjust result based on our player's color
+        if color == Color.BLACK:
+            result = -result
+
+        # Fill in the values array based on game result
+        values = [result for _ in range(len(states))]
+
+        if states:  # Only add if we have data
+            games_data.append((states, policies, values))
+
+    return games_data

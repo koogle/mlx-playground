@@ -33,36 +33,34 @@ class Node:
 
         best_score = float("-inf")
         best_move = None
-        best_child = None  # Add this to track the selected child
+        best_child = None
 
-        # Add small epsilon to avoid division by zero
         total_visits = max(1, self.visit_count)  # Ensure at least 1 visit
 
         for move, child in self.children.items():
-            # Negative because value is from opponent's perspective
+            # Debug the PUCT calculation
             q_value = -child.value() if child.visit_count > 0 else 0
-
-            # Calculate exploration bonus with protection against zero visits
             u_value = (
                 c_puct * child.prior * math.sqrt(total_visits) / (1 + child.visit_count)
             )
-
             score = q_value + u_value
+
+            print(
+                f"Move {move}: Q={q_value:.3f}, U={u_value:.3f}, Score={score:.3f}, "
+                f"Prior={child.prior:.3f}, Visits={child.visit_count}"
+            )
 
             if score > best_score:
                 best_score = score
                 best_move = move
-                best_child = child  # Track the best child node
+                best_child = child
 
-        if best_move is None:  # No valid moves found
-            print("no valid moves")
+        if best_move is None:  # This should never happen if we have children
+            print("WARNING: No best move found despite having children!")
             return None, None
 
-        # Debug info (optional)
-        # print(f"Selected move {best_move} with score {best_score}")
-        # print(f"Child stats: visits={best_child.visit_count}, value={best_child.value()}")
-
-        return best_move, best_child  # Return both move and child node
+        print(f"Selected move {best_move} with score {best_score}")
+        return best_move, best_child
 
 
 class MCTS:

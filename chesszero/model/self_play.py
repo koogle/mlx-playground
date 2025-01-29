@@ -121,8 +121,8 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
                 break
 
             # if move_count % 20 == 0:
-            print(f"\nMove {move_count}")
-            print(game.board)
+            # print(f"\nMove {move_count}")
+            # print(game.board)
 
             current_state = encode_board(game.board)
 

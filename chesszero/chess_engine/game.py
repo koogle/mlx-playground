@@ -1,5 +1,5 @@
 from .board import Board, Color, Piece, PieceType
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Set
 
 
 class ChessGame:
@@ -68,171 +68,74 @@ class ChessGame:
 
         return valid_moves
 
-    def make_move(self, move_str: str) -> bool:
-        """Make a move using standard algebraic notation."""
-        # Parse the move
-        print(f"Parsing move: {move_str}")
-        from_pos, to_pos = self._parse_move(move_str)
+    def make_move(self, move: str) -> bool:
+        """Make a move in algebraic notation (e.g. 'e2e4' or 'g1f3')"""
+        from_pos, to_pos = self.parse_move(move)
         if not from_pos or not to_pos:
-            if self.DEBUG:
-                print(f"\nDEBUG: Failed to parse move: {move_str}")
             return False
 
-        return self.make_move_coords(from_pos, to_pos)
+        # Track moves without captures or pawn moves for 50/75 move rule
+        piece = self.board.squares[from_pos[0]][from_pos[1]]
+        target = self.board.squares[to_pos[0]][to_pos[1]]
+        if piece.piece_type == PieceType.PAWN or target:
+            self.moves_without_progress = 0
+        else:
+            self.moves_without_progress += 1
+
+        # Make the move
+        if self.board.move_piece(from_pos, to_pos):
+            self.move_history.append(move)
+            return True
+        return False
 
     def make_move_coords(
         self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], move_str: str
     ) -> bool:
-
-        # Verify it's the correct player's turn
+        """Make a move using board coordinates"""
+        # Track moves without captures or pawn moves for 50/75 move rule
         piece = self.board.squares[from_pos[0]][from_pos[1]]
-        if not piece or piece.color != self.board.current_turn:
-            return False
-
-        # Try to make the move
-        if self._try_move(from_pos, to_pos):
-            self.move_history.append(move_str)
-            return True
-
-        if self.DEBUG:
-            print(f"\nDEBUG: Invalid move {move_str}")
-            print(f"From: {from_pos}, To: {to_pos}")
-            print(f"Valid moves: {self.board.get_valid_moves(from_pos)}")
-        return False
-
-    def _try_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> bool:
-        """Attempt to make a move and validate it."""
-        piece = self.board.squares[from_pos[0]][from_pos[1]]
-        if not piece or piece.color != self.board.current_turn:
-            return False
-
-        # Check if move is valid
-        attack_info = self.board.get_attack_info(piece.color)
-        valid_moves = self.board.get_valid_moves(from_pos, attack_info)
-        if to_pos not in valid_moves:
-            return False
-
-        # Check if move is a capture or pawn move
-        is_capture = self.board.squares[to_pos[0]][to_pos[1]] is not None
-        is_pawn_move = piece.piece_type == PieceType.PAWN
+        target = self.board.squares[to_pos[0]][to_pos[1]]
+        if piece.piece_type == PieceType.PAWN or target:
+            self.moves_without_progress = 0
+        else:
+            self.moves_without_progress += 1
 
         # Make the move
         if self.board.move_piece(from_pos, to_pos):
-            # Reset counter if capture or pawn move, otherwise increment
-            if is_capture or is_pawn_move:
-                self.moves_without_progress = 0
-            else:
-                self.moves_without_progress += 1
+            self.move_history.append(move_str)
             return True
         return False
 
-    def _parse_move(
-        self, move_str: str
-    ) -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
-        """Parse algebraic notation into board coordinates."""
-        if not move_str:
-            return None, None
-
-        move = move_str.strip()
-
-        # Handle castling
-        if move in ["O-O", "0-0"]:  # Kingside castling
-            row = 0 if self.board.current_turn == Color.WHITE else 7
-            return (row, 4), (row, 6)
-        elif move in ["O-O-O", "0-0-0"]:  # Queenside castling
-            row = 0 if self.board.current_turn == Color.WHITE else 7
-            return (row, 4), (row, 2)
-
-        # Handle standard moves (e.g., "e2e4" or "e7e8")
-        if len(move) >= 4:
-            try:
-                from_file = ord(move[0]) - ord("a")
-                from_rank = int(move[1]) - 1
-                to_file = ord(move[2]) - ord("a")
-                to_rank = int(move[3]) - 1
-
-                # Validate coordinates
-                if (
-                    0 <= from_file < 8
-                    and 0 <= from_rank < 8
-                    and 0 <= to_file < 8
-                    and 0 <= to_rank < 8
-                ):
-                    # Handle promotion if present (e.g., "e7e8Q")
-                    if len(move) == 5 and move[4] in ["Q", "R", "B", "N"]:
-                        # Promotion piece is handled by the board logic
-                        return (from_rank, from_file), (to_rank, to_file)
-                    elif len(move) == 4:
-                        return (from_rank, from_file), (to_rank, to_file)
-            except (ValueError, IndexError):
-                pass
-
-        # Remove capture and check symbols
-        move = move.replace("x", "").rstrip("+#")
-
-        # Get destination square
-        if len(move) < 2:
-            return None, None
-
-        dest_square = move[-2:]
-        try:
-            to_col = ord(dest_square[0]) - ord("a")
-            to_row = int(dest_square[1]) - 1
-            if not (0 <= to_row < 8 and 0 <= to_col < 8):
-                return None, None
-            to_pos = (to_row, to_col)
-        except (ValueError, IndexError):
-            return None, None
-
-        # Determine piece type
-        piece_type = {
-            "K": PieceType.KING,
-            "Q": PieceType.QUEEN,
-            "R": PieceType.ROOK,
-            "B": PieceType.BISHOP,
-            "N": PieceType.KNIGHT,
-        }.get(move[0], PieceType.PAWN)
-
-        # For pawn captures, use the source file
-        source_file = None
-        if piece_type == PieceType.PAWN and len(move) == 3 and move[0] in "abcdefgh":
-            source_file = ord(move[0]) - ord("a")
-
-        # Get all pieces of this type
-        pieces = self.board.get_pieces_by_type(self.board.current_turn, piece_type)
-
-        # Find piece that can make this move
-        for piece, from_pos in pieces:
-            if to_pos in self.board.get_valid_moves(from_pos):
-                # For pawns with source file, check column matches
-                if source_file is not None and from_pos[1] != source_file:
-                    continue
-                return from_pos, to_pos
-
-        return None, None
-
-    def get_current_turn(self) -> Color:
-        return self.board.current_turn
+    def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
+        """Get valid moves for a piece"""
+        return self.board.get_valid_moves(pos)
 
     def get_game_state(self) -> str:
-        """Get the current state of the game."""
+        """Get the current game state as a string"""
         if self.board.is_checkmate(self.board.current_turn):
             winner = "Black" if self.board.current_turn == Color.WHITE else "White"
-            return f"Checkmate! {winner} wins!"
-        elif self.board.is_stalemate(self.board.current_turn):
-            return "Stalemate! Game is a draw!"
-        elif len(self.move_history) >= 200:
-            return "Draw! Maximum moves reached!"
-        elif self.moves_without_progress >= 75:
-            return "Draw! 75 moves without progress!"
+            return f"Checkmate - {winner} wins"
         elif self.board.is_draw():
-            return "Draw! Insufficient material!"
+            return "Draw"
+        elif self.moves_without_progress >= 75:
+            return "Draw (75-move rule)"
+        elif len(self.move_history) >= 200:
+            return "Draw (maximum moves)"
         elif self.board.is_in_check(self.board.current_turn):
-            player = "White" if self.board.current_turn == Color.WHITE else "Black"
-            return f"Check! {player} is in check!"
-        elif self.moves_without_progress >= 50:
-            return "Draw can be claimed (50 moves without progress)"
-        return "Normal"
+            return "Check"
+        return "Ongoing"
+
+    def get_result(self) -> float:
+        """Get the game result from current player's perspective"""
+        if self.board.is_game_over():
+            return self.board.get_game_result()
+        elif self.moves_without_progress >= 75 or len(self.move_history) >= 200:
+            return 0.0  # Draw by move limit or 75-move rule
+        return 0.0  # Game not over
+
+    def can_claim_draw(self) -> bool:
+        """Check if a player can claim a draw (50-move rule)"""
+        return self.moves_without_progress >= 50
 
     def __str__(self):
         return str(self.board)
@@ -341,19 +244,6 @@ class ChessGame:
             or self.board.is_draw()  # Other draw conditions
         )
 
-    def get_result(self) -> float:
-        """Get the game result from current player's perspective
-        Returns:
-            1.0 for win
-            -1.0 for loss
-            0.0 for draw
-        """
-        state = self.get_game_state()
-        if "Checkmate" in state:
-            # If current player is checkmated, they lost
-            return -1.0 if "wins" in state else 1.0
-        return 0.0  # Draw or stalemate
-
     def is_draw(self) -> bool:
         """Check if the game is a draw"""
         return (
@@ -362,6 +252,114 @@ class ChessGame:
             or len(self.move_history) >= 200  # Maximum game length
         )
 
-    def can_claim_draw(self) -> bool:
-        """Check if a player can claim a draw (50-move rule)"""
-        return self.moves_without_progress >= 50
+    def get_current_turn(self) -> Color:
+        return self.board.current_turn
+
+    def parse_move(
+        self, move_str: str
+    ) -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
+        """Parse algebraic notation into board coordinates."""
+        if not move_str:
+            return None, None
+
+        move = move_str.strip()
+
+        # Handle castling
+        if move in ["O-O", "0-0"]:  # Kingside castling
+            row = 0 if self.board.current_turn == Color.WHITE else 7
+            return (row, 4), (row, 6)
+        elif move in ["O-O-O", "0-0-0"]:  # Queenside castling
+            row = 0 if self.board.current_turn == Color.WHITE else 7
+            return (row, 4), (row, 2)
+
+        # Handle standard moves (e.g., "e2e4" or "e7e8")
+        if len(move) >= 4:
+            try:
+                from_file = ord(move[0]) - ord("a")
+                from_rank = int(move[1]) - 1
+                to_file = ord(move[2]) - ord("a")
+                to_rank = int(move[3]) - 1
+
+                # Validate coordinates
+                if (
+                    0 <= from_file < 8
+                    and 0 <= from_rank < 8
+                    and 0 <= to_file < 8
+                    and 0 <= to_rank < 8
+                ):
+                    # Handle promotion if present (e.g., "e7e8Q" or "f1=Q")
+                    if len(move) >= 5:
+                        promotion_piece = move[4] if move[4] != "=" else move[5]
+                        if promotion_piece in ["Q", "R", "B", "N"]:
+                            return (from_rank, from_file), (to_rank, to_file)
+                    elif len(move) == 4:
+                        return (from_rank, from_file), (to_rank, to_file)
+            except (ValueError, IndexError):
+                pass
+
+        # Remove capture and check symbols
+        move = move.replace("x", "").rstrip("+#")
+
+        # Handle pawn promotion notation like "f1=Q"
+        if "=" in move:
+            try:
+                parts = move.split("=")
+                if (
+                    len(parts) == 2
+                    and len(parts[0]) == 2
+                    and parts[1] in ["Q", "R", "B", "N"]
+                ):
+                    to_file = ord(parts[0][0]) - ord("a")
+                    to_rank = int(parts[0][1]) - 1
+                    if 0 <= to_file < 8 and 0 <= to_rank < 8:
+                        # Find pawn that can move to this square
+                        to_pos = (to_rank, to_file)
+                        pawns = self.board.get_pieces_by_type(
+                            self.board.current_turn, PieceType.PAWN
+                        )
+                        for piece, from_pos in pawns:
+                            if to_pos in self.board.get_valid_moves(from_pos):
+                                return from_pos, to_pos
+            except (ValueError, IndexError):
+                pass
+
+        # Get destination square
+        if len(move) < 2:
+            return None, None
+
+        dest_square = move[-2:]
+        try:
+            to_col = ord(dest_square[0]) - ord("a")
+            to_row = int(dest_square[1]) - 1
+            if not (0 <= to_row < 8 and 0 <= to_col < 8):
+                return None, None
+            to_pos = (to_row, to_col)
+        except (ValueError, IndexError):
+            return None, None
+
+        # Determine piece type
+        piece_type = {
+            "K": PieceType.KING,
+            "Q": PieceType.QUEEN,
+            "R": PieceType.ROOK,
+            "B": PieceType.BISHOP,
+            "N": PieceType.KNIGHT,
+        }.get(move[0], PieceType.PAWN)
+
+        # For pawn captures, use the source file
+        source_file = None
+        if piece_type == PieceType.PAWN and len(move) == 3 and move[0] in "abcdefgh":
+            source_file = ord(move[0]) - ord("a")
+
+        # Get all pieces of this type
+        pieces = self.board.get_pieces_by_type(self.board.current_turn, piece_type)
+
+        # Find piece that can make this move
+        for piece, from_pos in pieces:
+            if to_pos in self.board.get_valid_moves(from_pos):
+                # For pawns with source file, check column matches
+                if source_file is not None and from_pos[1] != source_file:
+                    continue
+                return from_pos, to_pos
+
+        return None, None

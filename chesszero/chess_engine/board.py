@@ -698,3 +698,33 @@ class Board:
         # Implement the logic to check if moving from from_pos to to_pos leaves the king in check
         # This is a placeholder and should be implemented based on your specific check detection logic
         return False
+
+    def is_game_over(self) -> bool:
+        """Check if the game is over (checkmate or draw)"""
+        # Check for checkmate
+        if self.is_checkmate(Color.WHITE) or self.is_checkmate(Color.BLACK):
+            return True
+
+        # Check for draw
+        if self.is_draw():
+            return True
+
+        return False
+
+    def get_game_result(self) -> float:
+        """Get the game result from current player's perspective
+        Returns:
+            1.0 for win
+            -1.0 for loss
+            0.0 for draw
+        """
+        if self.is_checkmate(self.current_turn):
+            return -1.0  # Current player is checkmated
+        elif self.is_checkmate(
+            Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+        ):
+            return 1.0  # Current player delivered checkmate
+        elif self.is_draw():
+            return 0.0  # Draw
+
+        raise ValueError("Game is not over")

@@ -6,32 +6,86 @@ from mlx.utils import tree_map_with_path
 
 
 class ResidualBlock(nn.Module):
-    """Residual block for the chess network"""
+    """Residual block with two convolutions and skip connection"""
 
     def __init__(self, n_filters: int):
         super().__init__()
-        # Note: in_channels should match out_channels for residual connection
-        self.conv1 = nn.Conv2d(
-            in_channels=n_filters, out_channels=n_filters, kernel_size=3, padding=1
-        )
+        # First convolution
+        self.conv1 = nn.Conv2d(n_filters, n_filters, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm(n_filters)
-        self.conv2 = nn.Conv2d(
-            in_channels=n_filters, out_channels=n_filters, kernel_size=3, padding=1
-        )
+
+        # Second convolution
+        self.conv2 = nn.Conv2d(n_filters, n_filters, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm(n_filters)
 
-    def __call__(self, x):
+        self.relu = nn.ReLU()
+        self.debug = False
+
+        # Clip values to prevent explosion
+        self.clip_value = 10.0
+
+    def __call__(self, x: mx.array) -> mx.array:
         identity = x
 
+        if self.debug:
+            print("\nResBlock input:", x.shape)
+            print("Input has NaN:", mx.isnan(x).any())
+
+        # First conv block
         out = self.conv1(x)
+        out = mx.clip(out, -self.clip_value, self.clip_value)
+        if self.debug:
+            print(
+                "After conv1:",
+                mx.isnan(out).any(),
+                "min:",
+                out.min(),
+                "max:",
+                out.max(),
+            )
+
         out = self.bn1(out)
-        out = nn.relu(out)
+        out = mx.clip(out, -self.clip_value, self.clip_value)
+        if self.debug:
+            print(
+                "After bn1:", mx.isnan(out).any(), "min:", out.min(), "max:", out.max()
+            )
 
+        out = self.relu(out)
+        if self.debug:
+            print("After relu1:", mx.isnan(out).any())
+
+        # Second conv block
         out = self.conv2(out)
-        out = self.bn2(out)
+        out = mx.clip(out, -self.clip_value, self.clip_value)
+        if self.debug:
+            print(
+                "After conv2:",
+                mx.isnan(out).any(),
+                "min:",
+                out.min(),
+                "max:",
+                out.max(),
+            )
 
+        out = self.bn2(out)
+        out = mx.clip(out, -self.clip_value, self.clip_value)
+        if self.debug:
+            print(
+                "After bn2:", mx.isnan(out).any(), "min:", out.min(), "max:", out.max()
+            )
+
+        # Skip connection with clipping
         out = out + identity
-        out = nn.relu(out)
+        out = mx.clip(out, -self.clip_value, self.clip_value)
+        if self.debug:
+            print(
+                "After skip:", mx.isnan(out).any(), "min:", out.min(), "max:", out.max()
+            )
+
+        out = self.relu(out)
+        if self.debug:
+            print("After final relu:", mx.isnan(out).any())
 
         return out
 
@@ -79,39 +133,41 @@ class ChessNet(nn.Module):
         self.train()  # Set to training mode
 
     def _init_weights(self):
-        """Initialize weights with small random values"""
+        """Initialize weights with Kaiming initialization"""
 
         def init_fn(path, a):
             if "conv" in path and "weight" in path:
-                # MLX Conv2d weights shape is (out_channels, kernel_h, kernel_w, in_channels)
-                # For fan-in we want kernel_h * kernel_w * in_channels
-                n = a.shape[1] * a.shape[2] * a.shape[-1]  # Use -1 to get in_channels
-                return mx.random.normal(a.shape) / mx.sqrt(n)
+                # Use Kaiming initialization for convolutions
+                fan_in = (
+                    a.shape[1] * a.shape[2] * a.shape[-1]
+                )  # kernel_size * kernel_size * in_channels
+                std = mx.sqrt(2.0 / fan_in)  # He initialization
+                return mx.random.normal(a.shape) * std
             elif "linear" in path and "weight" in path:
-                # Linear weights have shape (out_features, in_features)
-                n = a.shape[1]  # fan-in
-                return mx.random.normal(a.shape) / mx.sqrt(n)
+                # Use Kaiming initialization for linear layers
+                fan_in = a.shape[1]
+                std = mx.sqrt(2.0 / fan_in)
+                return mx.random.normal(a.shape) * std
+            elif "bn" in path:
+                if "weight" in path:  # gamma
+                    return mx.ones(a.shape) * 0.1  # Start with smaller scale
+                else:  # bias (beta)
+                    return mx.zeros(a.shape)
             elif "bias" in path:
                 return mx.zeros(a.shape)
-            elif "bn" in path:  # BatchNorm parameters
-                if "weight" in path:
-                    return mx.ones(a.shape)
-                else:  # bias
-                    return mx.zeros(a.shape)
-            return a  # Leave other parameters unchanged
+            return a
 
         # Update all parameters using the initialization function
         self.update(tree_map_with_path(init_fn, self.parameters()))
 
     def __call__(self, x: mx.array) -> Tuple[mx.array, mx.array]:
-        # Input comes as [batch_size, channels, height, width] from encode_board
-        x = mx.transpose(
-            x, (0, 2, 3, 1)
-        )  # [batch, channels, height, width] -> [batch, height, width, channels]
+        """Forward pass"""
+        # Input comes as [batch_size, channels, height, width]
+        x = mx.transpose(x, (0, 2, 3, 1))
 
         # Input block
         x = self.conv_input(x)
-        x = self.bn_input(x) if self.training else x  # Only use BatchNorm in training
+        x = self.bn_input(x) if self.training else x
         x = self.relu(x)
 
         # Residual tower

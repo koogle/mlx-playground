@@ -70,11 +70,18 @@ class ChessGame:
     def make_move(self, move_str: str) -> bool:
         """Make a move using standard algebraic notation."""
         # Parse the move
+        print(f"Parsing move: {move_str}")
         from_pos, to_pos = self._parse_move(move_str)
         if not from_pos or not to_pos:
             if self.DEBUG:
                 print(f"\nDEBUG: Failed to parse move: {move_str}")
             return False
+
+        return self.make_move_coords(from_pos, to_pos)
+
+    def make_move_coords(
+        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], move_str: str
+    ) -> bool:
 
         # Verify it's the correct player's turn
         piece = self.board.squares[from_pos[0]][from_pos[1]]

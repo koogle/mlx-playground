@@ -5,6 +5,7 @@ from chess_engine.board import Color
 from chess_engine.game import ChessGame
 from model.network import ChessNet
 from model.mcts import MCTS
+from model.self_play import generate_games, create_batches
 from utils.random_player import RandomPlayer
 from utils.board_utils import encode_board
 from config.model_config import ModelConfig
@@ -33,14 +34,14 @@ class Trainer:
 
             # Generate self-play games
             print("Generating self-play games...")
-            games = self.generate_games()
+            games = generate_games(self.mcts, self.config)
 
             # Train on game data
             print("Training on game data...")
             total_loss = 0
             n_batches = 0
 
-            for batch in self.create_batches(games):
+            for batch in create_batches(games, self.config.batch_size):
                 loss = self.train_on_batch(batch)
                 total_loss += loss
                 n_batches += 1
@@ -56,58 +57,6 @@ class Trainer:
                 # Early success check
                 if epoch < 20 and win_rate > 0.8:
                     print("Early success achieved!")
-
-    def generate_games(self) -> List[Tuple]:
-        """Generate self-play games and return training data"""
-        games_data = []
-
-        for game_idx in range(self.config.n_games_per_iteration):
-            if game_idx % 10 == 0:  # Progress update
-                print(
-                    f"Generating game {game_idx + 1}/{self.config.n_games_per_iteration}"
-                )
-
-            game_data = self.play_self_play_game()
-            if game_data:
-                games_data.append(game_data)
-
-        return games_data
-
-    def play_self_play_game(self) -> Optional[Tuple]:
-        """Play a single game of self-play"""
-        game = ChessGame()
-        states, policies, values = [], [], []
-
-        print("\nStarting new self-play game")
-        print("---------------------------")
-
-        while not game.is_over():
-            print(f"\nMove {len(game.move_history) + 1}")
-            print(game.board)  # Print current position
-
-            # Get move from MCTS
-            move = self.mcts.get_move(game.board)
-
-            # Store game state and policy
-            encoded_state = encode_board(game.board)
-            policy = np.zeros(self.config.policy_output_dim)
-            move_idx = self.mcts.encode_move(move)
-            policy[move_idx] = 1.0
-
-            states.append(encoded_state)
-            policies.append(policy)
-
-            # Make move
-            game.make_move(move)
-
-        # Game is over - get result
-        result = game.get_result()
-        print(f"\nGame over. Result: {result}")
-
-        # Fill in the values array based on game result
-        values = [result if i % 2 == 0 else -result for i in range(len(states))]
-
-        return states, policies, values
 
     def get_policy_distribution(self, root_node):
         """Convert MCTS visit counts to policy distribution"""
@@ -127,32 +76,6 @@ class Trainer:
         if "Checkmate" in state:
             return 1.0 if "White wins" in state else -1.0
         return 0.0  # Draw
-
-    def create_batches(self, games):
-        """Create training batches from game data"""
-        # Flatten all games into (state, policy, value) tuples
-        all_examples = []
-        for states, policies, values in games:
-            all_examples.extend(zip(states, policies, values))
-
-        # Shuffle examples
-        mx.random.shuffle(all_examples)
-
-        # Create batches
-        for i in range(0, len(all_examples), self.config.batch_size):
-            batch = all_examples[i : i + self.config.batch_size]
-            if len(batch) < self.config.batch_size:
-                continue
-
-            # Unzip batch
-            states, policies, values = zip(*batch)
-
-            # Convert to MLX arrays
-            states = mx.array(states)
-            policies = mx.array(policies)
-            values = mx.array(values)
-
-            yield states, policies, values
 
     def train_on_batch(self, batch):
         """Train on a single batch of data"""

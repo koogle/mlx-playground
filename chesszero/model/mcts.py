@@ -3,6 +3,7 @@ import numpy as np
 from chess_engine.board import Board, Color
 from config.model_config import ModelConfig
 from utils.board_utils import encode_board, decode_policy
+from typing import List, Tuple
 
 
 class Node:
@@ -24,13 +25,13 @@ class Node:
 
     def select_child(self, c_puct):
         """Select child with highest UCB score"""
+        if not self.children:  # No children available
+            return None, None
+
         best_score = float("-inf")
         best_move = None
 
         for move, child in self.children.items():
-            # UCB score = Q + U
-            # Q = child value
-            # U = prior * sqrt(parent visits) / (1 + child visits)
             q_value = (
                 -child.value()
             )  # Negative because value is from opponent's perspective
@@ -45,6 +46,9 @@ class Node:
             if score > best_score:
                 best_score = score
                 best_move = move
+
+        if best_move is None:  # No valid moves found
+            return None, None
 
         return best_move, self.children[best_move]
 
@@ -64,26 +68,62 @@ class MCTS:
 
     def get_move(self, board: Board):
         """Get the best move for the current position after running MCTS"""
-        # Run simulations
         root = Node(board)
-        for _ in range(self.config.n_simulations):
+
+        # First expand root node
+        value = self.expand_and_evaluate(root)
+        if not root.children:  # No valid moves at root
+            return None
+
+        # Run simulations
+        for idx in range(self.config.n_simulations):
+            if idx % 10 == 0:
+                print(f"Running simulation {idx + 1} of {self.config.n_simulations}")
+
+            # Selection
             node = root
-            value = self.expand_and_evaluate(node)
+            search_path = [node]
+
+            while node.is_expanded:
+                move, child = node.select_child(self.config.c_puct)
+                if not move:  # No valid moves
+                    break
+                node = child
+                search_path.append(node)
+
+            # Expansion and evaluation
+            if not node.is_expanded:
+                value = self.expand_and_evaluate(node)
+                if not node.children:  # No valid moves
+                    value = -1  # Loss position
+
+            # Backup
+            self.backup(search_path, value)
 
         # Select move based on visit counts
         move_probs = np.zeros(self.config.policy_output_dim)
-        for child in root.children:
-            move_probs[child.move_index] = child.visit_count
+        for move, child in root.children.items():
+            move_idx = self.encode_move(move[0], move[1])
+            move_probs[move_idx] = child.visit_count
+
+        if np.sum(move_probs) == 0:  # No valid moves
+            return None
+
         move_probs = move_probs / np.sum(move_probs)
 
         # Select move (during training, sample from distribution)
         move_idx = np.random.choice(len(move_probs), p=move_probs)
-        selected_move = self.decode_move(move_idx, board)
 
-        # Print move info
-        print(f"\nPosition evaluation: {root.value():.3f}")
+        # Find the actual move
+        for move, child in root.children.items():
+            if self.encode_move(move[0], move[1]) == move_idx:
+                selected_move = move[0], move[1]
+                break
+
+        # Convert values to float before printing
+        print(f"\nPosition evaluation: {float(root.value()):.3f}")
         print(f"Selected move: {selected_move}")
-        print(f"Move probability: {move_probs[move_idx]:.3f}")
+        print(f"Move probability: {float(move_probs[move_idx]):.3f}")
 
         return selected_move
 
@@ -92,9 +132,6 @@ class MCTS:
         # Get model predictions
         encoded_board = encode_board(node.board)
         policy, value = self.model(encoded_board[None, ...])
-
-        # Convert policy to moves
-        moves = decode_policy(policy[0])
 
         # Add children for all legal moves
         pieces = (
@@ -106,21 +143,23 @@ class MCTS:
         for piece, from_pos in pieces:
             valid_moves = node.board.get_valid_moves(from_pos)
             for to_pos in valid_moves:
-                # Find policy probability for this move
+                # Get policy probability for this move
                 move_idx = self.encode_move(from_pos, to_pos)
                 prior = policy[0, move_idx] if move_idx < len(policy[0]) else 0.0
 
                 # Create child node
                 child_board = node.board.copy()
                 child_board.move_piece(from_pos, to_pos)
-                node.children[(from_pos, to_pos)] = Node(child_board, node, prior)
+                node.children[(from_pos, to_pos)] = Node(
+                    board=child_board, parent=node, prior=prior
+                )
 
         node.is_expanded = True
         return value[0]
 
-    def backup(self, search_path, value):
+    def backup(self, search_path: List[Node], value: float):
         """Update statistics of all nodes in search path"""
-        for node in search_path:
+        for node in reversed(search_path):
             node.visit_count += 1
             node.value_sum += value
             value = -value  # Value flips for opponent

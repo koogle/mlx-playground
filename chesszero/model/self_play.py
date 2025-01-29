@@ -6,6 +6,7 @@ from model.mcts import MCTS
 from utils.board_utils import encode_board
 from typing import List, Tuple
 import mlx.core as mx
+from tqdm import tqdm
 
 
 def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
@@ -16,9 +17,14 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
     print("\nStarting new self-play game")
     print("---------------------------")
 
-    while not game.is_over():
-        print(f"\nMove {len(game.move_history) + 1}")
-        print(game.board)  # Print current position
+    move_count = 0
+    for move_count in tqdm(range(201), desc="Playing game"):  # 200 move limit
+        if game.is_over():
+            break
+
+        if move_count % 20 == 0:
+            print(f"\nMove {move_count}")
+            print(game.board)
 
         # Get move from MCTS
         move = mcts.get_move(game.board)
@@ -36,6 +42,7 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
 
         # Make move
         game.make_move_coords(move[0], move[1], f"{move[0]}{move[1]}")
+        move_count += 1
 
     # Game is over - get result
     result = game.get_result()

@@ -83,9 +83,8 @@ class ChessNet(nn.Module):
         def init_fn(path, a):
             if "conv" in path and "weight" in path:
                 # MLX Conv2d weights shape is (out_channels, kernel_h, kernel_w, in_channels)
-                n = (
-                    a.shape[1] * a.shape[2] * a.shape[3]
-                )  # kernel_h * kernel_w * in_channels
+                # For fan-in we want kernel_h * kernel_w * in_channels
+                n = a.shape[1] * a.shape[2] * a.shape[-1]  # Use -1 to get in_channels
                 return mx.random.normal(a.shape) / mx.sqrt(n)
             elif "linear" in path and "weight" in path:
                 # Linear weights have shape (out_features, in_features)

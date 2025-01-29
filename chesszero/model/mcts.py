@@ -71,6 +71,7 @@ class MCTS:
 
     def get_move(self, board: Board):
         """Get the best move for the current position after running MCTS"""
+        # Set model to eval mode during search
         self.model.eval()
         try:
             root = Node(board)
@@ -79,19 +80,40 @@ class MCTS:
                 return None
 
             # Run simulations with early stopping
-            n_sims = min(200, self.config.n_simulations)  # Limit max simulations
+            n_sims = min(100, self.config.n_simulations)  # Reduced simulation count
             for idx in range(n_sims):
-                # Selection - limit depth
+                # Selection with depth limit
                 node = root
                 search_path = [node]
                 depth = 0
-                max_depth = 20  # Reduced max depth
+                max_depth = 15  # Further reduced max depth
 
+                # Fast selection loop
                 while node.is_expanded and depth < max_depth:
-                    move, child = node.select_child(self.config.c_puct)
-                    if not move or not child:
+                    # Get best child using PUCT
+                    best_score = float("-inf")
+                    best_move = None
+                    best_child = None
+
+                    # Single pass through children
+                    for move, child in node.children.items():
+                        q_value = -child.value() if child.visit_count > 0 else 0
+                        u_value = (
+                            self.config.c_puct
+                            * child.prior
+                            * (math.sqrt(node.visit_count) / (1 + child.visit_count))
+                        )
+                        score = q_value + u_value
+
+                        if score > best_score:
+                            best_score = score
+                            best_move = move
+                            best_child = child
+
+                    if not best_child:
                         break
-                    node = child
+
+                    node = best_child
                     search_path.append(node)
                     depth += 1
 
@@ -104,33 +126,20 @@ class MCTS:
                 # Backup
                 self.backup(search_path, value)
 
-                # Early stopping - check every 10 simulations
-                if idx > 10 and idx % 10 == 0:
-                    best_move = None
-                    best_visits = -1
-                    total_visits = 0
+                # Early stopping - check less frequently
+                if idx > 20 and idx % 5 == 0:
+                    best_visits = max(
+                        child.visit_count for child in root.children.values()
+                    )
+                    total_visits = sum(
+                        child.visit_count for child in root.children.values()
+                    )
 
-                    for move, child in root.children.items():
-                        total_visits += child.visit_count
-                        if child.visit_count > best_visits:
-                            best_visits = child.visit_count
-                            best_move = move
-
-                    # Stop if we have a clear winner
-                    if total_visits > 0:
-                        visit_ratio = best_visits / total_visits
-                        if visit_ratio > 0.8 and best_visits > 30:
-                            return best_move
+                    if total_visits > 0 and best_visits / total_visits > 0.75:
+                        break
 
             # Return most visited move
-            best_move = None
-            best_visits = -1
-            for move, child in root.children.items():
-                if child.visit_count > best_visits:
-                    best_visits = child.visit_count
-                    best_move = move
-
-            return best_move
+            return max(root.children.items(), key=lambda x: x[1].visit_count)[0]
 
         finally:
             self.model.train()

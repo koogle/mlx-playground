@@ -76,6 +76,8 @@ class ChessNet(nn.Module):
         # Initialize weights
         self._init_weights()
 
+        self.train()  # Set to training mode
+
     def _init_weights(self):
         """Initialize weights with small random values"""
 
@@ -103,35 +105,34 @@ class ChessNet(nn.Module):
 
     def __call__(self, x: mx.array) -> Tuple[mx.array, mx.array]:
         # Input comes as [batch_size, channels, height, width] from encode_board
-        # Convert to NHWC format for MLX Conv2d
         x = mx.transpose(
             x, (0, 2, 3, 1)
         )  # [batch, channels, height, width] -> [batch, height, width, channels]
 
         # Input block
-        x = self.conv_input(x)  # Shape: [batch_size, n_filters, 8, 8]
-        x = self.bn_input(x)
+        x = self.conv_input(x)
+        x = self.bn_input(x) if self.training else x  # Only use BatchNorm in training
         x = self.relu(x)
 
         # Residual tower
-        x = self.residual_tower(x)  # Shape remains: [batch_size, n_filters, 8, 8]
+        x = self.residual_tower(x)
 
         # Policy head
-        policy = self.policy_conv(x)  # Shape: [batch_size, 32, 8, 8]
-        policy = self.policy_bn(policy)
+        policy = self.policy_conv(x)
+        policy = self.policy_bn(policy) if self.training else policy
         policy = self.relu(policy)
         policy = mx.reshape(policy, (-1, 32 * 8 * 8))
-        policy = self.policy_fc(policy)  # Shape: [batch_size, policy_output_dim]
+        policy = self.policy_fc(policy)
         policy = mx.softmax(policy, axis=-1)
 
         # Value head
-        value = self.value_conv(x)  # Shape: [batch_size, 32, 8, 8]
-        value = self.value_bn(value)
+        value = self.value_conv(x)
+        value = self.value_bn(value) if self.training else value
         value = self.relu(value)
         value = mx.reshape(value, (-1, 32 * 8 * 8))
         value = self.value_fc1(value)
         value = self.relu(value)
-        value = self.value_fc2(value)  # Shape: [batch_size, 1]
+        value = self.value_fc2(value)
         value = mx.tanh(value)
 
         return policy, value

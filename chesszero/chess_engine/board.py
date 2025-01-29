@@ -363,8 +363,6 @@ class Board:
         """Execute a move and update piece lists. Returns True if successful."""
         piece = self.squares[from_pos[0]][from_pos[1]]
         if not piece:
-            if self.DEBUG:
-                print(f"DEBUG: No piece at {from_pos}")
             return False
 
         # Handle castling moves
@@ -409,8 +407,6 @@ class Board:
         pieces = self.white_pieces if color == Color.WHITE else self.black_pieces
         for piece, pos in pieces:
             if self.get_valid_moves(pos):
-                if self.DEBUG:
-                    print(f"DEBUG: {piece.piece_type} at {pos} has valid moves")
                 return False
 
         return True
@@ -569,8 +565,6 @@ class Board:
         if captured_piece:
             # Never allow king captures - this should never happen in valid chess
             if captured_piece.piece_type == PieceType.KING:
-                if self.DEBUG:
-                    print(f"DEBUG: Attempted to capture king at {to_pos}")
                 return False
 
             # Remove captured piece from opponent's piece list

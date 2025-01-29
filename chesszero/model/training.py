@@ -92,6 +92,8 @@ class Trainer:
     def train_on_batch(self, batch):
         """Train on a single batch of data"""
         states, policies, values = batch
+        # Ensure model is in training mode
+        self.model.train()
         loss = self.model.loss_fn(states, policies, values)
         self.optimizer.step(loss)
         return loss.item()

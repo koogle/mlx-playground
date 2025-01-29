@@ -6,6 +6,7 @@ class ChessGame:
     def __init__(self):
         self.board = Board()
         self.move_history: List[str] = []
+        self.moves_without_progress = 0  # Counter for 50/75 move rule
         self.DEBUG = False
 
     def _get_piece_symbol(self, piece: Piece) -> str:
@@ -86,8 +87,6 @@ class ChessGame:
         # Verify it's the correct player's turn
         piece = self.board.squares[from_pos[0]][from_pos[1]]
         if not piece or piece.color != self.board.current_turn:
-            if self.DEBUG:
-                print(f"\nDEBUG: Wrong player's turn or no piece at {from_pos}")
             return False
 
         # Try to make the move
@@ -113,8 +112,19 @@ class ChessGame:
         if to_pos not in valid_moves:
             return False
 
+        # Check if move is a capture or pawn move
+        is_capture = self.board.squares[to_pos[0]][to_pos[1]] is not None
+        is_pawn_move = piece.piece_type == PieceType.PAWN
+
         # Make the move
-        return self.board.move_piece(from_pos, to_pos)
+        if self.board.move_piece(from_pos, to_pos):
+            # Reset counter if capture or pawn move, otherwise increment
+            if is_capture or is_pawn_move:
+                self.moves_without_progress = 0
+            else:
+                self.moves_without_progress += 1
+            return True
+        return False
 
     def _parse_move(
         self, move_str: str
@@ -176,13 +186,19 @@ class ChessGame:
         if self.board.is_checkmate(self.board.current_turn):
             winner = "Black" if self.board.current_turn == Color.WHITE else "White"
             return f"Checkmate! {winner} wins!"
+        elif self.board.is_stalemate(self.board.current_turn):
+            return "Stalemate! Game is a draw!"
+        elif len(self.move_history) >= 200:
+            return "Draw! Maximum moves reached!"
+        elif self.moves_without_progress >= 75:
+            return "Draw! 75 moves without progress!"
+        elif self.board.is_draw():
+            return "Draw! Insufficient material!"
         elif self.board.is_in_check(self.board.current_turn):
             player = "White" if self.board.current_turn == Color.WHITE else "Black"
             return f"Check! {player} is in check!"
-        elif self.board.is_draw():
-            return "Draw!"
-        elif self.board.is_stalemate(self.board.current_turn):
-            return "Stalemate! Game is a draw!"
+        elif self.moves_without_progress >= 50:
+            return "Draw can be claimed (50 moves without progress)"
         return "Normal"
 
     def __str__(self):
@@ -284,8 +300,13 @@ class ChessGame:
 
     def is_over(self) -> bool:
         """Check if the game is over (checkmate, stalemate, or draw)"""
-        state = self.get_game_state()
-        return state != "Normal"
+        return (
+            self.board.is_checkmate(self.board.current_turn)
+            or self.board.is_stalemate(self.board.current_turn)
+            or len(self.move_history) >= 200  # Maximum game length
+            or self.moves_without_progress >= 75  # 75-move rule
+            or self.board.is_draw()  # Other draw conditions
+        )
 
     def get_result(self) -> float:
         """Get the game result from current player's perspective
@@ -299,3 +320,15 @@ class ChessGame:
             # If current player is checkmated, they lost
             return -1.0 if "wins" in state else 1.0
         return 0.0  # Draw or stalemate
+
+    def is_draw(self) -> bool:
+        """Check if the game is a draw"""
+        return (
+            self.board.is_draw()  # Original draw conditions (stalemate, insufficient material)
+            or self.moves_without_progress >= 75  # 75-move rule
+            or len(self.move_history) >= 200  # Maximum game length
+        )
+
+    def can_claim_draw(self) -> bool:
+        """Check if a player can claim a draw (50-move rule)"""
+        return self.moves_without_progress >= 50

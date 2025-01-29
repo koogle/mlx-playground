@@ -2,6 +2,7 @@ import mlx.core as mx
 import mlx.nn as nn
 from config.model_config import ModelConfig
 from typing import Tuple
+from mlx.utils import tree_map_with_path
 
 
 class ResidualBlock(nn.Module):
@@ -79,20 +80,28 @@ class ChessNet(nn.Module):
     def _init_weights(self):
         """Initialize weights with small random values"""
 
-        def init_conv(conv):
-            # Initialize conv weights with small random values
-            n = conv.weight.shape[1] * conv.weight.shape[2] * conv.weight.shape[3]
-            conv.weight = mx.random.normal(conv.weight.shape) / mx.sqrt(n)
-            if conv.bias is not None:
-                conv.bias = mx.zeros(conv.bias.shape)
+        def init_fn(path, a):
+            if "conv" in path and "weight" in path:
+                # MLX Conv2d weights shape is (out_channels, kernel_h, kernel_w, in_channels)
+                n = (
+                    a.shape[1] * a.shape[2] * a.shape[3]
+                )  # kernel_h * kernel_w * in_channels
+                return mx.random.normal(a.shape) / mx.sqrt(n)
+            elif "linear" in path and "weight" in path:
+                # Linear weights have shape (out_features, in_features)
+                n = a.shape[1]  # fan-in
+                return mx.random.normal(a.shape) / mx.sqrt(n)
+            elif "bias" in path:
+                return mx.zeros(a.shape)
+            elif "bn" in path:  # BatchNorm parameters
+                if "weight" in path:
+                    return mx.ones(a.shape)
+                else:  # bias
+                    return mx.zeros(a.shape)
+            return a  # Leave other parameters unchanged
 
-        # Initialize all conv layers
-        init_conv(self.conv_input)
-        for block in self.residual_tower:
-            init_conv(block.conv1)
-            init_conv(block.conv2)
-        init_conv(self.policy_conv)
-        init_conv(self.value_conv)
+        # Update all parameters using the initialization function
+        self.update(tree_map_with_path(init_fn, self.parameters()))
 
     def __call__(self, x: mx.array) -> Tuple[mx.array, mx.array]:
         # Input shape should be [batch_size, channels, height, width]

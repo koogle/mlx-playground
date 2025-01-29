@@ -28,10 +28,12 @@ class Node:
     def select_child(self, c_puct):
         """Select child with highest UCB score"""
         if not self.children:  # No children available
+            print("no children")
             return None, None
 
         best_score = float("-inf")
         best_move = None
+        best_child = None  # Add this to track the selected child
 
         # Add small epsilon to avoid division by zero
         total_visits = max(1, self.visit_count)  # Ensure at least 1 visit
@@ -50,11 +52,17 @@ class Node:
             if score > best_score:
                 best_score = score
                 best_move = move
+                best_child = child  # Track the best child node
 
         if best_move is None:  # No valid moves found
+            print("no valid moves")
             return None, None
 
-        return best_move, self.children[best_move]
+        # Debug info (optional)
+        # print(f"Selected move {best_move} with score {best_score}")
+        # print(f"Child stats: visits={best_child.visit_count}, value={best_child.value()}")
+
+        return best_move, best_child  # Return both move and child node
 
 
 class MCTS:
@@ -121,6 +129,8 @@ class MCTS:
 
                     while node.is_expanded:
                         move, child = node.select_child(self.config.c_puct)
+                        print("move", move, child)
+
                         if not move:  # No valid moves
                             break
                         node = child
@@ -192,6 +202,11 @@ class MCTS:
             encoded_board = encode_board(node.board)
             policy, value = self.model(encoded_board[None, ...])
 
+            # Debug output to check valid moves
+            print("\nExpanding node:")
+            print(node.board)
+            print(f"Current turn: {node.board.current_turn}")
+
             # Add children for all legal moves
             pieces = (
                 node.board.white_pieces
@@ -199,26 +214,35 @@ class MCTS:
                 else node.board.black_pieces
             )
 
-            for piece, from_pos in pieces:
-                valid_moves = node.board.get_valid_moves(from_pos)
+            # Debug output
+            print("Available pieces:", len(pieces))
+            for piece, pos in pieces:
+                valid_moves = node.board.get_valid_moves(pos)
+                print(f"{piece.piece_type} at {pos} has moves: {valid_moves}")
+
                 for to_pos in valid_moves:
                     # Get policy probability for this move
-                    move_idx = self.encode_move(from_pos, to_pos)
+                    move_idx = self.encode_move(pos, to_pos)
                     prior = policy[0, move_idx] if move_idx < len(policy[0]) else 0.0
 
                     # Create child node
                     child_board = node.board.copy()
-                    child_board.move_piece(from_pos, to_pos)
-                    node.children[(from_pos, to_pos)] = Node(
+                    child_board.move_piece(pos, to_pos)
+                    node.children[(pos, to_pos)] = Node(
                         board=child_board, parent=node, prior=prior
                     )
 
             node.is_expanded = True
+            if not node.children:
+                print("WARNING: No valid moves found during expansion!")
+
             return value[0]
 
         except Exception as e:
             print(f"Error in expand_and_evaluate: {e}")
-            # Return neutral evaluation on error
+            import traceback
+
+            print(traceback.format_exc())
             return 0.0
 
     def backup(self, search_path: List[Node], value: float):

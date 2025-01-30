@@ -167,7 +167,7 @@ class ChessNet(nn.Module):
 
         # Input block
         x = self.conv_input(x)
-        x = self.bn_input(x) if self.training else x
+        x = self.bn_input(x)  # Always use running stats in eval mode
         x = self.relu(x)
 
         # Residual tower
@@ -175,7 +175,7 @@ class ChessNet(nn.Module):
 
         # Policy head
         policy = self.policy_conv(x)
-        policy = self.policy_bn(policy) if self.training else policy
+        policy = self.policy_bn(policy)  # Always use running stats
         policy = self.relu(policy)
         policy = mx.reshape(policy, (-1, 32 * 8 * 8))
         policy = self.policy_fc(policy)
@@ -183,7 +183,7 @@ class ChessNet(nn.Module):
 
         # Value head
         value = self.value_conv(x)
-        value = self.value_bn(value) if self.training else value
+        value = self.value_bn(value)  # Always use running stats
         value = self.relu(value)
         value = mx.reshape(value, (-1, 32 * 8 * 8))
         value = self.value_fc1(value)

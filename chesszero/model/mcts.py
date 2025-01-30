@@ -94,12 +94,9 @@ class MCTS:
 
                 # Batch process expansions
                 if nodes_to_expand:
-                    # Prepare batch of board states
+                    # Prepare batch of board states - remove the extra dimension
                     encoded_boards = mx.stack(
-                        [
-                            encode_board(node.board)[None, ...]
-                            for node in nodes_to_expand
-                        ]
+                        [encode_board(node.board) for node in nodes_to_expand]
                     )
 
                     # Get model predictions in batch
@@ -107,7 +104,7 @@ class MCTS:
 
                     # Process each node with its predictions
                     for node, policy, value in zip(nodes_to_expand, policies, values):
-                        self._expand_node(node, policy[0], value[0])
+                        self._expand_node(node, policy, value)
 
                 # Backup
                 for search_path, end_node in search_paths:
@@ -126,9 +123,9 @@ class MCTS:
 
     def expand_and_evaluate(self, node: Node):
         """Expand node and return value estimate"""
-        # Get model predictions
-        encoded_board = encode_board(node.board)
-        policy, value = self.model(encoded_board[None, ...])
+        # Get model predictions - add batch dimension but not extra dimension
+        encoded_board = encode_board(node.board)[None, ...]
+        policy, value = self.model(encoded_board)
 
         self._expand_node(node, policy[0], value[0])
         return value[0]

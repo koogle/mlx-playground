@@ -37,7 +37,7 @@ class RandomPlayer:
         while valid_moves:
             # Select random move in algebraic notation
             move_str = random.choice(valid_moves)
-            from_pos, to_pos = game._parse_move(move_str)
+            from_pos, to_pos = game.parse_move(move_str)
 
             if from_pos and to_pos:  # If move parsed successfully
                 return (from_pos, to_pos)

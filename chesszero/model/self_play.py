@@ -8,10 +8,20 @@ from utils.board_utils import encode_board
 from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
+import time
 
 
 def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
     """Play a single game of self-play and return the training data"""
+    perf_stats = {
+        "move_generation": 0.0,
+        "state_encoding": 0.0,
+        "policy_creation": 0.0,
+        "move_execution": 0.0,
+        "total_time": 0.0,
+    }
+
+    start_time = time.time()
     game = ChessGame()
     states, policies, values = [], [], []
 
@@ -19,7 +29,7 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
     print("---------------------------")
 
     move_count = 0
-    for move_count in tqdm(range(201), desc="Playing game"):  # 200 move limit
+    for move_count in tqdm(range(201), desc="Playing game"):
         if game.is_over():
             break
 
@@ -27,23 +37,53 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
             print(f"\nMove {move_count}")
             print(game.board)
 
-        # Get move from MCTS
+        # Time move generation
+        t0 = time.time()
         move = mcts.get_move(game.board)
+        perf_stats["move_generation"] += time.time() - t0
 
-        # Store game state and policy
+        # Time state encoding
+        t0 = time.time()
         encoded_state = encode_board(game.board)
+        perf_stats["state_encoding"] += time.time() - t0
+
+        # Time policy creation
+        t0 = time.time()
         policy = np.zeros(config.policy_output_dim)
-        move_idx = mcts.encode_move(
-            move[0], move[1]
-        )  # Assuming move is (from_pos, to_pos)
+        move_idx = mcts.encode_move(move[0], move[1])
         policy[move_idx] = 1.0
+        perf_stats["policy_creation"] += time.time() - t0
 
         states.append(encoded_state)
         policies.append(policy)
 
-        # Make move
+        # Time move execution
+        t0 = time.time()
         game.make_move_coords(move[0], move[1], f"{move[0]}{move[1]}")
+        perf_stats["move_execution"] += time.time() - t0
+
         move_count += 1
+
+    perf_stats["total_time"] = time.time() - start_time
+
+    # Print performance statistics
+    print("\nSelf-play Performance Statistics:")
+    print(f"Total game time: {perf_stats['total_time']:.2f}s")
+    print(f"Moves: {move_count}")
+    print(f"Time per move: {perf_stats['total_time']/move_count:.3f}s")
+    print("\nTime breakdown:")
+    print(
+        f"Move generation: {perf_stats['move_generation']/perf_stats['total_time']*100:.1f}%"
+    )
+    print(
+        f"State encoding: {perf_stats['state_encoding']/perf_stats['total_time']*100:.1f}%"
+    )
+    print(
+        f"Policy creation: {perf_stats['policy_creation']/perf_stats['total_time']*100:.1f}%"
+    )
+    print(
+        f"Move execution: {perf_stats['move_execution']/perf_stats['total_time']*100:.1f}%"
+    )
 
     # Game is over - get result
     result = game.get_result()

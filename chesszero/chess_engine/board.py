@@ -91,6 +91,8 @@ class Board:
         self.white_pieces: List[Tuple[Piece, Tuple[int, int]]] = []
         self.black_pieces: List[Tuple[Piece, Tuple[int, int]]] = []
         self.current_turn = Color.WHITE  # Add current turn tracking
+        self._valid_moves_cache = {}  # New: cache for valid moves
+        self._last_move = None  # Track last move to invalidate cache
         self.initialize_board()
 
     def initialize_board(self):
@@ -231,6 +233,11 @@ class Board:
         if not piece:
             return set()
 
+        # Check cache first
+        cache_key = (pos, str(self))  # Use board state as part of cache key
+        if cache_key in self._valid_moves_cache:
+            return self._valid_moves_cache[cache_key]
+
         # Get attack information if not provided
         if attack_info is None:
             attack_info = self.get_attack_info(piece.color)
@@ -326,32 +333,27 @@ class Board:
 
         return basic_moves
 
-    def copy(self) -> "Board":
-        """Create a deep copy of the board for move simulation."""
-        new_board = Board.__new__(Board)  # Create new board without initialization
+    def copy(self):
+        """Optimized board copy"""
+        # Use __new__ to create instance without calling __init__
+        new_board = object.__new__(self.__class__)
+
+        # Copy squares array
         new_board.squares = [[None for _ in range(8)] for _ in range(8)]
-        new_board.current_turn = self.current_turn  # Copy current turn
-
-        # Copy pieces and their positions
-        new_board.white_pieces = []
-        new_board.black_pieces = []
-
         for row in range(8):
             for col in range(8):
                 piece = self.squares[row][col]
                 if piece:
-                    # Create new piece with same attributes
                     new_piece = Piece(piece.piece_type, piece.color)
                     new_piece.has_moved = piece.has_moved
                     new_board.squares[row][col] = new_piece
 
-                    # Add to appropriate piece list
-                    piece_list = (
-                        new_board.white_pieces
-                        if piece.color == Color.WHITE
-                        else new_board.black_pieces
-                    )
-                    piece_list.append((new_piece, (row, col)))
+        # Copy piece lists and current turn using fast copy methods
+        new_board.white_pieces = [(piece, pos) for piece, pos in self.white_pieces]
+        new_board.black_pieces = [(piece, pos) for piece, pos in self.black_pieces]
+        new_board.current_turn = self.current_turn
+        new_board._valid_moves_cache = {}  # Start with empty cache
+        new_board._last_move = self._last_move  # Copy last move
 
         return new_board
 
@@ -380,6 +382,9 @@ class Board:
         # Make the main move
         if not self.make_move(from_pos, to_pos):
             return False
+
+        self._valid_moves_cache = {}  # Invalidate cache after move
+        self._last_move = (from_pos, to_pos)
 
         return True
 

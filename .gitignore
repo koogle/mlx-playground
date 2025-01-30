@@ -168,3 +168,6 @@ yolo/VOCdevkit
 yolo/checkpoints
 
 diffusion/checkpoints
+
+# Chesszero
+chesszero/checkpoints

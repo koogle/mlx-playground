@@ -1,4 +1,5 @@
 import math
+import time
 from random import randint
 
 from tqdm import tqdm
@@ -31,25 +32,19 @@ class Node:
         if not self.children:
             return None, None
 
-        best_score = float("-inf")
-        best_move = None
-        best_child = None
-
-        # Calculate these once instead of for each child
+        # Pre-calculate values that are used for all children
         total_visits = max(1, self.visit_count)
         sqrt_total_visits = math.sqrt(total_visits)
 
-        for move, child in self.children.items():
-            q_value = -child.value() if child.visit_count > 0 else 0
-            u_value = c_puct * child.prior * sqrt_total_visits / (1 + child.visit_count)
-            score = q_value + u_value
-
-            if score > best_score:
-                best_score = score
-                best_move = move
-                best_child = child
-
-        return best_move, best_child
+        # Use list comprehension and max() instead of iterating
+        move, child = max(
+            self.children.items(),
+            key=lambda x: (
+                (-x[1].value() if x[1].visit_count > 0 else 0)
+                + c_puct * x[1].prior * sqrt_total_visits / (1 + x[1].visit_count)
+            ),
+        )
+        return move, child
 
 
 class MCTS:
@@ -64,19 +59,50 @@ class MCTS:
         self.eval_prior_threshold = (
             0.00  # Prune low probability moves during evaluation
         )
+        self.perf_stats = {
+            "model_inference": 0.0,
+            "node_expansion": 0.0,
+            "selection": 0.0,
+            "backup": 0.0,
+            "board_copy": 0.0,  # New: track board copying time
+            "move_validation": 0.0,  # New: track move validation time
+            "total_moves": 0,
+            "total_time": 0.0,
+            "board_copies": 0,  # New: count number of board copies
+            "move_validations": 0,  # New: count number of move validations
+            "total_nodes_expanded": 0,  # New: track total nodes expanded
+            "total_inferences": 0,  # New: track total model inferences
+        }
 
     def get_move(self, board: Board):
         """Get the best move for the current position after running MCTS"""
+        start_time = time.time()
         self.model.eval()
         try:
             root = Node(board)
-            # Fix array handling in expand_and_evaluate
+
+            # Initial model inference and expansion
+            t0 = time.time()
             encoded_board = encode_board(board)[None, ...]
             policies, values = self.model(encoded_board)
-            policy = mx.array(policies[0])  # Convert to MLX array
-            value = values[0].item()  # Get scalar value
+            policy = mx.array(policies[0])
+            value = values[0].item()
+            self.perf_stats["model_inference"] += time.time() - t0
+            self.perf_stats["total_inferences"] += 1
 
+            if self.debug:
+                print("\nRoot node activations:")
+                print(f"Value: {value:.3f}")
+                print(f"Policy stats:")
+                print(f"  Min: {mx.min(policy):.3f}")
+                print(f"  Max: {mx.max(policy):.3f}")
+                print(f"  Mean: {mx.mean(policy):.3f}")
+                print(f"  Std: {mx.std(policy):.3f}")
+
+            t0 = time.time()
             self._expand_node(root, policy, value)
+            self.perf_stats["node_expansion"] += time.time() - t0
+            self.perf_stats["total_nodes_expanded"] += 1
 
             if not root.children:
                 print("\nWarning: Root node has no children after expansion!")
@@ -98,80 +124,110 @@ class MCTS:
                     print(f"Policy range: [{mx.min(policy):.4f}, {mx.max(policy):.4f}]")
                 return None if not valid_moves else valid_moves[0]
 
-            # Pre-allocate arrays for batching
-            batch_size = min(self.config.n_simulations, self.config.n_simulations)
+            # Initialize arrays once for all chunks
+            batch_size = self.config.n_simulations
+            chunk_size = 128
             encoded_boards = []
             nodes_to_expand = []
             search_paths = []
 
-            # Run simulations in batches
-            encoded_boards.clear()
-            nodes_to_expand.clear()
-            search_paths.clear()
+            # Process simulations in chunks
+            for sim_start in range(0, batch_size, chunk_size):
+                chunk_end = min(sim_start + chunk_size, batch_size)
+                current_chunk_size = chunk_end - sim_start
 
-            # Collect batch_size paths
-            for _ in range(batch_size):
-                node = root
-                path = [node]
+                # Selection phase for current chunk
+                t0 = time.time()
+                for _ in range(current_chunk_size):
+                    node = root
+                    path = [node]
 
-                # Selection - avoid creating new boards until necessary
-                while node.is_expanded and node.children:
-                    move, child = node.select_child(self.config.c_puct)
-                    if not move:
-                        break
-                    node = child
-                    path.append(node)
+                    while node.is_expanded and node.children:
+                        move, child = node.select_child(self.config.c_puct)
+                        if not move:
+                            break
+                        node = child
+                        path.append(node)
 
-                if not node.board.is_game_over():
-                    # Cache board encoding
-                    board_hash = hash(str(node.board))
-                    if board_hash not in self.board_cache:
-                        self.board_cache[board_hash] = encode_board(node.board)
-                    encoded_boards.append(self.board_cache[board_hash])
-                    nodes_to_expand.append(node)
-                search_paths.append((path, node))
+                    if not node.board.is_game_over():
+                        board_hash = hash(str(node.board))
+                        if board_hash not in self.board_cache:
+                            self.board_cache[board_hash] = encode_board(node.board)
+                        encoded_boards.append(self.board_cache[board_hash])
+                        nodes_to_expand.append(node)
+                    search_paths.append((path, node))
+                self.perf_stats["selection"] += time.time() - t0
 
-            # Batch evaluate positions
-            if encoded_boards:
-                encoded_batch = mx.stack(encoded_boards)
-                policies, values = self.model(encoded_batch)
+                # Batch evaluate positions
+                if encoded_boards:
+                    t0 = time.time()
+                    encoded_batch = mx.stack(encoded_boards)
+                    policies, values = self.model(encoded_batch)
+                    self.perf_stats["model_inference"] += time.time() - t0
+                    self.perf_stats["total_inferences"] += len(encoded_boards)
 
-                if self.debug:
-                    print("\nPolicy statistics:")
-                    for i, policy in enumerate(policies):
-                        print(
-                            f"Policy {i}: min={mx.min(policy):.4f}, max={mx.max(policy):.4f}"
-                        )
+                    if self.debug and sim_start == 0:  # Sample first batch
+                        print("\nBatch activations sample (first 5):")
+                        for i in range(min(5, len(values))):
+                            print(f"\nNode {i}:")
+                            print(f"Value: {values[i].item():.3f}")
+                            print(f"Policy stats:")
+                            policy = mx.array(policies[i])
+                            print(f"  Min: {mx.min(policy):.3f}")
+                            print(f"  Max: {mx.max(policy):.3f}")
+                            print(f"  Mean: {mx.mean(policy):.3f}")
+                            print(f"  Std: {mx.std(policy):.3f}")
 
-                # Expand nodes with predictions
-                for node, policy, value in zip(nodes_to_expand, policies, values):
-                    policy = mx.array(policy)  # Convert to MLX array
-                    value = value.item()  # Get scalar value
-                    self._expand_node(node, policy, value)
+                    t0 = time.time()
+                    for node, policy, value in zip(nodes_to_expand, policies, values):
+                        policy = mx.array(policy)
+                        value = value.item()
+                        self._expand_node(node, policy, value)
+                    self.perf_stats["node_expansion"] += time.time() - t0
+                    self.perf_stats["total_nodes_expanded"] += len(nodes_to_expand)
 
-            # Backup
-            for path, end_node in search_paths:
-                value = (
-                    end_node.board.get_game_result()
-                    if end_node.board.is_game_over()
-                    else end_node.value()
-                )
-                self.backup(path, value)
+                    # Clear arrays for next chunk
+                    encoded_boards.clear()
+                    nodes_to_expand.clear()
 
-            # Select best move
-            if not root.children:
-                # Fallback to any valid move if no children
-                valid_moves = []
-                pieces = (
-                    board.white_pieces
-                    if board.current_turn == Color.WHITE
-                    else board.black_pieces
-                )
-                for piece, pos in pieces:
-                    moves = board.get_valid_moves(pos)
-                    if moves:
-                        valid_moves.extend([(pos, move) for move in moves])
-                return valid_moves[0] if valid_moves else None
+                # Backup phase
+                t0 = time.time()
+                for path, end_node in search_paths:
+                    value = (
+                        end_node.board.get_game_result()
+                        if end_node.board.is_game_over()
+                        else end_node.value()
+                    )
+                    self.backup(path, value)
+                self.perf_stats["backup"] += time.time() - t0
+                search_paths.clear()
+
+                # Early stopping check
+                best_visits = float("-inf")
+                second_best = float("-inf")
+                best_move = None
+
+                for move, child in root.children.items():
+                    visits = child.visit_count
+                    if visits > best_visits:
+                        second_best = best_visits
+                        best_visits = visits
+                        best_move = move
+                    elif visits > second_best:
+                        second_best = visits
+
+                    if best_visits > second_best * 4 and sim_start > batch_size // 2:
+                        self.perf_stats["total_moves"] += 1
+                        self.perf_stats["total_time"] += time.time() - start_time
+                        if self.perf_stats["total_moves"] % 10 == 0:
+                            self._print_perf_stats()
+                        return best_move
+
+            self.perf_stats["total_moves"] += 1
+            self.perf_stats["total_time"] += time.time() - start_time
+
+            if self.perf_stats["total_moves"] % 10 == 0:
+                self._print_perf_stats()
 
             return max(root.children.items(), key=lambda x: x[1].visit_count)[0]
         finally:
@@ -205,34 +261,92 @@ class MCTS:
         is_white = board.current_turn == Color.WHITE
         pieces = board.white_pieces if is_white else board.black_pieces
 
-        if self.debug:
-            print(f"\nExpanding node for {'White' if is_white else 'Black'}")
-            print(f"Number of pieces: {len(pieces)}")
-            print(f"Board state:\n{board}")
-
-        # Create children for all valid moves
-        children_created = 0
+        # Time move validation
+        t0 = time.time()
+        # Pre-calculate all valid moves for each piece at once
+        piece_moves = {}
         for piece, pos in pieces:
             valid_moves = board.get_valid_moves(pos)
+            self.perf_stats["move_validations"] += 1
             if valid_moves:
-                if self.debug:
-                    print(f"Valid moves for {piece} at {pos}: {valid_moves}")
+                piece_moves[pos] = valid_moves
+        self.perf_stats["move_validation"] += time.time() - t0
 
-                for to_pos in valid_moves:
-                    move_idx = self.encode_move(pos, to_pos)
-                    prior = policy[move_idx]
+        # Batch create children
+        children = {}
+        for from_pos, moves in piece_moves.items():
+            for to_pos in moves:
+                move_idx = self.encode_move(from_pos, to_pos)
+                prior = policy[move_idx]
 
-                    # Create child board and make move
+                # Only create board copy if prior is above threshold
+                if prior > (
+                    self.training_prior_threshold
+                    if self.training
+                    else self.eval_prior_threshold
+                ):
+                    t0 = time.time()
                     child_board = board.copy()
-                    child_board.move_piece(pos, to_pos)
-                    node.children[(pos, to_pos)] = Node(
+                    child_board.move_piece(from_pos, to_pos)
+                    self.perf_stats["board_copy"] += time.time() - t0
+                    self.perf_stats["board_copies"] += 1
+
+                    children[(from_pos, to_pos)] = Node(
                         board=child_board, parent=node, prior=prior
                     )
-                    children_created += 1
 
-        if self.debug:
-            print(f"Created {children_created} child nodes")
+        if not children and self.debug:
+            print(f"\nNo children created for node!")
+            print(f"Number of pieces: {len(pieces)}")
+            print(
+                f"Valid moves found: {sum(len(moves) for moves in piece_moves.values())}"
+            )
+            print(f"Policy range: [{mx.min(policy):.4f}, {mx.max(policy):.4f}]")
+            print(
+                f"Prior threshold: {self.training_prior_threshold if self.training else self.eval_prior_threshold}"
+            )
 
+        node.children = children
         node.is_expanded = True
         node.value_sum = value
         node.visit_count = 1
+
+    def _print_perf_stats(self):
+        """Print performance statistics"""
+        total_time = self.perf_stats["total_time"]
+        moves = self.perf_stats["total_moves"]
+        print("\nPerformance Statistics:")
+        print(f"Total moves: {moves}")
+        print(f"Average time per move: {total_time/moves:.3f}s")
+        print("\nTime breakdown:")
+        print(
+            f"Model inference: {self.perf_stats['model_inference']/total_time*100:.1f}%"
+        )
+        print(
+            f"Node expansion: {self.perf_stats['node_expansion']/total_time*100:.1f}%"
+        )
+        print(f"Selection: {self.perf_stats['selection']/total_time*100:.1f}%")
+        print(f"Backup: {self.perf_stats['backup']/total_time*100:.1f}%")
+        print(f"Board copying: {self.perf_stats['board_copy']/total_time*100:.1f}%")
+        print(
+            f"Move validation: {self.perf_stats['move_validation']/total_time*100:.1f}%"
+        )
+
+        print("\nOperation counts:")
+        print(f"Board copies: {self.perf_stats['board_copies']}")
+        print(f"Move validations: {self.perf_stats['move_validations']}")
+        print(f"Nodes expanded: {self.perf_stats['total_nodes_expanded']}")
+        print(f"Model inferences: {self.perf_stats['total_inferences']}")
+
+        if moves > 0:
+            print("\nPer move statistics:")
+            print(f"Board copies per move: {self.perf_stats['board_copies']/moves:.1f}")
+            print(
+                f"Move validations per move: {self.perf_stats['move_validations']/moves:.1f}"
+            )
+            print(
+                f"Nodes expanded per move: {self.perf_stats['total_nodes_expanded']/moves:.1f}"
+            )
+            print(
+                f"Model inferences per move: {self.perf_stats['total_inferences']/moves:.1f}"
+            )

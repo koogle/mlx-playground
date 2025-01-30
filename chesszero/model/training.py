@@ -55,6 +55,7 @@ class Trainer:
 
     def train(self, n_epochs: Optional[int] = None):
         """Main training loop"""
+        self.mcts.training = True  # Enable training mode
         n_epochs = n_epochs or self.config.n_epochs
 
         for epoch in range(self.start_epoch, n_epochs):

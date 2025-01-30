@@ -56,94 +56,124 @@ class MCTS:
     def __init__(self, model, config: ModelConfig):
         self.model = model
         self.config = config
-        self.debug = False  # Debug flag property
+        self.debug = False
+        self.board_cache = {}
+        # Add training flag and different thresholds
+        self.training = True
+        self.training_prior_threshold = 0.0  # No pruning during training
+        self.eval_prior_threshold = (
+            0.00  # Prune low probability moves during evaluation
+        )
 
     def get_move(self, board: Board):
         """Get the best move for the current position after running MCTS"""
         self.model.eval()
         try:
             root = Node(board)
+            # Fix array handling in expand_and_evaluate
+            encoded_board = encode_board(board)[None, ...]
+            policies, values = self.model(encoded_board)
+            policy = mx.array(policies[0])  # Convert to MLX array
+            value = values[0].item()  # Get scalar value
 
-            # First expand root node
-            value = self.expand_and_evaluate(root)
-            if self.debug:
-                print(f"\nRoot evaluation: value={str(value)}")
+            self._expand_node(root, policy, value)
 
             if not root.children:
-                return None
-
-            # Run MCTS simulations in batches
-            batch_size = min(
-                32, self.config.n_simulations
-            )  # Adjust batch size as needed
-            for _ in range(0, self.config.n_simulations, batch_size):
-                search_paths = []
-                nodes_to_expand = []
-
-                # Collect batch_size paths
-                for _ in range(batch_size):
-                    node = root
-                    search_path = [node]
-
-                    # Selection
-                    while node.is_expanded:
-                        move, child = node.select_child(self.config.c_puct)
-                        if not move:  # No valid moves
-                            break
-                        node = child
-                        search_path.append(node)
-
-                    if not node.board.is_game_over():
-                        nodes_to_expand.append(node)
-                    search_paths.append((search_path, node))
-
-                # Batch process expansions
-                if nodes_to_expand:
-                    # Prepare batch of board states - remove the extra dimension
-                    encoded_boards = mx.stack(
-                        [encode_board(node.board) for node in nodes_to_expand]
-                    )
-                    if self.debug:
-                        print("\nInput boards:")
-                        print(f"Shape: {encoded_boards.shape}")
-                        print(
-                            f"Input range: [{mx.min(encoded_boards):.3f}, {mx.max(encoded_boards):.3f}]"
-                        )
-                        print(f"Unique values: {mx.unique(encoded_boards)}")
-
-                    # Get model predictions in batch
-                    policies, values = self.model(encoded_boards)
-                    if self.debug:
-                        print(f"\nBatch predictions:")
-                        print(f"Policy shape: {policies.shape}")
-                        print(
-                            f"First policy == last policy: {mx.array_equal(policies[0], policies[-1])}"
-                        )
-                        for i, (policy, value) in enumerate(zip(policies, values)):
-                            print(
-                                f"Node {i}: value={str(value)}, policy_range=[{mx.min(policy):.3f}, {mx.max(policy):.3f}]"
-                            )
-
-                    # Process each node with its predictions
-                    for node, policy, value in zip(nodes_to_expand, policies, values):
-                        self._expand_node(node, policy, value)
-
-                # Backup
-                for search_path, end_node in search_paths:
-                    value = (
-                        end_node.board.get_game_result()
-                        if end_node.board.is_game_over()
-                        else end_node.value()
-                    )
-                    self.backup(search_path, value)
-
-            best_move = max(root.children.items(), key=lambda x: x[1].visit_count)[0]
-            if self.debug:
-                print(
-                    f"\nSelected move {best_move}: visits={root.children[best_move].visit_count}"
+                print("\nWarning: Root node has no children after expansion!")
+                print(f"Board state:\n{board}")
+                print(f"Root value: {value}")
+                valid_moves = []
+                pieces = (
+                    board.white_pieces
+                    if board.current_turn == Color.WHITE
+                    else board.black_pieces
                 )
-            return best_move
+                for piece, pos in pieces:
+                    moves = board.get_valid_moves(pos)
+                    if moves:
+                        valid_moves.extend([(pos, move) for move in moves])
+                print(f"Valid moves: {valid_moves}")
+                if self.debug:
+                    print(f"Policy shape: {policy.shape}")
+                    print(f"Policy range: [{mx.min(policy):.4f}, {mx.max(policy):.4f}]")
+                return None if not valid_moves else valid_moves[0]
 
+            # Pre-allocate arrays for batching
+            batch_size = min(self.config.n_simulations, self.config.n_simulations)
+            encoded_boards = []
+            nodes_to_expand = []
+            search_paths = []
+
+            # Run simulations in batches
+            encoded_boards.clear()
+            nodes_to_expand.clear()
+            search_paths.clear()
+
+            # Collect batch_size paths
+            for _ in range(batch_size):
+                node = root
+                path = [node]
+
+                # Selection - avoid creating new boards until necessary
+                while node.is_expanded and node.children:
+                    move, child = node.select_child(self.config.c_puct)
+                    if not move:
+                        break
+                    node = child
+                    path.append(node)
+
+                if not node.board.is_game_over():
+                    # Cache board encoding
+                    board_hash = hash(str(node.board))
+                    if board_hash not in self.board_cache:
+                        self.board_cache[board_hash] = encode_board(node.board)
+                    encoded_boards.append(self.board_cache[board_hash])
+                    nodes_to_expand.append(node)
+                search_paths.append((path, node))
+
+            # Batch evaluate positions
+            if encoded_boards:
+                encoded_batch = mx.stack(encoded_boards)
+                policies, values = self.model(encoded_batch)
+
+                if self.debug:
+                    print("\nPolicy statistics:")
+                    for i, policy in enumerate(policies):
+                        print(
+                            f"Policy {i}: min={mx.min(policy):.4f}, max={mx.max(policy):.4f}"
+                        )
+
+                # Expand nodes with predictions
+                for node, policy, value in zip(nodes_to_expand, policies, values):
+                    policy = mx.array(policy)  # Convert to MLX array
+                    value = value.item()  # Get scalar value
+                    self._expand_node(node, policy, value)
+
+            # Backup
+            for path, end_node in search_paths:
+                value = (
+                    end_node.board.get_game_result()
+                    if end_node.board.is_game_over()
+                    else end_node.value()
+                )
+                self.backup(path, value)
+
+            # Select best move
+            if not root.children:
+                # Fallback to any valid move if no children
+                valid_moves = []
+                pieces = (
+                    board.white_pieces
+                    if board.current_turn == Color.WHITE
+                    else board.black_pieces
+                )
+                for piece, pos in pieces:
+                    moves = board.get_valid_moves(pos)
+                    if moves:
+                        valid_moves.extend([(pos, move) for move in moves])
+                return valid_moves[0] if valid_moves else None
+
+            return max(root.children.items(), key=lambda x: x[1].visit_count)[0]
         finally:
             self.model.train()
 
@@ -170,24 +200,38 @@ class MCTS:
         return from_idx * 64 + to_idx
 
     def _expand_node(self, node: Node, policy, value):
-        """Helper method to expand a single node with given policy and value"""
-        pieces = (
-            node.board.white_pieces
-            if node.board.current_turn == Color.WHITE
-            else node.board.black_pieces
-        )
+        """Expand node with all valid moves"""
+        board = node.board
+        is_white = board.current_turn == Color.WHITE
+        pieces = board.white_pieces if is_white else board.black_pieces
 
+        if self.debug:
+            print(f"\nExpanding node for {'White' if is_white else 'Black'}")
+            print(f"Number of pieces: {len(pieces)}")
+            print(f"Board state:\n{board}")
+
+        # Create children for all valid moves
+        children_created = 0
         for piece, pos in pieces:
-            valid_moves = node.board.get_valid_moves(pos)
-            for to_pos in valid_moves:
-                move_idx = self.encode_move(pos, to_pos)
-                prior = policy[move_idx]
+            valid_moves = board.get_valid_moves(pos)
+            if valid_moves:
+                if self.debug:
+                    print(f"Valid moves for {piece} at {pos}: {valid_moves}")
 
-                child_board = node.board.copy()
-                child_board.move_piece(pos, to_pos)
-                node.children[(pos, to_pos)] = Node(
-                    board=child_board, parent=node, prior=prior
-                )
+                for to_pos in valid_moves:
+                    move_idx = self.encode_move(pos, to_pos)
+                    prior = policy[move_idx]
+
+                    # Create child board and make move
+                    child_board = board.copy()
+                    child_board.move_piece(pos, to_pos)
+                    node.children[(pos, to_pos)] = Node(
+                        board=child_board, parent=node, prior=prior
+                    )
+                    children_created += 1
+
+        if self.debug:
+            print(f"Created {children_created} child nodes")
 
         node.is_expanded = True
         node.value_sum = value

@@ -198,30 +198,42 @@ class Board:
         return moves
 
     def get_attack_info(self, color: Color) -> AttackInfo:
-        """Get all squares attacked by the opponent and pieces attacking the king."""
-        opponent_pieces = (
-            self.black_pieces if color == Color.WHITE else self.white_pieces
-        )
+        """Get information about attacks on the king"""
+        king_pos = self.find_king(color)
+        if not king_pos:
+            return AttackInfo(set(), [], {})
 
         attacked_squares = set()
         attacking_pieces = []
         pin_lines = {}
 
-        king_pos = self.find_king(color)
-        if not king_pos:
-            return AttackInfo(attacked_squares, attacking_pieces, pin_lines)
+        # Get enemy pieces
+        enemy_pieces = self.black_pieces if color == Color.WHITE else self.white_pieces
 
-        # Get all attacked squares and find pieces attacking the king
-        for piece, pos in opponent_pieces:
-            # Use ignore_castling=True to break recursion
-            piece_attacks = self.get_basic_moves(pos, ignore_castling=True)
-            attacked_squares.update(piece_attacks)
+        # Check each enemy piece
+        for piece, pos in enemy_pieces:
+            # Get basic moves without considering check
+            moves = self.get_basic_moves(pos)
 
-            if king_pos in piece_attacks:
+            # Add to attacked squares
+            attacked_squares.update(moves)
+
+            # Check if piece is attacking king
+            if king_pos in moves:
                 attacking_pieces.append((piece, pos))
 
-        # Find pin lines
-        self._find_pin_lines(king_pos, color, pin_lines)
+                # Check for pins along the attack line
+                if piece.piece_type in {
+                    PieceType.BISHOP,
+                    PieceType.ROOK,
+                    PieceType.QUEEN,
+                }:
+                    pin_line = self._get_pin_line(pos, king_pos)
+                    pinned_piece = self._find_pinned_piece(pos, king_pos, color)
+                    if pinned_piece:
+                        pin_lines[pinned_piece] = pin_line | {
+                            pos
+                        }  # Include capture of attacking piece
 
         return AttackInfo(attacked_squares, attacking_pieces, pin_lines)
 
@@ -327,15 +339,26 @@ class Board:
         attack_info: AttackInfo,
         basic_moves: Set[Tuple[int, int]],
     ) -> Set[Tuple[int, int]]:
+        """Get valid moves when not in check, considering pins"""
+        piece = self.squares[pos[0]][pos[1]]
+
         # If piece is pinned, it can only move along the pin line
         if pos in attack_info.pin_lines:
-            return basic_moves & attack_info.pin_lines[pos]
+            allowed_moves = basic_moves & attack_info.pin_lines[pos]
+            if self.debug:
+                print(f"Piece at {pos} is pinned. Allowed moves: {allowed_moves}")
+            return allowed_moves
 
         return basic_moves
 
     def copy(self):
         """Create a deep copy of the board for move simulation."""
-        new_board = Board()  # Create new board with initialization
+        new_board = object.__new__(Board)  # Create new board without initialization
+
+        # Initialize empty squares
+        new_board.squares = [[None for _ in range(8)] for _ in range(8)]
+        new_board.white_pieces = []
+        new_board.black_pieces = []
 
         # Copy squares and create new pieces
         for row in range(8):
@@ -746,3 +769,31 @@ class Board:
             return 0.0  # Draw
 
         raise ValueError("Game is not over")
+
+    def _get_pin_line(
+        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]
+    ) -> Set[Tuple[int, int]]:
+        """Get all squares between two positions (including to_pos)"""
+        row_diff = to_pos[0] - from_pos[0]
+        col_diff = to_pos[1] - from_pos[1]
+
+        # Determine direction
+        row_step = 0 if row_diff == 0 else row_diff // abs(row_diff)
+        col_step = 0 if col_diff == 0 else col_diff // abs(col_diff)
+
+        pin_line = set()
+        current = (from_pos[0] + row_step, from_pos[1] + col_step)
+
+        while current != to_pos:
+            pin_line.add(current)
+            current = (current[0] + row_step, current[1] + col_step)
+
+        pin_line.add(to_pos)
+        return pin_line
+
+    def _find_pinned_piece(
+        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], color: Color
+    ) -> Optional[Tuple[int, int]]:
+        # Implement the logic to find the pinned piece between from_pos and to_pos
+        # This is a placeholder and should be implemented based on your specific pinned piece detection logic
+        return None

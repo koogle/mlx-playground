@@ -1,4 +1,5 @@
 import math
+from random import randint
 
 from tqdm import tqdm
 from chess_engine.board import Board, Color
@@ -55,6 +56,7 @@ class MCTS:
     def __init__(self, model, config: ModelConfig):
         self.model = model
         self.config = config
+        self.debug = False  # Debug flag property
 
     def get_move(self, board: Board):
         """Get the best move for the current position after running MCTS"""
@@ -64,6 +66,9 @@ class MCTS:
 
             # First expand root node
             value = self.expand_and_evaluate(root)
+            if self.debug:
+                print(f"\nRoot evaluation: value={str(value)}")
+
             if not root.children:
                 return None
 
@@ -98,9 +103,26 @@ class MCTS:
                     encoded_boards = mx.stack(
                         [encode_board(node.board) for node in nodes_to_expand]
                     )
+                    if self.debug:
+                        print("\nInput boards:")
+                        print(f"Shape: {encoded_boards.shape}")
+                        print(
+                            f"Input range: [{mx.min(encoded_boards):.3f}, {mx.max(encoded_boards):.3f}]"
+                        )
+                        print(f"Unique values: {mx.unique(encoded_boards)}")
 
                     # Get model predictions in batch
                     policies, values = self.model(encoded_boards)
+                    if self.debug:
+                        print(f"\nBatch predictions:")
+                        print(f"Policy shape: {policies.shape}")
+                        print(
+                            f"First policy == last policy: {mx.array_equal(policies[0], policies[-1])}"
+                        )
+                        for i, (policy, value) in enumerate(zip(policies, values)):
+                            print(
+                                f"Node {i}: value={str(value)}, policy_range=[{mx.min(policy):.3f}, {mx.max(policy):.3f}]"
+                            )
 
                     # Process each node with its predictions
                     for node, policy, value in zip(nodes_to_expand, policies, values):
@@ -115,8 +137,12 @@ class MCTS:
                     )
                     self.backup(search_path, value)
 
-            # Select most visited move after search
-            return max(root.children.items(), key=lambda x: x[1].visit_count)[0]
+            best_move = max(root.children.items(), key=lambda x: x[1].visit_count)[0]
+            if self.debug:
+                print(
+                    f"\nSelected move {best_move}: visits={root.children[best_move].visit_count}"
+                )
+            return best_move
 
         finally:
             self.model.train()

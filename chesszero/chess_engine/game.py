@@ -272,6 +272,32 @@ class ChessGame:
             row = 0 if self.board.current_turn == Color.WHITE else 7
             return (row, 4), (row, 2)
 
+        # Handle pawn captures with promotion (e.g. "cxb1=Q")
+        if "=" in move and "x" in move:
+            try:
+                # Extract source file, target square and promotion piece
+                source_file = ord(move[0]) - ord("a")
+                target_file = ord(move[2]) - ord("a")
+                target_rank = int(move[3]) - 1
+
+                if (
+                    0 <= source_file < 8
+                    and 0 <= target_file < 8
+                    and 0 <= target_rank < 8
+                ):
+                    # Find pawn that can make this capture
+                    pawns = self.board.get_pieces_by_type(
+                        self.board.current_turn, PieceType.PAWN
+                    )
+                    for piece, from_pos in pawns:
+                        if from_pos[1] == source_file and (
+                            target_rank,
+                            target_file,
+                        ) in self.board.get_valid_moves(from_pos):
+                            return from_pos, (target_rank, target_file)
+            except (ValueError, IndexError):
+                pass
+
         # Handle standard moves (e.g., "e2e4" or "e7e8")
         if len(move) >= 4:
             try:

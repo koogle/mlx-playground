@@ -3,7 +3,6 @@ import mlx.nn as nn
 from config.model_config import ModelConfig
 from typing import Tuple
 from mlx.utils import tree_map_with_path
-import os
 import json
 from pathlib import Path
 

@@ -68,7 +68,8 @@ class MCTS:
                 return None
 
             # Run MCTS simulations
-            for _ in tqdm(range(self.config.n_simulations), desc="Running MCTS"):
+            # for _ in tqdm(range(self.config.n_simulations), desc="Running MCTS"):
+            for _ in range(self.config.n_simulations):
                 node = root
                 search_path = [node]
 

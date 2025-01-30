@@ -130,9 +130,11 @@ class TestBoard(unittest.TestCase):
 
     def test_blocked_pawn(self):
         """Test blocked pawn movement"""
-        # Block a white pawn
-        self.board.state[2, 0] = 1  # Put a piece in front of a2 pawn
-        moves = self.board.get_valid_moves((1, 0))
+        # Block a white pawn at a2 (1,0) with a black piece at a3 (2,0)
+        self.board.state[6, 2, 0] = (
+            1  # Put a black pawn at a3 to block white pawn at a2
+        )
+        moves = self.board.get_valid_moves((1, 0))  # Get moves for white pawn at a2
         assert len(moves) == 0  # Pawn should have no valid moves
 
     def test_pawn_captures(self):

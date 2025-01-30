@@ -82,6 +82,10 @@ class BitBoard:
         self.state[13, 0, [0, 4, 7]] = 1  # White castling rights
         self.state[13, 7, [0, 4, 7]] = 1  # Black castling rights
 
+        # Add debug print
+        print("\nInitial castling rights:")
+        print(self.state[13])  # Show entire castling rights array
+
     def get_piece_at(self, row: int, col: int) -> Tuple[int, int]:
         """Returns (color, piece_type) at given position, where:
         color: 0 for white, 1 for black
@@ -251,15 +255,18 @@ class BitBoard:
         new_row = row + direction
         if 0 <= new_row < 8:
             # Check if square in front is empty
-            if self.get_piece_at(new_row, col)[0] == -1:
+            if self.get_piece_at(new_row, col)[0] == -1:  # Square must be empty
                 moves.add((new_row, col))
 
-                # Initial two-square move - only if path is clear
-                if (
-                    row == start_row
-                    and self.get_piece_at(new_row + direction, col)[0] == -1
-                ):
-                    moves.add((row + 2 * direction, col))
+                # Initial two-square move - only if path is clear and on starting rank
+                if row == start_row:
+                    two_forward = row + 2 * direction
+                    # Check if both squares are empty
+                    if (
+                        self.get_piece_at(new_row, col)[0] == -1
+                        and self.get_piece_at(two_forward, col)[0] == -1
+                    ):
+                        moves.add((two_forward, col))
 
         # Captures
         for col_delta in [-1, 1]:
@@ -297,9 +304,11 @@ class BitBoard:
 
         # Check pawn attacks
         pawn_channel = 0 if by_color == 0 else 6
-        pawn_direction = 1 if by_color == 0 else -1
+        pawn_direction = (
+            -1 if by_color == 0 else 1
+        )  # CHANGED: Pawns attack in opposite direction
         for col_delta in [-1, 1]:
-            attack_row = row + pawn_direction  # Changed: pawn attacks forward
+            attack_row = row + pawn_direction
             attack_col = col + col_delta
             if 0 <= attack_row < 8 and 0 <= attack_col < 8:
                 if self.state[pawn_channel, attack_row, attack_col]:
@@ -313,15 +322,18 @@ class BitBoard:
             if pattern.sliding:
                 # For sliding pieces, check along each direction until we hit something
                 for row_delta, col_delta in pattern.directions:
-                    current_row, current_col = row + row_delta, col + col_delta
+                    current_row, current_col = (
+                        row - row_delta,
+                        col - col_delta,
+                    )  # CHANGED: Look backwards
                     while 0 <= current_row < 8 and 0 <= current_col < 8:
                         if self.state[channel, current_row, current_col]:
                             return True
                         target_color, _ = self.get_piece_at(current_row, current_col)
                         if target_color != -1:  # Hit any piece
                             break
-                        current_row += row_delta
-                        current_col += col_delta
+                        current_row -= row_delta  # CHANGED: Move backwards
+                        current_col -= col_delta
             else:
                 # For non-sliding pieces, just check the pattern squares
                 for row_delta, col_delta in pattern.directions:
@@ -362,23 +374,41 @@ class BitBoard:
         king_channel = 5 if color == 0 else 11
         rook_channel = 3 if color == 0 else 9
 
-        # Check if king and rook are in original positions
+        # Add debug prints
+        print(f"\nDebugging castling for color {color}:")
+        print(f"King at e1: {self.state[king_channel, row, 4]}")
+        print(f"Rook at h1: {self.state[rook_channel, row, 7]}")
+        print(f"King rights: {self.state[13, row, 4]}")
+        print(f"Rook rights: {self.state[13, row, 7]}")
+
+        # Check pieces
         if not (self.state[king_channel, row, 4] and self.state[rook_channel, row, 7]):
+            print("Failed: King or rook not in position")
             return False
 
-        # Check if castling rights are maintained
+        # Check rights
         if not (self.state[13, row, 4] and self.state[13, row, 7]):
+            print("Failed: Castling rights not maintained")
             return False
 
-        # Check if squares between are empty
-        if any(self.get_piece_at(row, col)[0] != -1 for col in range(5, 7)):
+        # Check empty squares
+        squares_empty = not any(
+            self.get_piece_at(row, col)[0] != -1 for col in range(5, 7)
+        )
+        if not squares_empty:
+            print("Failed: Squares between not empty")
             return False
 
-        # Check if king's path is under attack
+        # Check attacks
         enemy_color = 1 - color
-        return not any(
+        path_safe = not any(
             self.is_square_attacked((row, col), enemy_color) for col in range(4, 7)
         )
+        if not path_safe:
+            print("Failed: Path under attack")
+            return False
+
+        return True
 
     def can_castle_queenside(self, color: int) -> bool:
         """Check if queenside castling is possible"""
@@ -429,3 +459,10 @@ class BitBoard:
                 return False
 
         return True
+
+    def test_blocked_pawn(self):
+        """Test blocked pawn movement"""
+        # Block a white pawn with a black pawn
+        self.state[6, 2, 0] = 1  # Put a black pawn in front of a2 pawn
+        moves = self.get_valid_moves((1, 0))
+        assert len(moves) == 0  # Pawn should have no valid moves

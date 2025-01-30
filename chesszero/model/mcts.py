@@ -55,10 +55,9 @@ class MCTS:
         self.board_cache = {}
         # Add training flag and different thresholds
         self.training = True
-        self.training_prior_threshold = 0.0  # No pruning during training
-        self.eval_prior_threshold = (
-            0.00  # Prune low probability moves during evaluation
-        )
+        # Remove pruning during training completely, very small threshold during evaluation
+        self.training_prior_threshold = -1.0  # Accept all moves during training
+        self.eval_prior_threshold = -1.0  # Accept all moves during evaluation for now
         self.perf_stats = {
             "model_inference": 0.0,
             "node_expansion": 0.0,
@@ -263,7 +262,6 @@ class MCTS:
 
         # Time move validation
         t0 = time.time()
-        # Pre-calculate all valid moves for each piece at once
         piece_moves = {}
         for piece, pos in pieces:
             valid_moves = board.get_valid_moves(pos)
@@ -272,28 +270,31 @@ class MCTS:
                 piece_moves[pos] = valid_moves
         self.perf_stats["move_validation"] += time.time() - t0
 
+        # Enhanced debugging for move generation
+        if self.debug:
+            print("\nExpanding node:")
+            print(f"Number of pieces with valid moves: {len(piece_moves)}")
+            total_moves = sum(len(moves) for moves in piece_moves.values())
+            print(f"Total valid moves: {total_moves}")
+
         # Batch create children
         children = {}
+        moves_pruned = 0
         for from_pos, moves in piece_moves.items():
             for to_pos in moves:
                 move_idx = self.encode_move(from_pos, to_pos)
                 prior = policy[move_idx]
 
-                # Only create board copy if prior is above threshold
-                if prior > (
-                    self.training_prior_threshold
-                    if self.training
-                    else self.eval_prior_threshold
-                ):
-                    t0 = time.time()
-                    child_board = board.copy()
-                    child_board.move_piece(from_pos, to_pos)
-                    self.perf_stats["board_copy"] += time.time() - t0
-                    self.perf_stats["board_copies"] += 1
+                # Create child regardless of prior (removed pruning)
+                t0 = time.time()
+                child_board = board.copy()
+                child_board.move_piece(from_pos, to_pos)
+                self.perf_stats["board_copy"] += time.time() - t0
+                self.perf_stats["board_copies"] += 1
 
-                    children[(from_pos, to_pos)] = Node(
-                        board=child_board, parent=node, prior=prior
-                    )
+                children[(from_pos, to_pos)] = Node(
+                    board=child_board, parent=node, prior=prior
+                )
 
         if not children and self.debug:
             print(f"\nNo children created for node!")
@@ -305,6 +306,13 @@ class MCTS:
             print(
                 f"Prior threshold: {self.training_prior_threshold if self.training else self.eval_prior_threshold}"
             )
+
+            # Print some sample moves and their priors
+            print("\nSample moves and their priors:")
+            for from_pos, moves in piece_moves.items():
+                for to_pos in moves:
+                    move_idx = self.encode_move(from_pos, to_pos)
+                    print(f"Move {from_pos}->{to_pos}: prior={policy[move_idx]:.4f}")
 
         node.children = children
         node.is_expanded = True

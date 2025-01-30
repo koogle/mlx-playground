@@ -334,12 +334,10 @@ class Board:
         return basic_moves
 
     def copy(self):
-        """Optimized board copy"""
-        # Use __new__ to create instance without calling __init__
-        new_board = object.__new__(self.__class__)
+        """Create a deep copy of the board for move simulation."""
+        new_board = Board()  # Create new board with initialization
 
-        # Copy squares array
-        new_board.squares = [[None for _ in range(8)] for _ in range(8)]
+        # Copy squares and create new pieces
         for row in range(8):
             for col in range(8):
                 piece = self.squares[row][col]
@@ -348,43 +346,58 @@ class Board:
                     new_piece.has_moved = piece.has_moved
                     new_board.squares[row][col] = new_piece
 
-        # Copy piece lists and current turn using fast copy methods
-        new_board.white_pieces = [(piece, pos) for piece, pos in self.white_pieces]
-        new_board.black_pieces = [(piece, pos) for piece, pos in self.black_pieces]
+                    # Add to appropriate piece list
+                    if piece.color == Color.WHITE:
+                        new_board.white_pieces.append((new_piece, (row, col)))
+                    else:
+                        new_board.black_pieces.append((new_piece, (row, col)))
+
+        # Copy current turn
         new_board.current_turn = self.current_turn
-        new_board._valid_moves_cache = {}  # Start with empty cache
-        new_board._last_move = self._last_move  # Copy last move
 
         return new_board
 
-    def move_piece(
-        self,
-        from_pos: Tuple[int, int],
-        to_pos: Tuple[int, int],
-    ) -> bool:
+    def move_piece(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> bool:
         """Execute a move and update piece lists. Returns True if successful."""
         piece = self.squares[from_pos[0]][from_pos[1]]
         if not piece:
             return False
 
-        # Handle castling moves
-        if piece.piece_type == PieceType.KING and abs(to_pos[1] - from_pos[1]) == 2:
-            row = from_pos[0]
-            # Kingside castling
-            if to_pos[1] > from_pos[1]:
-                if not self.make_move((row, 7), (row, to_pos[1] - 1)):  # Move rook
-                    return False
-            # Queenside castling
-            else:
-                if not self.make_move((row, 0), (row, to_pos[1] + 1)):  # Move rook
-                    return False
+        # Handle captured piece
+        captured_piece = self.squares[to_pos[0]][to_pos[1]]
+        if captured_piece:
+            # Never allow king captures
+            if captured_piece.piece_type == PieceType.KING:
+                return False
 
-        # Make the main move
-        if not self.make_move(from_pos, to_pos):
-            return False
+            # Remove captured piece from opponent's piece list
+            piece_list = (
+                self.black_pieces if piece.color == Color.WHITE else self.white_pieces
+            )
+            for i, (p, pos) in enumerate(piece_list):
+                if pos == to_pos:
+                    piece_list.pop(i)
+                    break
 
-        self._valid_moves_cache = {}  # Invalidate cache after move
-        self._last_move = (from_pos, to_pos)
+        # Update board state
+        self.squares[to_pos[0]][to_pos[1]] = piece
+        self.squares[from_pos[0]][from_pos[1]] = None
+
+        # Update piece lists
+        piece_list = (
+            self.white_pieces if piece.color == Color.WHITE else self.black_pieces
+        )
+        for i, (p, pos) in enumerate(piece_list):
+            if pos == from_pos:
+                piece_list[i] = (piece, to_pos)
+                break
+
+        piece.has_moved = True
+
+        # Update current turn
+        self.current_turn = (
+            Color.BLACK if self.current_turn == Color.WHITE else Color.WHITE
+        )
 
         return True
 

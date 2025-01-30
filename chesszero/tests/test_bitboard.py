@@ -43,8 +43,13 @@ class TestBoard(unittest.TestCase):
         assert len(moves) == 2  # Only these moves are possible initially
 
     def test_check_detection(self):
-        # Move white queen to attack black king
-        self.board.make_move((0, 3), (4, 7))
+        """Test check detection with queen attacking king"""
+        # Clear the pawns blocking the path
+        self.board.state[0, 1, 5] = 0  # Remove white f2 pawn
+        self.board.state[6, 6, 7] = 0  # Remove black h7 pawn
+
+        # Now move white queen to attack black king
+        self.board.make_move((0, 3), (4, 7))  # Moving from d1 to h5
         assert self.board.is_in_check(1)  # Black should be in check
         assert not self.board.is_in_check(0)  # White should not be in check
 

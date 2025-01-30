@@ -113,8 +113,17 @@ class BitBoard:
         from_row, from_col = from_pos
         to_row, to_col = to_pos
 
-        # Get piece details
+        # Add debug prints
+        print(f"\nAttempting move from ({from_row},{from_col}) to ({to_row},{to_col})")
         color, piece_type = self.get_piece_at(from_row, from_col)
+        print(f"Piece at source: color={color}, type={piece_type}")
+
+        # After move
+        print("\nBoard state after move:")
+        for c in range(12):
+            if np.any(self.state[c]):
+                print(f"Channel {c}:\n{self.state[c]}")
+
         if color == -1 or color != self.get_current_turn():  # No piece or wrong color
             return False
 
@@ -348,7 +357,10 @@ class BitBoard:
     def is_in_check(self, color: int) -> bool:
         """Check if the given color's king is in check"""
         king_pos = self.get_king_position(color)
-        return self.is_square_attacked(king_pos, 1 - color)
+        print(f"\nChecking if {color} king at {king_pos} is in check")
+        is_attacked = self.is_square_attacked(king_pos, 1 - color)
+        print(f"Is attacked: {is_attacked}")
+        return is_attacked
 
     def _filter_valid_moves(
         self, pos: Tuple[int, int], moves: Set[Tuple[int, int]]

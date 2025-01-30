@@ -1,6 +1,7 @@
 import numpy as np
 from chess_engine.game import ChessGame
 from chess_engine.board import Color
+from config.model_config import ModelConfig
 from utils.random_player import RandomPlayer
 from model.mcts import MCTS
 from utils.board_utils import encode_board
@@ -54,19 +55,17 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
     return states, policies, values
 
 
-def generate_games(mcts: MCTS, config) -> List[Tuple]:
-    """Generate multiple self-play games"""
-    games_data = []
+def generate_games(mcts, config: ModelConfig) -> List:
+    """Generate multiple self-play games sequentially"""
+    print(f"Generating {config.n_games_per_iteration} games")
 
-    for game_idx in range(config.n_games_per_iteration):
-        if game_idx % 10 == 0:  # Progress update
-            print(f"Generating game {game_idx + 1}/{config.n_games_per_iteration}")
+    all_games = []
+    for i in range(config.n_games_per_iteration):
+        print(f"\nGenerating game {i+1}/{config.n_games_per_iteration}")
+        states, policies, values = play_self_play_game(mcts, config)
+        all_games.append((states, policies, values))
 
-        game_data = play_self_play_game(mcts, config)
-        if game_data:
-            games_data.append(game_data)
-
-    return games_data
+    return all_games
 
 
 def create_batches(games: List[Tuple], batch_size: int):

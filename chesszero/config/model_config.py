@@ -18,7 +18,7 @@ class ModelConfig:
     policy_output_dim: int = 4672  # All possible moves: 8x8x73
 
     # MCTS
-    n_simulations: int = 20  # 100  # Number of MCTS simulations per move
+    n_simulations: int = 1000  # Number of MCTS simulations per move
     c_puct: float = 1.0  # Exploration constant
     dirichlet_alpha: float = 0.3  # Dirichlet noise parameter
     dirichlet_epsilon: float = 0.25  # Weight of Dirichlet noise
@@ -31,8 +31,8 @@ class ModelConfig:
     momentum: float = 0.9
     weight_decay: float = 1e-4
     """
-    batch_size: int = 1
-    n_epochs: int = 10
+    batch_size: int = 2048
+    n_epochs: int = 500
     learning_rate: float = 0.2
     momentum: float = 0.9
     weight_decay: float = 1e-4

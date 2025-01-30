@@ -14,35 +14,54 @@ from utils.random_player import RandomPlayer
 from utils.board_utils import encode_board
 from config.model_config import ModelConfig
 import numpy as np
+from pathlib import Path
 
 
 class Trainer:
     """Handles training, self-play, and evaluation of the chess model"""
 
-    def __init__(self, config: ModelConfig, start_with_random: bool = False):
+    def __init__(
+        self,
+        config: ModelConfig,
+        checkpoint_dir: str = "checkpoints",
+        resume_epoch: Optional[int] = None,
+    ):
         self.config = config
-        self.model = ChessNet(config)
-        self.optimizer = optim.SGD(
-            learning_rate=config.learning_rate,
-            momentum=config.momentum,
-            weight_decay=config.weight_decay,
-        )
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        if resume_epoch is not None:
+            print(f"Resuming from epoch {resume_epoch}")
+            self.model, state = ChessNet.load_checkpoint(checkpoint_dir, resume_epoch)
+            self.start_epoch = resume_epoch + 1
+            # Recreate optimizer with saved state if needed
+            self.optimizer = optim.SGD(
+                learning_rate=config.learning_rate,
+                momentum=config.momentum,
+                weight_decay=config.weight_decay,
+            )
+            if state.get("optimizer_state"):
+                self.optimizer.state.update(state["optimizer_state"])
+        else:
+            self.model = ChessNet(config)
+            self.start_epoch = 0
+            self.optimizer = optim.SGD(
+                learning_rate=config.learning_rate,
+                momentum=config.momentum,
+                weight_decay=config.weight_decay,
+            )
+
         self.mcts = MCTS(self.model, config)
-        self.start_with_random = start_with_random
-        self.random_player = RandomPlayer()
 
     def train(self, n_epochs: Optional[int] = None):
         """Main training loop"""
         n_epochs = n_epochs or self.config.n_epochs
 
-        for epoch in range(n_epochs):
+        for epoch in range(self.start_epoch, n_epochs):
             print(f"\nEpoch {epoch + 1}/{n_epochs}")
 
-            # Generate training games
-            print("Generating training games...")
-            if (
-                self.start_with_random and epoch < 5
-            ):  # Use random opponent for first 5 epochs
+            # Initial training against random opponent
+            if epoch < 5:  # First 5 epochs
                 print("Playing against random opponent for initial training...")
                 games = generate_random_opponent_games(self.mcts, self.config)
             else:
@@ -61,14 +80,17 @@ class Trainer:
             avg_loss = total_loss / n_batches if n_batches > 0 else 0
             print(f"Average loss: {avg_loss:.4f}")
 
+            # Save checkpoint every N epochs
+            if (epoch + 1) % 5 == 0:
+                print("Saving checkpoint...")
+                self.model.save_checkpoint(
+                    self.checkpoint_dir, epoch + 1, optimizer_state=self.optimizer.state
+                )
+
             # Evaluate periodically
             if (epoch + 1) % 5 == 0:
                 win_rate = self.evaluate()
                 print(f"Win rate vs random: {win_rate:.2%}")
-
-                # Early success check
-                if epoch < 20 and win_rate > 0.8:
-                    print("Early success achieved!")
 
     def get_policy_distribution(self, root_node):
         """Convert MCTS visit counts to policy distribution"""

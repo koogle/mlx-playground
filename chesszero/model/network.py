@@ -3,6 +3,9 @@ import mlx.nn as nn
 from config.model_config import ModelConfig
 from typing import Tuple
 from mlx.utils import tree_map_with_path
+import os
+import json
+from pathlib import Path
 
 
 class ResidualBlock(nn.Module):
@@ -219,3 +222,46 @@ class ChessNet(nn.Module):
         total_loss = policy_loss + value_loss
 
         return total_loss
+
+    def save_checkpoint(self, checkpoint_dir: str, epoch: int, optimizer_state=None):
+        """Save model checkpoint and training state"""
+        checkpoint_dir = Path(checkpoint_dir)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save model parameters
+        model_path = checkpoint_dir / f"model_epoch_{epoch}.safetensors"
+
+        # Save model weights
+        self.save_weights(str(model_path))
+
+        # Save training state
+        state = {
+            "epoch": epoch,
+            "optimizer_state": optimizer_state,
+            "config": vars(self.config),
+        }
+        state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
+        with open(state_path, "w") as f:
+            json.dump(state, f)
+
+    @classmethod
+    def load_checkpoint(
+        cls, checkpoint_dir: str, epoch: int
+    ) -> Tuple["ChessNet", dict]:
+        """Load model checkpoint and return model and training state"""
+        checkpoint_dir = Path(checkpoint_dir)
+
+        # Load model parameters
+        model_path = checkpoint_dir / f"model_epoch_{epoch}.safetensors"
+
+        # Load training state
+        state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
+        with open(state_path) as f:
+            state = json.load(f)
+
+        # Recreate model with saved config
+        config = ModelConfig(**state["config"])
+        model = cls(config)
+        model.load_weights(str(model_path))
+
+        return model, state

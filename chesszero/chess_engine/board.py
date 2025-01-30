@@ -87,6 +87,38 @@ class Board:
         self.white_pieces = []
         self.black_pieces = []
         self.current_turn = Color.WHITE
+        self.initialize_board()
+
+    def initialize_board(self):
+        """Initialize the board with pieces in starting positions."""
+        # Initialize pawns
+        for col in range(8):
+            white_pawn = Piece(PieceType.PAWN, Color.WHITE)
+            black_pawn = Piece(PieceType.PAWN, Color.BLACK)
+            self.squares[1][col] = white_pawn
+            self.squares[6][col] = black_pawn
+            self.white_pieces.append((white_pawn, (1, col)))
+            self.black_pieces.append((black_pawn, (6, col)))
+
+        # Initialize other pieces
+        piece_order = [
+            PieceType.ROOK,
+            PieceType.KNIGHT,
+            PieceType.BISHOP,
+            PieceType.QUEEN,
+            PieceType.KING,
+            PieceType.BISHOP,
+            PieceType.KNIGHT,
+            PieceType.ROOK,
+        ]
+
+        for col in range(8):
+            white_piece = Piece(piece_order[col], Color.WHITE)
+            black_piece = Piece(piece_order[col], Color.BLACK)
+            self.squares[0][col] = white_piece
+            self.squares[7][col] = black_piece
+            self.white_pieces.append((white_piece, (0, col)))
+            self.black_pieces.append((black_piece, (7, col)))
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
         """Get all legal moves for a piece considering check and pins."""
@@ -152,28 +184,54 @@ class Board:
             moves = self.get_basic_moves(pos)
             attacked_squares.update(moves)
 
-            # Check for pins and attacks from sliding pieces
+            # Only sliding pieces can pin
             if piece.piece_type.is_sliding_piece():
-                ray_squares = self._get_ray_to_king(pos, king_pos)
-                if ray_squares:  # Piece is aligned with king
-                    pinned_piece = self._find_pinned_piece(pos, king_pos, color)
-                    if pinned_piece:
-                        pin_lines[pinned_piece] = ray_squares
-                    elif king_pos in moves:
+                # Check if piece is aligned with king
+                if self._are_aligned(pos, king_pos):
+                    # Look for pieces between attacker and king
+                    squares_between = self._get_squares_between(pos, king_pos)
+                    pieces_between = [
+                        (square, self.squares[square[0]][square[1]])
+                        for square in squares_between
+                        if self.squares[square[0]][square[1]] is not None
+                    ]
+
+                    # If exactly one friendly piece is between attacker and king, it's pinned
+                    friendly_pieces = [
+                        (square, p) for square, p in pieces_between if p.color == color
+                    ]
+                    if len(pieces_between) == 1 and len(friendly_pieces) == 1:
+                        pinned_pos = friendly_pieces[0][0]
+                        # Pin line includes attacker position and squares between
+                        pin_lines[pinned_pos] = squares_between | {pos}
+                    elif len(pieces_between) == 0 and king_pos in moves:
+                        # Direct attack on king
                         attacking_pieces.append((piece, pos))
             elif king_pos in moves:
+                # Direct attack from non-sliding piece
                 attacking_pieces.append((piece, pos))
 
         return AttackInfo(attacked_squares, attacking_pieces, pin_lines)
 
-    def _get_ray_to_king(
-        self, from_pos: Tuple[int, int], king_pos: Tuple[int, int]
-    ) -> Set[Tuple[int, int]]:
-        """Get all squares in the ray from a piece to the king, if they're aligned."""
-        row_diff = king_pos[0] - from_pos[0]
-        col_diff = king_pos[1] - from_pos[1]
+    def _are_aligned(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> bool:
+        """Check if two positions are aligned (same row, column, or diagonal)."""
+        row_diff = pos2[0] - pos1[0]
+        col_diff = pos2[1] - pos1[1]
 
-        # Check if piece and king are aligned (same row, column, or diagonal)
+        return (
+            row_diff == 0  # Same row
+            or col_diff == 0  # Same column
+            or abs(row_diff) == abs(col_diff)  # Diagonal
+        )
+
+    def _get_ray_between(
+        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]
+    ) -> Set[Tuple[int, int]]:
+        """Get all squares between two positions if they're aligned (including to_pos, excluding from_pos)."""
+        row_diff = to_pos[0] - from_pos[0]
+        col_diff = to_pos[1] - from_pos[1]
+
+        # Check if positions are aligned
         if row_diff == 0:  # Same row
             step = (0, 1 if col_diff > 0 else -1)
         elif col_diff == 0:  # Same column
@@ -181,15 +239,15 @@ class Board:
         elif abs(row_diff) == abs(col_diff):  # Diagonal
             step = (1 if row_diff > 0 else -1, 1 if col_diff > 0 else -1)
         else:
-            return set()
+            return set()  # Not aligned
 
         squares = set()
         curr = (from_pos[0] + step[0], from_pos[1] + step[1])
-        while 0 <= curr[0] < 8 and 0 <= curr[1] < 8:
+
+        while curr != to_pos:
             squares.add(curr)
-            if curr == king_pos:
-                break
             curr = (curr[0] + step[0], curr[1] + step[1])
+        squares.add(to_pos)  # Include the target position
 
         return squares
 
@@ -226,12 +284,17 @@ class Board:
         # Pawn moves
         if piece.piece_type == PieceType.PAWN:
             direction = 1 if piece.color == Color.WHITE else -1
+
             # Forward move
-            if 0 <= row + direction < 8 and not self.squares[row + direction][col]:
-                moves.add((row + direction, col))
+            new_row = row + direction
+            if 0 <= new_row < 8 and not self.squares[new_row][col]:
+                moves.add((new_row, col))
                 # Initial two-square move
-                if not piece.has_moved and not self.squares[row + 2 * direction][col]:
-                    moves.add((row + 2 * direction, col))
+                if not piece.has_moved:
+                    two_forward = row + 2 * direction
+                    if 0 <= two_forward < 8 and not self.squares[two_forward][col]:
+                        moves.add((two_forward, col))
+
             # Captures
             for col_offset in [-1, 1]:
                 new_col = col + col_offset

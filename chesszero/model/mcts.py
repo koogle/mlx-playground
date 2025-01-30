@@ -34,13 +34,13 @@ class Node:
         best_move = None
         best_child = None
 
+        # Calculate these once instead of for each child
         total_visits = max(1, self.visit_count)
+        sqrt_total_visits = math.sqrt(total_visits)
 
         for move, child in self.children.items():
             q_value = -child.value() if child.visit_count > 0 else 0
-            u_value = (
-                c_puct * child.prior * math.sqrt(total_visits) / (1 + child.visit_count)
-            )
+            u_value = c_puct * child.prior * sqrt_total_visits / (1 + child.visit_count)
             score = q_value + u_value
 
             if score > best_score:
@@ -67,28 +67,56 @@ class MCTS:
             if not root.children:
                 return None
 
-            # Run MCTS simulations
-            # for _ in tqdm(range(self.config.n_simulations), desc="Running MCTS"):
-            for _ in range(self.config.n_simulations):
-                node = root
-                search_path = [node]
+            # Run MCTS simulations in batches
+            batch_size = min(
+                32, self.config.n_simulations
+            )  # Adjust batch size as needed
+            for _ in range(0, self.config.n_simulations, batch_size):
+                search_paths = []
+                nodes_to_expand = []
 
-                # Selection
-                while node.is_expanded:
-                    move, child = node.select_child(self.config.c_puct)
-                    if not move:  # No valid moves
-                        break
-                    node = child
-                    search_path.append(node)
+                # Collect batch_size paths
+                for _ in range(batch_size):
+                    node = root
+                    search_path = [node]
 
-                # Expansion and evaluation
-                if node.board.is_game_over():
-                    value = node.board.get_game_result()
-                else:
-                    value = self.expand_and_evaluate(node)
+                    # Selection
+                    while node.is_expanded:
+                        move, child = node.select_child(self.config.c_puct)
+                        if not move:  # No valid moves
+                            break
+                        node = child
+                        search_path.append(node)
+
+                    if not node.board.is_game_over():
+                        nodes_to_expand.append(node)
+                    search_paths.append((search_path, node))
+
+                # Batch process expansions
+                if nodes_to_expand:
+                    # Prepare batch of board states
+                    encoded_boards = mx.stack(
+                        [
+                            encode_board(node.board)[None, ...]
+                            for node in nodes_to_expand
+                        ]
+                    )
+
+                    # Get model predictions in batch
+                    policies, values = self.model(encoded_boards)
+
+                    # Process each node with its predictions
+                    for node, policy, value in zip(nodes_to_expand, policies, values):
+                        self._expand_node(node, policy[0], value[0])
 
                 # Backup
-                self.backup(search_path, value)
+                for search_path, end_node in search_paths:
+                    value = (
+                        end_node.board.get_game_result()
+                        if end_node.board.is_game_over()
+                        else end_node.value()
+                    )
+                    self.backup(search_path, value)
 
             # Select most visited move after search
             return max(root.children.items(), key=lambda x: x[1].visit_count)[0]
@@ -102,26 +130,7 @@ class MCTS:
         encoded_board = encode_board(node.board)
         policy, value = self.model(encoded_board[None, ...])
 
-        # Add children for all legal moves
-        pieces = (
-            node.board.white_pieces
-            if node.board.current_turn == Color.WHITE
-            else node.board.black_pieces
-        )
-
-        for piece, pos in pieces:
-            valid_moves = node.board.get_valid_moves(pos)
-            for to_pos in valid_moves:
-                move_idx = self.encode_move(pos, to_pos)
-                prior = policy[0, move_idx]
-
-                child_board = node.board.copy()
-                child_board.move_piece(pos, to_pos)
-                node.children[(pos, to_pos)] = Node(
-                    board=child_board, parent=node, prior=prior
-                )
-
-        node.is_expanded = True
+        self._expand_node(node, policy[0], value[0])
         return value[0]
 
     def backup(self, search_path: List[Node], value: float):
@@ -136,3 +145,27 @@ class MCTS:
         from_idx = from_pos[0] * 8 + from_pos[1]
         to_idx = to_pos[0] * 8 + to_pos[1]
         return from_idx * 64 + to_idx
+
+    def _expand_node(self, node: Node, policy, value):
+        """Helper method to expand a single node with given policy and value"""
+        pieces = (
+            node.board.white_pieces
+            if node.board.current_turn == Color.WHITE
+            else node.board.black_pieces
+        )
+
+        for piece, pos in pieces:
+            valid_moves = node.board.get_valid_moves(pos)
+            for to_pos in valid_moves:
+                move_idx = self.encode_move(pos, to_pos)
+                prior = policy[move_idx]
+
+                child_board = node.board.copy()
+                child_board.move_piece(pos, to_pos)
+                node.children[(pos, to_pos)] = Node(
+                    board=child_board, parent=node, prior=prior
+                )
+
+        node.is_expanded = True
+        node.value_sum = value
+        node.visit_count = 1

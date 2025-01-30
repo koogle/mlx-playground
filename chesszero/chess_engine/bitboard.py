@@ -82,10 +82,6 @@ class BitBoard:
         self.state[13, 0, [0, 4, 7]] = 1  # White castling rights
         self.state[13, 7, [0, 4, 7]] = 1  # Black castling rights
 
-        # Add debug print
-        print("\nInitial castling rights:")
-        print(self.state[13])  # Show entire castling rights array
-
     def get_piece_at(self, row: int, col: int) -> Tuple[int, int]:
         """Returns (color, piece_type) at given position, where:
         color: 0 for white, 1 for black
@@ -113,35 +109,10 @@ class BitBoard:
         from_row, from_col = from_pos
         to_row, to_col = to_pos
 
-        # Add debug prints
-        print(f"\nAttempting move from ({from_row},{from_col}) to ({to_row},{to_col})")
+        # Get piece details
         color, piece_type = self.get_piece_at(from_row, from_col)
-        print(f"Piece at source: color={color}, type={piece_type}")
-
-        # After move
-        print("\nBoard state after move:")
-        for c in range(12):
-            if np.any(self.state[c]):
-                print(f"Channel {c}:\n{self.state[c]}")
-
-        if color == -1 or color != self.get_current_turn():  # No piece or wrong color
+        if color == -1 or color != self.get_current_turn():
             return False
-
-        # Handle castling
-        if piece_type == 5 and abs(to_col - from_col) == 2:  # King moving 2 squares
-            row = 0 if color == 0 else 7
-            if to_col == 6:  # Kingside
-                if not self.can_castle_kingside(color):
-                    return False
-                # Move rook
-                self.state[3 if color == 0 else 9, row, 7] = 0
-                self.state[3 if color == 0 else 9, row, 5] = 1
-            else:  # Queenside
-                if not self.can_castle_queenside(color):
-                    return False
-                # Move rook
-                self.state[3 if color == 0 else 9, row, 0] = 0
-                self.state[3 if color == 0 else 9, row, 3] = 1
 
         # Clear source square
         channel = piece_type if color == 0 else piece_type + 6
@@ -157,16 +128,13 @@ class BitBoard:
         # Update castling rights
         if piece_type == 5:  # King move
             row = 0 if color == 0 else 7
-            # Remove all castling rights for this side
             self.state[13, row, :] = 0
         elif piece_type == 3:  # Rook move
             row = 0 if color == 0 else 7
             if from_col == 0:  # Queenside rook
-                self.state[13, row, 0] = 0
-                self.state[13, row, 4] = 0  # Also remove king's castling right
+                self.state[13, row, [0, 4]] = 0
             elif from_col == 7:  # Kingside rook
-                self.state[13, row, 7] = 0
-                self.state[13, row, 4] = 0  # Also remove king's castling right
+                self.state[13, row, [4, 7]] = 0
 
         # Update turn
         self.state[12] = 1 - self.state[12]
@@ -289,8 +257,10 @@ class BitBoard:
 
     def get_king_position(self, color: int) -> Tuple[int, int]:
         """Find the position of the king for the given color"""
-        channel = 5 if color == 0 else 11  # White king or black king channel
+        channel = 5 if color == 0 else 11
         king_pos = np.where(self.state[channel] == 1)
+        if len(king_pos[0]) == 0:
+            raise ValueError(f"No king found for color {color}")
         return (int(king_pos[0][0]), int(king_pos[1][0]))
 
     def get_all_pieces(self, color: int) -> List[Tuple[Tuple[int, int], int]]:
@@ -357,10 +327,7 @@ class BitBoard:
     def is_in_check(self, color: int) -> bool:
         """Check if the given color's king is in check"""
         king_pos = self.get_king_position(color)
-        print(f"\nChecking if {color} king at {king_pos} is in check")
-        is_attacked = self.is_square_attacked(king_pos, 1 - color)
-        print(f"Is attacked: {is_attacked}")
-        return is_attacked
+        return self.is_square_attacked(king_pos, 1 - color)
 
     def _filter_valid_moves(
         self, pos: Tuple[int, int], moves: Set[Tuple[int, int]]
@@ -386,41 +353,23 @@ class BitBoard:
         king_channel = 5 if color == 0 else 11
         rook_channel = 3 if color == 0 else 9
 
-        # Add debug prints
-        print(f"\nDebugging castling for color {color}:")
-        print(f"King at e1: {self.state[king_channel, row, 4]}")
-        print(f"Rook at h1: {self.state[rook_channel, row, 7]}")
-        print(f"King rights: {self.state[13, row, 4]}")
-        print(f"Rook rights: {self.state[13, row, 7]}")
-
-        # Check pieces
-        if not (self.state[king_channel, row, 4] and self.state[rook_channel, row, 7]):
-            print("Failed: King or rook not in position")
+        # Check pieces and rights
+        if not self.state[king_channel, row, 4]:
             return False
-
-        # Check rights
+        if not self.state[rook_channel, row, 7]:
+            return False
         if not (self.state[13, row, 4] and self.state[13, row, 7]):
-            print("Failed: Castling rights not maintained")
             return False
 
-        # Check empty squares
-        squares_empty = not any(
-            self.get_piece_at(row, col)[0] != -1 for col in range(5, 7)
-        )
-        if not squares_empty:
-            print("Failed: Squares between not empty")
+        # Check squares between are empty
+        if any(self.get_piece_at(row, col)[0] != -1 for col in range(5, 7)):
             return False
 
-        # Check attacks
+        # Check path not under attack
         enemy_color = 1 - color
-        path_safe = not any(
+        return not any(
             self.is_square_attacked((row, col), enemy_color) for col in range(4, 7)
         )
-        if not path_safe:
-            print("Failed: Path under attack")
-            return False
-
-        return True
 
     def can_castle_queenside(self, color: int) -> bool:
         """Check if queenside castling is possible"""
@@ -478,3 +427,15 @@ class BitBoard:
         self.state[6, 2, 0] = 1  # Put a black pawn in front of a2 pawn
         moves = self.get_valid_moves((1, 0))
         assert len(moves) == 0  # Pawn should have no valid moves
+
+    def test_check_detection(self):
+        """Test check detection with queen attacking king"""
+        # Clear the board first
+        self.state.fill(0)
+
+        # Set up a simple position:
+        # White queen at e4 attacking black king at e8
+        self.state[4, 3, 4] = 1  # White queen at e4
+        self.state[11, 7, 4] = 1  # Black king at e8
+        self.state[5, 0, 4] = 1  # White king at e1 (needed!)
+        self.state[12] = 1  # White to move

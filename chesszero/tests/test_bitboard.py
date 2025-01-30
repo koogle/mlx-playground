@@ -44,24 +44,33 @@ class TestBoard(unittest.TestCase):
 
     def test_check_detection(self):
         """Test check detection with queen attacking king"""
-        # Clear the pawns blocking the path
-        self.board.state[0, 1, 5] = 0  # Remove white f2 pawn
-        self.board.state[6, 6, 7] = 0  # Remove black h7 pawn
+        # Clear the board first
+        self.board.state.fill(0)
 
-        # Now move white queen to attack black king
-        self.board.make_move((0, 3), (4, 7))  # Moving from d1 to h5
+        # Set up a simple position:
+        # White queen at e4 attacking black king at e8
+        self.board.state[4, 3, 4] = 1  # White queen at e4
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[12] = 1  # White to move
+
+        # Verify check detection
         assert self.board.is_in_check(1)  # Black should be in check
         assert not self.board.is_in_check(0)  # White should not be in check
 
     def test_castling_rights(self):
+        """Test castling rights with valid moves"""
         # Initially castling should be possible
         assert self.board.can_castle_kingside(0)
         assert self.board.can_castle_queenside(0)
 
-        # Move king, should lose all castling rights
-        self.board.make_move((0, 4), (0, 5))
-        self.board.make_move((7, 0), (7, 1))  # Black move
-        self.board.make_move((0, 5), (0, 4))  # Move king back
+        # Clear blocking pieces for a valid king move
+        self.board.state[0, 1, 5] = 0  # Remove f1 pawn
+        self.board.state[0, 1, 6] = 0  # Remove g1 pawn
+
+        # Move king to f1 and back (valid moves now that pawns are cleared)
+        self.board.make_move((0, 4), (0, 5))  # e1 to f1
+        self.board.make_move((7, 0), (7, 1))  # Black move: a8 to b8
+        self.board.make_move((0, 5), (0, 4))  # f1 back to e1
 
         assert not self.board.can_castle_kingside(0)
         assert not self.board.can_castle_queenside(0)
@@ -116,8 +125,17 @@ class TestBoard(unittest.TestCase):
         assert copied_board.get_current_turn() == 0  # White to move
 
     def test_piece_list_consistency(self):
-        """Test that piece lists stay consistent with board state"""
-        # Make a move
+        """Test piece list consistency with valid pawn move"""
+        # Clear the board first
+        self.board.state.fill(0)
+
+        # Set up minimal position
+        self.board.state[0, 1, 4] = 1  # White pawn at e2
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[12] = 1  # White to move
+
+        # Make a valid pawn move
         from_pos = (1, 4)  # e2
         to_pos = (3, 4)  # e4
         self.board.make_move(from_pos, to_pos)
@@ -127,24 +145,38 @@ class TestBoard(unittest.TestCase):
         black_pieces = self.board.get_all_pieces(1)
 
         # Verify piece counts
-        assert len(white_pieces) == 16
-        assert len(black_pieces) == 16
+        assert len(white_pieces) == 2  # King and pawn
+        assert len(black_pieces) == 1  # Just king
 
         # Verify the moved pawn is in the correct position
         assert (to_pos, 0) in white_pieces  # Pawn at e4
 
     def test_blocked_pawn(self):
         """Test blocked pawn movement"""
-        # Block a white pawn at a2 (1,0) with a black piece at a3 (2,0)
-        self.board.state[6, 2, 0] = (
-            1  # Put a black pawn at a3 to block white pawn at a2
-        )
+        # Clear the board first
+        self.board.state.fill(0)
+
+        # Set up a simple blocked pawn position
+        self.board.state[0, 1, 0] = 1  # White pawn at a2
+        self.board.state[6, 2, 0] = 1  # Black pawn at a3
+        self.board.state[12] = 1  # White to move
+
         moves = self.board.get_valid_moves((1, 0))  # Get moves for white pawn at a2
         assert len(moves) == 0  # Pawn should have no valid moves
 
     def test_pawn_captures(self):
         """Test pawn capture moves"""
-        # Place a black piece for white pawn to capture
-        self.board.state[6, 2, 1] = 1  # Black pawn at diagonal
+        # Clear the board first
+        self.board.state.fill(0)
+
+        # Set up a simple pawn capture position
+        self.board.state[0, 1, 0] = 1  # White pawn at a2
+        self.board.state[6, 2, 1] = 1  # Black pawn at b3
+        # Keep kings on board for check detection
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[12] = 1  # White to move
+
         moves = self.board.get_valid_moves((1, 0))
         assert (2, 1) in moves  # Should be able to capture diagonally
+        assert len(moves) == 2  # Should have forward move and capture

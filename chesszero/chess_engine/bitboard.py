@@ -43,6 +43,10 @@ class BitBoard:
     def __init__(self):
         self.state = np.zeros((19, 8, 8), dtype=np.float32)
         self.initialize_board()
+        # Add pre-computed attack tables
+        self.knight_attacks = self._init_knight_attacks()
+        self.king_attacks = self._init_king_attacks()
+        self.pawn_attacks = self._init_pawn_attacks()
 
     def initialize_board(self):
         """Set up the initial chess position"""
@@ -187,11 +191,27 @@ class BitBoard:
         if color == -1 or color != self.get_current_turn():
             return set()
 
+        # Create compact position hash using only piece positions
+        pieces_hash = hash(tuple(map(tuple, np.where(self.state[:12] > 0))))
+        cache_key = (pieces_hash, pos)
+
+        if cache_key in self._moves_cache:
+            return self._moves_cache[cache_key]
+
         moves = set()
 
         # Handle pawns separately due to special rules
         if piece_type == 0:  # Pawn
             moves.update(self._get_pawn_moves(row, col, color))
+        elif piece_type == 1:  # Knight
+            # Use pre-computed attacks
+            valid = self.knight_attacks[row, col]
+            # Filter occupied squares
+            moves.update(
+                (r, c)
+                for r, c in zip(*np.where(valid))
+                if self.get_piece_at(r, c)[0] != color
+            )
         else:
             pattern = PIECE_PATTERNS[piece_type]
             # Generate moves based on piece pattern
@@ -213,6 +233,7 @@ class BitBoard:
         # Filter moves that would leave king in check
         valid_moves = self._filter_valid_moves(pos, moves)
 
+        self._moves_cache[cache_key] = valid_moves
         return valid_moves
 
     def _get_sliding_moves(
@@ -369,20 +390,26 @@ class BitBoard:
     def _filter_valid_moves(
         self, pos: Tuple[int, int], moves: Set[Tuple[int, int]]
     ) -> Set[Tuple[int, int]]:
-        """Filter moves that would leave the king in check"""
-        color, _ = self.get_piece_at(*pos)
-        valid_moves = set()
+        """Vectorized check validation"""
+        if not moves:
+            return moves
 
-        for move in moves:
-            # Try the move
-            board_copy = self.copy()
-            board_copy.make_move(pos, move)
+        # Convert moves to arrays
+        move_rows, move_cols = zip(*moves)
+        moves_array = np.array([move_rows, move_cols])
 
-            # If it doesn't leave us in check, it's valid
-            if not board_copy.is_in_check(color):
-                valid_moves.add(move)
+        # Create board copies in one operation
+        boards = np.tile(self.state, (len(moves), 1, 1, 1))
 
-        return valid_moves
+        # Make all moves at once
+        for i, (to_row, to_col) in enumerate(zip(move_rows, move_cols)):
+            self._make_move_on_board(boards[i], pos, (to_row, to_col))
+
+        # Check all positions for check in parallel
+        valid_mask = ~self._is_in_check_vectorized(boards, self.get_current_turn())
+
+        # Filter moves using mask
+        return {move for move, valid in zip(moves, valid_mask) if valid}
 
     def can_castle_kingside(self, color: int) -> bool:
         """Check if kingside castling is possible"""
@@ -584,3 +611,41 @@ class BitBoard:
         board_str += f"\n{turn} to move"
 
         return board_str
+
+    def get_hash(self) -> int:
+        """Fast hashing of board state using numpy"""
+        # Convert float32 array to bytes and hash
+        return hash(self.state.tobytes())
+
+    def _init_knight_attacks(self):
+        """Pre-compute knight attack patterns for each square"""
+        attacks = np.zeros((8, 8, 8, 8), dtype=np.bool_)  # from_square -> to_squares
+        for row in range(8):
+            for col in range(8):
+                for dr, dc in PIECE_PATTERNS[1].directions:  # Knight patterns
+                    new_row, new_col = row + dr, col + dc
+                    if 0 <= new_row < 8 and 0 <= new_col < 8:
+                        attacks[row, col, new_row, new_col] = True
+        return attacks
+
+    def _init_king_attacks(self):
+        """Pre-compute king attack patterns for each square"""
+        attacks = np.zeros((8, 8, 8, 8), dtype=np.bool_)  # from_square -> to_squares
+        for row in range(8):
+            for col in range(8):
+                for dr, dc in PIECE_PATTERNS[5].directions:  # King patterns
+                    new_row, new_col = row + dr, col + dc
+                    if 0 <= new_row < 8 and 0 <= new_col < 8:
+                        attacks[row, col, new_row, new_col] = True
+        return attacks
+
+    def _init_pawn_attacks(self):
+        """Pre-compute pawn attack patterns for each square"""
+        attacks = np.zeros((8, 8, 8, 8), dtype=np.bool_)  # from_square -> to_squares
+        for row in range(8):
+            for col in range(8):
+                for dr, dc in PIECE_PATTERNS[0].directions:  # Pawn patterns
+                    new_row, new_col = row + dr, col + dc
+                    if 0 <= new_row < 8 and 0 <= new_col < 8:
+                        attacks[row, col, new_row, new_col] = True
+        return attacks

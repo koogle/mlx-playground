@@ -300,88 +300,108 @@ class MCTS:
         """Expand node with all valid moves"""
         t0_total = time.time()  # Track total expansion time
 
-        # Timing variables
-        get_pieces_time = 0
-        valid_moves_time = 0
-        move_encoding_time = 0
-        node_creation_time = 0
-        copy_time = 0
-        make_move_time = 0
+        # Global timing accumulators (measured once)
         policy_conversion_time = 0
-        loop_overhead_time = 0
+        get_pieces_time = 0
+
+        # Global accumulators for operations inside loops
+        total_valid_moves_time = 0
+        total_move_encoding_time = 0
+        total_copy_time = 0
+        total_make_move_time = 0
+        total_node_creation_time = 0
+        total_loop_overhead = 0
 
         # Time policy conversion
         t0 = time.time()
         policy_np = np.array(policy)
         policy_conversion_time = time.time() - t0
 
-        # Time get_pieces
+        # Time get_pieces (once for all iterations)
         t0 = time.time()
         board = node.board
         pieces = board.get_all_pieces(board.get_current_turn())
         get_pieces_time = time.time() - t0
 
-        # Time main loop
+        # Process each piece (each iteration is measured separately)
         for pos, piece_type in pieces:
             t_loop_start = time.time()
 
-            t1 = time.time()
+            # Local timers for this iteration
+            t_valid = time.time()
             valid_moves = board.get_valid_moves(pos)
-            valid_moves_time += time.time() - t1
+            local_valid_moves_time = time.time() - t_valid
+
+            local_move_encoding_time = 0
+            local_copy_time = 0
+            local_make_move_time = 0
+            local_node_creation_time = 0
 
             for to_pos in valid_moves:
                 t1 = time.time()
                 move_idx = self.encode_move(pos, to_pos)
                 prior = policy_np[move_idx]
-                move_encoding_time += time.time() - t1
+                local_move_encoding_time += time.time() - t1
 
                 t1 = time.time()
                 child_board = board.copy()
-                copy_time += time.time() - t1
+                local_copy_time += time.time() - t1
 
                 t1 = time.time()
                 child_board.make_move(pos, to_pos)
-                make_move_time += time.time() - t1
+                local_make_move_time += time.time() - t1
 
                 t1 = time.time()
                 node.children[(pos, to_pos)] = Node(
                     board=child_board, parent=node, prior=prior
                 )
-                node_creation_time += time.time() - t1
+                local_node_creation_time += time.time() - t1
 
-            loop_overhead_time += (
-                time.time()
-                - t_loop_start
-                - (
-                    valid_moves_time
-                    + move_encoding_time
-                    + copy_time
-                    + make_move_time
-                    + node_creation_time
-                )
+            # End time for this iteration
+            t_loop_end = time.time()
+            loop_duration = t_loop_end - t_loop_start
+
+            # Sum of measured operations in this iteration
+            local_operations_time = (
+                local_valid_moves_time
+                + local_move_encoding_time
+                + local_copy_time
+                + local_make_move_time
+                + local_node_creation_time
             )
+
+            # Local overhead is the time not accounted for by known operations
+            local_overhead = loop_duration - local_operations_time
+            total_loop_overhead += local_overhead
+
+            # Accumulate global values
+            total_valid_moves_time += local_valid_moves_time
+            total_move_encoding_time += local_move_encoding_time
+            total_copy_time += local_copy_time
+            total_make_move_time += local_make_move_time
+            total_node_creation_time += local_node_creation_time
 
         total_time = time.time() - t0_total
         other_time = total_time - (
             get_pieces_time
-            + valid_moves_time
-            + move_encoding_time
-            + copy_time
-            + make_move_time
-            + node_creation_time
+            + total_valid_moves_time
+            + total_move_encoding_time
+            + total_copy_time
+            + total_make_move_time
+            + total_node_creation_time
             + policy_conversion_time
-            + loop_overhead_time
+            + total_loop_overhead
         )
 
         # Update performance stats
         self.perf_stats["get_pieces_time"] += get_pieces_time
-        self.perf_stats["valid_moves_time"] += valid_moves_time
-        self.perf_stats["move_encoding_time"] += move_encoding_time
-        self.perf_stats["node_creation_time"] += node_creation_time
-        self.perf_stats["board_copy_time"] += copy_time
-        self.perf_stats["make_move_time"] += make_move_time
+        self.perf_stats["valid_moves_time"] += total_valid_moves_time
+        self.perf_stats["move_encoding_time"] += total_move_encoding_time
+        self.perf_stats["node_creation_time"] += total_node_creation_time
+        self.perf_stats["board_copy_time"] += total_copy_time
+        self.perf_stats["make_move_time"] += total_make_move_time
         self.perf_stats["policy_conversion_time"] += policy_conversion_time
-        self.perf_stats["loop_overhead_time"] += loop_overhead_time
+        self.perf_stats["loop_overhead_time"] += total_loop_overhead
         self.perf_stats["other_time"] += other_time
 
         node.is_expanded = True

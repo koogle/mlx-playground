@@ -183,6 +183,12 @@ class BitBoard:
         """Create a deep copy of the board"""
         new_board = BitBoard.__new__(BitBoard)  # Create without __init__
         new_board.state = self.state.copy()  # Use copy instead of view
+        # Copy the pre-computed tables by reference (they're immutable)
+        new_board.knight_attacks = self.knight_attacks
+        new_board.king_attacks = self.king_attacks
+        new_board.pawn_attacks = self.pawn_attacks
+        # Create new cache for the copy
+        new_board._moves_cache = {}  # Start with empty cache for new board
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -757,3 +763,27 @@ class BitBoard:
                     current_col += dcol
 
         return False
+
+    def get_game_result(self) -> float:
+        """Get the game result from current player's perspective
+        Returns:
+            1.0 for win
+            -1.0 for loss
+            0.0 for draw
+        """
+        current_turn = self.get_current_turn()
+        opponent_turn = 1 - current_turn
+
+        # Check if current player is checkmated
+        if self.is_checkmate(current_turn):
+            return -1.0  # Current player is checkmated
+
+        # Check if opponent is checkmated
+        elif self.is_checkmate(opponent_turn):
+            return 1.0  # Current player delivered checkmate
+
+        # Check for draw
+        elif self.is_draw():
+            return 0.0  # Draw
+
+        raise ValueError("Game is not over")

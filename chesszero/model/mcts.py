@@ -76,10 +76,18 @@ class MCTS:
             "node_creation_time": 0.0,
             "board_copy_time": 0.0,
             "make_move_time": 0.0,
+            "other_time": 0.0,
+            "policy_conversion_time": 0.0,
+            "loop_overhead_time": 0.0,
         }
 
     def get_move(self, board: BitBoard):
         """Get the best move for the current position after running MCTS"""
+        # Print current position
+        print("\nCurrent position:")
+        print(board)
+        print(f"Move {board.get_move_count() + 1}")
+
         start_time = time.time()
         self.model.eval()
         try:
@@ -290,32 +298,41 @@ class MCTS:
 
     def _expand_node(self, node: Node, policy, value):
         """Expand node with all valid moves"""
+        t0_total = time.time()  # Track total expansion time
+
+        # Timing variables
+        get_pieces_time = 0
+        valid_moves_time = 0
+        move_encoding_time = 0
+        node_creation_time = 0
+        copy_time = 0
+        make_move_time = 0
+        policy_conversion_time = 0
+        loop_overhead_time = 0
+
+        # Time policy conversion
+        t0 = time.time()
+        policy_np = np.array(policy)
+        policy_conversion_time = time.time() - t0
+
+        # Time get_pieces
         t0 = time.time()
         board = node.board
         pieces = board.get_all_pieces(board.get_current_turn())
         get_pieces_time = time.time() - t0
 
-        # Convert MLX policy array to numpy for indexing
-        policy_np = np.array(policy)
-
-        # Timing variables
-        move_encoding_time = 0
-        node_creation_time = 0
-        copy_time = 0
-        make_move_time = 0
-        valid_moves_time = 0
-
+        # Time main loop
         for pos, piece_type in pieces:
+            t_loop_start = time.time()
+
             t1 = time.time()
-            valid_moves = board.get_valid_moves(
-                pos
-            )  # Direct call, no caching since it's not helping
+            valid_moves = board.get_valid_moves(pos)
             valid_moves_time += time.time() - t1
 
             for to_pos in valid_moves:
                 t1 = time.time()
                 move_idx = self.encode_move(pos, to_pos)
-                prior = policy_np[move_idx]  # Use numpy array for indexing
+                prior = policy_np[move_idx]
                 move_encoding_time += time.time() - t1
 
                 t1 = time.time()
@@ -332,6 +349,30 @@ class MCTS:
                 )
                 node_creation_time += time.time() - t1
 
+            loop_overhead_time += (
+                time.time()
+                - t_loop_start
+                - (
+                    valid_moves_time
+                    + move_encoding_time
+                    + copy_time
+                    + make_move_time
+                    + node_creation_time
+                )
+            )
+
+        total_time = time.time() - t0_total
+        other_time = total_time - (
+            get_pieces_time
+            + valid_moves_time
+            + move_encoding_time
+            + copy_time
+            + make_move_time
+            + node_creation_time
+            + policy_conversion_time
+            + loop_overhead_time
+        )
+
         # Update performance stats
         self.perf_stats["get_pieces_time"] += get_pieces_time
         self.perf_stats["valid_moves_time"] += valid_moves_time
@@ -339,6 +380,9 @@ class MCTS:
         self.perf_stats["node_creation_time"] += node_creation_time
         self.perf_stats["board_copy_time"] += copy_time
         self.perf_stats["make_move_time"] += make_move_time
+        self.perf_stats["policy_conversion_time"] += policy_conversion_time
+        self.perf_stats["loop_overhead_time"] += loop_overhead_time
+        self.perf_stats["other_time"] += other_time
 
         node.is_expanded = True
         node.value_sum = value
@@ -386,7 +430,12 @@ class MCTS:
             "node_creation_time",
             "board_copy_time",
             "make_move_time",
+            "policy_conversion_time",
+            "loop_overhead_time",
         ]
+        total_pct = 0
         for key in expansion_keys:
             pct = safe_percentage(key, total_expansion)
+            total_pct += pct
             print(f"{key.replace('_time', '').replace('_', ' ').title()}: {pct:.1f}%")
+        print(f"Total: {total_pct:.1f}%")  # Should be close to 100%

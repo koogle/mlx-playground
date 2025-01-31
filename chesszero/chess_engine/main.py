@@ -3,7 +3,6 @@ from game import ChessGame
 import random
 import argparse
 import time
-import sys
 
 
 def main():
@@ -62,112 +61,72 @@ def main():
         ai_color = random.choice([Color.WHITE, Color.BLACK])
         print(f"\nYou are playing as {'Black' if ai_color == Color.WHITE else 'White'}")
 
-    while True:
-        try:
-            game_state = game.get_game_state()
-            if "Checkmate" in game_state:
-                print(f"\n{game_state}")
-                print("\nFinal game history:")
-                print_move_history(game)
+    while not game.is_game_over():
+        print(game)  # Show the board and current turn
+
+        current_color = game.get_current_turn()
+
+        # AI's turn (either in ai mode or auto mode)
+        if args.mode == "auto" or (args.mode == "ai" and current_color == ai_color):
+            if not handle_ai_turn(game):
                 break
-            elif game.board.is_draw():
-                print("\nGame is a draw!")
-                print("Reason: Insufficient material or stalemate")
-                print("\nFinal game history:")
-                print_move_history(game)
-                break
-
-            current_color = game.get_current_turn()
-            print(
-                f"\n{'White' if current_color == Color.WHITE else 'Black'}: ",
-                end="",
-            )
-
-            # AI's turn (either in ai mode or auto mode)
-            if args.mode == "auto" or (args.mode == "ai" and current_color == ai_color):
-                if not handle_ai_turn(game):
-                    print("\nFinal game history:")
-                    print_move_history(game)
-                    break
-                if args.mode == "auto":
-                    time.sleep(args.delay)
-                continue
-
+            if args.mode == "auto":
+                time.sleep(args.delay)
+        else:
             # Human's turn
             if not handle_human_turn(game):
-                print("\nGame aborted. Final game history:")
-                print_move_history(game)
+                print("\nGame aborted.")
                 break
 
-        except (IndexError, ValueError) as e:
-            print(e)
-            e.with_traceback()
-            print(
-                "\nInvalid input! Please use standard algebraic notation (e.g., e4, Nf3, exd5)"
-            )
+        # if game.move_history:
+        #    print("\nLast move:", game.move_history[-1])
+
+    print("\nGame Over!")
+    print(game.get_game_state())
+    print("\nFinal game history:")
+    print_move_history(game)
 
 
-def handle_ai_turn(game):
-    valid_moves = game.get_all_valid_moves()
+def handle_ai_turn(game: ChessGame) -> bool:
+    """Handle AI move selection and execution"""
+    # Get all pieces of current color
+    current_color = game.get_current_turn()
+    pieces = game.board.get_all_pieces(current_color)
+
+    # Collect all valid moves
+    valid_moves = []
+    for pos, _ in pieces:
+        moves = game.board.get_valid_moves(pos)
+        for move in moves:
+            valid_moves.append((pos, move))
+
     if not valid_moves:
-        state = game.get_game_state()
-        if "Checkmate" in state:
-            print(f"\n{state}")
-        else:
-            print("No valid moves available! Stalemate!")
         return False
 
-    # Check for draw conditions
-    if game.board.is_draw():
-        print("\nGame is a draw!")
-        print("Reason: Insufficient material or stalemate")
-        return False
+    # Choose and make a random move
+    from_pos, to_pos = random.choice(valid_moves)
+    move_str = game._coords_to_algebraic(from_pos, to_pos)
+    print(f"AI plays: {move_str}")
 
-    # Choose and make the move
-    ai_move = random.choice(valid_moves)
-    print(f"AI move: {ai_move}")
-    if not game.make_move(ai_move):
-        # If move fails, get fresh valid moves after board update
-        print("\nERROR: AI made an invalid move!")
-        print("\nValid moves by piece:")
-        pieces = (
-            game.board.white_pieces
-            if game.current_turn == Color.WHITE
-            else game.board.black_pieces
-        )
-        # Get fresh attack info and valid moves
-        attack_info = game.board.get_attack_info(game.current_turn)
-        for piece, pos in pieces:
-            moves = game.board.get_valid_moves(pos, attack_info)
-            if moves:
-                print(
-                    f"{piece.piece_type} at {chr(ord('a') + pos[1])}{pos[0] + 1}: {[game._move_to_algebraic(pos, m, piece) for m in moves]}"
-                )
-        return False
-
-    print(game.board)
-    state = game.get_game_state()
-    if state != "Normal":
-        print(state)
-    return True
+    return game.make_move(from_pos, to_pos)
 
 
-def handle_human_turn(game):
-    move = input("Enter move: ").strip()
+def handle_human_turn(game: ChessGame) -> bool:
+    """Handle a human player's turn"""
+    while True:
+        try:
+            move = input("Enter move: ").strip()
+            if move.lower() == "quit":
+                return False
 
-    if move.lower() == "quit":
-        return False
-    elif move.lower() == "history":
-        print_move_history(game)
-        return True
-
-    if game.make_move(move):
-        print(game)
-        if "x" in move:
-            print("A piece was captured!")
-    else:
-        print("\nInvalid move! Try again.")
-    return True
+            # Use make_move_algebraic instead of make_move
+            if game.make_move_algebraic(move):
+                return True
+            else:
+                print("Invalid move, try again")
+        except (ValueError, IndexError) as e:
+            print(f"Invalid move format: {e}")
+            print("Please use formats like: e2e4, e4, Nf3, or O-O")
 
 
 def print_move_history(game):

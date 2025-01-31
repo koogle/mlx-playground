@@ -439,3 +439,100 @@ class BitBoard:
         self.state[11, 7, 4] = 1  # Black king at e8
         self.state[5, 0, 4] = 1  # White king at e1 (needed!)
         self.state[12] = 1  # White to move
+
+    def is_draw(self) -> bool:
+        """Check if the position is a draw (stalemate or insufficient material)"""
+        current_turn = self.get_current_turn()
+
+        # Check for stalemate
+        if self.is_stalemate(current_turn):
+            return True
+
+        # Get all pieces
+        white_pieces = self.get_all_pieces(0)
+        black_pieces = self.get_all_pieces(1)
+
+        # Count pieces by type
+        white_counts = {piece_type: 0 for piece_type in range(6)}
+        black_counts = {piece_type: 0 for piece_type in range(6)}
+
+        for _, piece_type in white_pieces:
+            white_counts[piece_type] += 1
+        for _, piece_type in black_pieces:
+            black_counts[piece_type] += 1
+
+        # Insufficient material cases:
+
+        # 1. King vs King
+        if len(white_pieces) == 1 and len(black_pieces) == 1:
+            return True
+
+        # 2. King and minor piece vs King
+        if (len(white_pieces) == 2 and len(black_pieces) == 1) or (
+            len(white_pieces) == 1 and len(black_pieces) == 2
+        ):
+            # Check if extra piece is a knight or bishop
+            if (white_counts[1] == 1 or white_counts[2] == 1) or (
+                black_counts[1] == 1 or black_counts[2] == 1
+            ):
+                return True
+
+        # 3. King and bishop vs King and bishop (same colored squares)
+        if len(white_pieces) == 2 and len(black_pieces) == 2:
+            if white_counts[2] == 1 and black_counts[2] == 1:  # Both have bishops
+                # Get bishop positions
+                white_bishop_pos = next(
+                    pos for pos, piece_type in white_pieces if piece_type == 2
+                )
+                black_bishop_pos = next(
+                    pos for pos, piece_type in black_pieces if piece_type == 2
+                )
+                # Check if bishops are on same colored squares
+                if (white_bishop_pos[0] + white_bishop_pos[1]) % 2 == (
+                    black_bishop_pos[0] + black_bishop_pos[1]
+                ) % 2:
+                    return True
+
+        # 4. King and knight vs King and knight
+        if len(white_pieces) == 2 and len(black_pieces) == 2:
+            if white_counts[1] == 1 and black_counts[1] == 1:  # Both have knights
+                return True
+
+        return False
+
+    def __str__(self) -> str:
+        """Return string representation of the board"""
+        # Unicode chess pieces
+        piece_symbols = {
+            (0, 0): "♙",  # White pawn
+            (0, 1): "♘",  # White knight
+            (0, 2): "♗",  # White bishop
+            (0, 3): "♖",  # White rook
+            (0, 4): "♕",  # White queen
+            (0, 5): "♔",  # White king
+            (1, 0): "♟",  # Black pawn
+            (1, 1): "♞",  # Black knight
+            (1, 2): "♝",  # Black bishop
+            (1, 3): "♜",  # Black rook
+            (1, 4): "♛",  # Black queen
+            (1, 5): "♚",  # Black king
+        }
+
+        # Build the board string
+        board_str = "\n  a b c d e f g h\n"
+        for row in range(7, -1, -1):  # Start from rank 8
+            board_str += f"{row + 1} "
+            for col in range(8):
+                piece = self.get_piece_at(row, col)
+                if piece[0] == -1:  # Empty square
+                    board_str += "· "
+                else:
+                    board_str += piece_symbols[piece] + " "
+            board_str += f"{row + 1}\n"
+        board_str += "  a b c d e f g h\n"
+
+        # Add current turn
+        turn = "White" if self.get_current_turn() == 0 else "Black"
+        board_str += f"\n{turn} to move"
+
+        return board_str

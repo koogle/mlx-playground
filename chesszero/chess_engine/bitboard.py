@@ -41,15 +41,17 @@ class BitBoard:
     """
 
     def __init__(self):
-        # Initialize board state as numpy array for efficient operations
-        self.state = np.zeros((19, 8, 8), dtype=np.float32)  # Changed to float32
+        self.state = np.zeros((19, 8, 8), dtype=np.float32)
         self.initialize_board()
 
     def initialize_board(self):
         """Set up the initial chess position"""
         # White pieces (channels 0-5)
-        self.state[0:6] = self._init_pieces(0)  # White pieces
-        self.state[6:12] = self._init_pieces(1)  # Black pieces
+        white_pieces = self._init_pieces(0)
+        black_pieces = self._init_pieces(1)
+
+        self.state[0:6] = white_pieces
+        self.state[6:12] = black_pieces
 
         # White to move
         self.state[12].fill(1)  # White to move = 1
@@ -174,8 +176,8 @@ class BitBoard:
 
     def copy(self) -> "BitBoard":
         """Create a deep copy of the board"""
-        new_board = BitBoard.__new__(BitBoard)
-        new_board.state = self.state.copy()
+        new_board = BitBoard.__new__(BitBoard)  # Create without __init__
+        new_board.state = self.state.copy()  # Use copy instead of view
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -185,7 +187,6 @@ class BitBoard:
         if color == -1 or color != self.get_current_turn():
             return set()
 
-        # Get basic moves first
         moves = set()
 
         # Handle pawns separately due to special rules
@@ -210,7 +211,9 @@ class BitBoard:
                 moves.add((row, 2))
 
         # Filter moves that would leave king in check
-        return self._filter_valid_moves(pos, moves)
+        valid_moves = self._filter_valid_moves(pos, moves)
+
+        return valid_moves
 
     def _get_sliding_moves(
         self, row: int, col: int, directions: List[Tuple[int, int]], color: int

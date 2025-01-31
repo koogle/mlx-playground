@@ -1,11 +1,10 @@
 import math
 import time
-
-from config.model_config import ModelConfig
-from utils.board_utils import encode_board
-from typing import List, Tuple
+import numpy as np
+from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
+from config.model_config import ModelConfig
 
 
 class Node:
@@ -30,19 +29,23 @@ class Node:
         if not self.children:
             return None, None
 
-        # Pre-calculate values that are used for all children
-        total_visits = max(1, self.visit_count)
-        sqrt_total_visits = math.sqrt(total_visits)
+        moves = list(self.children.keys())
+        children = list(self.children.values())
 
-        # Use list comprehension and max() instead of iterating
-        move, child = max(
-            self.children.items(),
-            key=lambda x: (
-                (-x[1].value() if x[1].visit_count > 0 else 0)
-                + c_puct * x[1].prior * sqrt_total_visits / (1 + x[1].visit_count)
-            ),
+        # Convert to numpy arrays
+        visit_counts = np.array([child.visit_count for child in children])
+        values = np.array(
+            [child.value_sum / max(1, vc) for child, vc in zip(children, visit_counts)]
         )
-        return move, child
+        priors = np.array([child.prior for child in children])
+
+        # Vectorized UCB computation on CPU
+        sqrt_total_visits = math.sqrt(max(1, self.visit_count))
+        q_values = np.where(visit_counts > 0, -values, 0)
+        ucb_scores = q_values + c_puct * sqrt_total_visits * priors / (1 + visit_counts)
+
+        best_idx = int(np.argmax(ucb_scores))
+        return moves[best_idx], children[best_idx]
 
 
 class MCTS:
@@ -50,7 +53,8 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = True
-        self.board_cache = {}
+        self.valid_moves_cache = {}  # (board_hash, position) -> valid moves
+        self.all_moves_cache = {}  # board_hash -> all valid moves
         # Add training flag and different thresholds
         self.training = True
         # Remove pruning during training completely, very small threshold during evaluation
@@ -69,6 +73,13 @@ class MCTS:
             "move_validations": 0,  # New: count number of move validations
             "total_nodes_expanded": 0,  # New: track total nodes expanded
             "total_inferences": 0,  # New: track total model inferences
+            "select_child_time": 0.0,
+            "board_hash_time": 0.0,
+            "path_building_time": 0.0,
+            "get_pieces_time": 0.0,
+            "valid_moves_time": 0.0,
+            "board_copy_time": 0.0,
+            "make_move_time": 0.0,
         }
 
     def get_move(self, board: BitBoard):
@@ -125,7 +136,7 @@ class MCTS:
             # Initialize arrays once for all chunks
             batch_size = self.config.n_simulations
             chunk_size = 128
-            encoded_boards = []
+            boards_to_evaluate = []
             nodes_to_expand = []
             search_paths = []
 
@@ -148,23 +159,22 @@ class MCTS:
                         path.append(node)
 
                     if not node.board.is_game_over():
-                        board_hash = hash(str(node.board))
-                        if board_hash not in self.board_cache:
-                            # Ensure encode_board returns correct shape
-                            encoded = encode_board(node.board)
-                            self.board_cache[board_hash] = encoded
-                        encoded_boards.append(self.board_cache[board_hash])
+                        # Board state is already in correct format
+                        boards_to_evaluate.append(node.board.state)
                         nodes_to_expand.append(node)
                     search_paths.append((path, node))
                 self.perf_stats["selection"] += time.time() - t0
 
                 # Batch evaluate positions
-                if encoded_boards:
+                if boards_to_evaluate:
                     t0 = time.time()
-                    encoded_batch = mx.stack(encoded_boards)
-                    policies, values = self.model(encoded_batch)
+                    # Stack board states directly
+                    board_batch = mx.array(
+                        np.stack(boards_to_evaluate), dtype=mx.float32
+                    )
+                    policies, values = self.model(board_batch)
                     self.perf_stats["model_inference"] += time.time() - t0
-                    self.perf_stats["total_inferences"] += len(encoded_boards)
+                    self.perf_stats["total_inferences"] += len(boards_to_evaluate)
 
                     if self.debug and sim_start == 0:  # Sample first batch
                         print("\nBatch activations sample (first 5):")
@@ -187,7 +197,7 @@ class MCTS:
                     self.perf_stats["total_nodes_expanded"] += len(nodes_to_expand)
 
                     # Clear arrays for next chunk
-                    encoded_boards.clear()
+                    boards_to_evaluate.clear()
                     nodes_to_expand.clear()
 
                 # Backup phase
@@ -255,28 +265,74 @@ class MCTS:
         to_idx = to_pos[0] * 8 + to_pos[1]
         return from_idx * 64 + to_idx
 
+    def _get_valid_moves(
+        self, board: BitBoard, pos: Tuple[int, int]
+    ) -> Set[Tuple[int, int]]:
+        """Get valid moves with caching"""
+        board_hash = hash(str(board.state))
+        cache_key = (board_hash, pos)
+
+        if cache_key in self.valid_moves_cache:
+            return self.valid_moves_cache[cache_key]
+
+        valid_moves = board.get_valid_moves(pos)
+        self.valid_moves_cache[cache_key] = valid_moves
+        return valid_moves
+
+    def _get_all_valid_moves(
+        self, board: BitBoard
+    ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
+        """Get all valid moves for current player with caching"""
+        board_hash = hash(str(board.state))
+        if board_hash in self.all_moves_cache:
+            return self.all_moves_cache[board_hash]
+
+        moves = {}
+        pieces = board.get_all_pieces(board.get_current_turn())
+        for pos, _ in pieces:
+            valid_moves = board.get_valid_moves(pos)
+            if valid_moves:
+                moves[pos] = valid_moves
+
+        self.all_moves_cache[board_hash] = moves
+        return moves
+
     def _expand_node(self, node: Node, policy, value):
         """Expand node with all valid moves"""
+        t0 = time.time()
         board = node.board
-        pieces = (
-            board.get_all_pieces(0)
-            if board.get_current_turn() == 0
-            else board.get_all_pieces(1)
-        )
+        pieces = board.get_all_pieces(board.get_current_turn())
+        self.perf_stats["get_pieces_time"] = time.time() - t0
 
         # Get valid moves for each piece
+        valid_moves_time = 0
+        copy_time = 0
+        make_move_time = 0
+
         for pos, piece_type in pieces:
-            valid_moves = board.get_valid_moves(pos)
+            t1 = time.time()
+            valid_moves = self._get_valid_moves(board, pos)  # Use cached version
+            valid_moves_time += time.time() - t1
+
             for to_pos in valid_moves:
                 move_idx = self.encode_move(pos, to_pos)
                 prior = policy[move_idx]
 
+                t1 = time.time()
                 child_board = board.copy()
+                copy_time += time.time() - t1
+
+                t1 = time.time()
                 child_board.make_move(pos, to_pos)
+                make_move_time += time.time() - t1
 
                 node.children[(pos, to_pos)] = Node(
                     board=child_board, parent=node, prior=prior
                 )
+
+        self.perf_stats["valid_moves_time"] = valid_moves_time
+        self.perf_stats["board_copy_time"] = copy_time
+        self.perf_stats["make_move_time"] = make_move_time
 
         node.is_expanded = True
         node.value_sum = value
@@ -321,3 +377,15 @@ class MCTS:
             print(
                 f"Model inferences per move: {self.perf_stats['total_inferences']/moves:.1f}"
             )
+
+        print("\nSelection phase breakdown:")
+        total_selection = self.perf_stats["selection"]
+        print(
+            f"Select child: {self.perf_stats['select_child_time']/total_selection*100:.1f}%"
+        )
+        print(
+            f"Board hash: {self.perf_stats['board_hash_time']/total_selection*100:.1f}%"
+        )
+        print(
+            f"Path building: {self.perf_stats['path_building_time']/total_selection*100:.1f}%"
+        )

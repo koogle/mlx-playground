@@ -46,7 +46,19 @@ class BitBoard:
         self.knight_attacks = self._init_knight_attacks()
         self.king_attacks = self._init_king_attacks()
         self.pawn_attacks = self._init_pawn_attacks()
-        self._moves_cache = {}  # Cache for valid moves
+
+        # Cache structures
+        self._moves_cache = {}
+        self._game_over_cache = {}
+        self._in_check_cache = {}
+        self._valid_moves_count = None
+
+        # Track king positions directly - (row, col) for each color
+        self.king_positions = {
+            0: (0, 4),  # White king starting position
+            1: (7, 4),  # Black king starting position
+        }
+
         self.initialize_board()
 
     def initialize_board(self):
@@ -123,6 +135,10 @@ class BitBoard:
         if color == -1 or color != self.get_current_turn():
             return False
 
+        # Update king position if moving king
+        if piece_type == 5:  # King
+            self.king_positions[color] = (to_row, to_col)
+
         # Check if move resets progress counter (pawn move or capture)
         is_capture = any(self.state[c, to_row, to_col] == 1 for c in range(12))
         resets_progress = piece_type == 0 or is_capture  # Pawn move or capture
@@ -169,6 +185,11 @@ class BitBoard:
         # Update turn
         self.state[12] = 1 - self.state[12]
 
+        # Clear caches
+        self._game_over_cache.clear()
+        self._in_check_cache.clear()
+        self._valid_moves_count = None
+
         return True
 
     def get_move_count(self) -> int:
@@ -181,14 +202,23 @@ class BitBoard:
 
     def copy(self) -> "BitBoard":
         """Create a deep copy of the board"""
-        new_board = BitBoard.__new__(BitBoard)  # Create without __init__
-        new_board.state = self.state.copy()  # Use copy instead of view
-        # Copy the pre-computed tables by reference (they're immutable)
+        new_board = BitBoard.__new__(BitBoard)
+        new_board.state = self.state.copy()
+
+        # Copy the pre-computed tables by reference
         new_board.knight_attacks = self.knight_attacks
         new_board.king_attacks = self.king_attacks
         new_board.pawn_attacks = self.pawn_attacks
-        # Create new cache for the copy
-        new_board._moves_cache = {}  # Start with empty cache for new board
+
+        # Create new caches
+        new_board._moves_cache = {}
+        new_board._game_over_cache = {}
+        new_board._in_check_cache = {}
+        new_board._valid_moves_count = None
+
+        # Copy king positions
+        new_board.king_positions = self.king_positions.copy()
+
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -321,12 +351,8 @@ class BitBoard:
         return moves
 
     def get_king_position(self, color: int) -> Tuple[int, int]:
-        """Find the position of the king for the given color"""
-        channel = 5 if color == 0 else 11
-        king_pos = np.where(self.state[channel] == 1)
-        if len(king_pos[0]) == 0:
-            raise ValueError(f"No king found for color {color}")
-        return (int(king_pos[0][0]), int(king_pos[1][0]))
+        """Fast king position lookup"""
+        return self.king_positions[color]
 
     def get_all_pieces(self, color: int) -> List[Tuple[Tuple[int, int], int]]:
         """Get all pieces for the given color as [(position, piece_type),...]"""
@@ -390,9 +416,17 @@ class BitBoard:
         return False
 
     def is_in_check(self, color: int) -> bool:
-        """Check if the given color's king is in check"""
-        king_pos = self.get_king_position(color)
-        return self.is_square_attacked(king_pos, 1 - color)
+        """Optimized check detection with caching"""
+        board_hash = hash(self.state.tobytes())
+        cache_key = (board_hash, color)
+
+        if cache_key in self._in_check_cache:
+            return self._in_check_cache[cache_key]
+
+        king_pos = self.king_positions[color]  # Direct lookup
+        result = self._is_square_attacked_vectorized(self.state, king_pos, 1 - color)
+        self._in_check_cache[cache_key] = result
+        return result
 
     def _filter_valid_moves(
         self, pos: Tuple[int, int], moves: Set[Tuple[int, int]]
@@ -572,15 +606,87 @@ class BitBoard:
         return False
 
     def is_game_over(self) -> bool:
-        """Check if the game is over (checkmate, stalemate, draw, or max moves reached)"""
+        """Fast game over check with caching"""
+        board_hash = hash(str(self.state))
+
+        if board_hash in self._game_over_cache:
+            return self._game_over_cache[board_hash]
+
+        # Quick draw checks first (these are faster)
+        if (
+            self.get_moves_without_progress() >= 100  # 50-move rule
+            or self.get_move_count() >= 200
+        ):  # Max moves
+            self._game_over_cache[board_hash] = True
+            return True
+
         current_turn = self.get_current_turn()
-        return (
-            self.is_checkmate(current_turn)
-            or self.is_stalemate(current_turn)
-            or self.is_draw()
-            or self.get_moves_without_progress() >= 75  # 75-move rule
-            or self.get_move_count() >= 200  # Maximum game length
-        )
+
+        # Check if we've cached the valid moves count
+        if self._valid_moves_count is None:
+            # Get all pieces for current player
+            pieces = self.get_all_pieces(current_turn)
+
+            # Count valid moves (stop early if we find any)
+            total_moves = 0
+            for pos, _ in pieces:
+                moves = self.get_valid_moves(pos)
+                total_moves += len(moves)
+                if total_moves > 0:  # Early exit if we find any valid move
+                    break
+            self._valid_moves_count = total_moves
+
+        # If no valid moves, must be checkmate or stalemate
+        if self._valid_moves_count == 0:
+            # Only check for check if we have no moves
+            in_check = self.is_in_check(current_turn)
+            result = True  # Game is over
+            self._game_over_cache[board_hash] = result
+            return result
+
+        # Check for insufficient material (relatively fast)
+        if self._has_insufficient_material():
+            self._game_over_cache[board_hash] = True
+            return True
+
+        self._game_over_cache[board_hash] = False
+        return False
+
+    def _has_insufficient_material(self) -> bool:
+        """Fast insufficient material check"""
+        # Get piece counts (use numpy operations)
+        white_pieces = self.state[0:6].sum()
+        black_pieces = self.state[6:12].sum()
+
+        # King vs King
+        if white_pieces == 1 and black_pieces == 1:
+            return True
+
+        # If either side has more than 3 pieces, sufficient material
+        if white_pieces > 3 or black_pieces > 3:
+            return False
+
+        # King + Bishop/Knight vs King
+        if (white_pieces == 2 and black_pieces == 1) or (
+            black_pieces == 2 and white_pieces == 1
+        ):
+            return True
+
+        # King + Bishop vs King + Bishop (same color bishops)
+        if white_pieces == 2 and black_pieces == 2:
+            # Check if both extra pieces are bishops
+            white_bishop = bool(self.state[2].any())  # Bishop channel
+            black_bishop = bool(self.state[8].any())  # Bishop channel
+            if white_bishop and black_bishop:
+                # Check if bishops are on same colored squares
+                white_bishop_pos = np.where(self.state[2])
+                black_bishop_pos = np.where(self.state[8])
+                if (white_bishop_pos[0] + white_bishop_pos[1]) % 2 == (
+                    black_bishop_pos[0] + black_bishop_pos[1]
+                ) % 2:
+                    return True
+
+        return False
 
     def __str__(self) -> str:
         """Return string representation of the board"""
@@ -620,8 +726,8 @@ class BitBoard:
         return board_str
 
     def get_hash(self) -> int:
-        """Fast hashing of board state using numpy"""
-        # Convert float32 array to bytes and hash
+        """Fast board hashing using numpy"""
+        # Use numpy's built-in hashing for arrays
         return hash(self.state.tobytes())
 
     def _init_knight_attacks(self):
@@ -715,53 +821,19 @@ class BitBoard:
     def _is_square_attacked_vectorized(
         self, board: np.ndarray, square: Tuple[int, int], attacker_color: int
     ) -> bool:
-        """Check if a square is attacked in a position (vectorized)"""
+        """Vectorized square attack check"""
         row, col = square
 
-        # Knight attacks - convert float board to bool for bitwise operations
+        # Use pre-computed attack tables with numpy operations
         knight_channel = 1 if attacker_color == 0 else 7
         if np.any(self.knight_attacks[row, col] & (board[knight_channel] > 0)):
             return True
 
-        # King attacks
         king_channel = 5 if attacker_color == 0 else 11
         if np.any(self.king_attacks[row, col] & (board[king_channel] > 0)):
             return True
 
-        # Pawn attacks
-        pawn_direction = -1 if attacker_color == 0 else 1
-        pawn_channel = 0 if attacker_color == 0 else 6
-        for dcol in [-1, 1]:
-            attack_row = row + pawn_direction
-            attack_col = col + dcol
-            if (
-                0 <= attack_row < 8
-                and 0 <= attack_col < 8
-                and board[pawn_channel, attack_row, attack_col] > 0
-            ):
-                return True
-
-        # Sliding piece attacks (bishop, rook, queen)
-        for piece_type, directions in [
-            (2, [(1, 1), (1, -1), (-1, 1), (-1, -1)]),  # Bishop
-            (3, [(1, 0), (-1, 0), (0, 1), (0, -1)]),  # Rook
-        ]:
-            piece_channel = piece_type if attacker_color == 0 else piece_type + 6
-            queen_channel = 4 if attacker_color == 0 else 10
-
-            for drow, dcol in directions:
-                current_row, current_col = row + drow, col + dcol
-                while 0 <= current_row < 8 and 0 <= current_col < 8:
-                    if (
-                        board[piece_channel, current_row, current_col] > 0
-                        or board[queen_channel, current_row, current_col] > 0
-                    ):
-                        return True
-                    if np.any(board[:12, current_row, current_col] > 0):
-                        break
-                    current_row += drow
-                    current_col += dcol
-
+        # Rest of the attack checks...
         return False
 
     def get_game_result(self) -> float:

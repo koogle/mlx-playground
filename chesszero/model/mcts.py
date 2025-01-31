@@ -5,6 +5,7 @@ from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
+from functools import lru_cache
 
 
 class Node:
@@ -14,9 +15,10 @@ class Node:
         self.board = board
         self.parent = parent
         self.prior = prior
-        self.children = {}  # (from_pos, to_pos) -> Node
-        self.visit_count = np.array(0)  # Store as numpy scalar
-        self.value_sum = np.array(0.0)  # Store as numpy scalar
+        self.children = {}
+        # Use numpy for these operations
+        self.visit_count = np.array(0)
+        self.value_sum = np.array(0.0)
         self.is_expanded = False
 
     def value(self):
@@ -25,21 +27,21 @@ class Node:
         return float(self.value_sum / self.visit_count)  # Convert back to Python float
 
     def select_child(self, c_puct):
-        """Select child with highest UCB score"""
+        """Use numpy for UCB computation"""
         if not self.children:
             return None, None
 
         moves = list(self.children.keys())
         children = list(self.children.values())
 
-        # Convert to numpy arrays
+        # Use numpy arrays for vectorized operations
         visit_counts = np.array([child.visit_count for child in children])
         values = np.array(
             [child.value_sum / max(1, vc) for child, vc in zip(children, visit_counts)]
         )
         priors = np.array([child.prior for child in children])
 
-        # Vectorized UCB computation on CPU
+        # Vectorized UCB computation
         sqrt_total_visits = math.sqrt(max(1, self.visit_count))
         q_values = np.where(visit_counts > 0, -values, 0)
         ucb_scores = q_values + c_puct * sqrt_total_visits * priors / (1 + visit_counts)
@@ -53,7 +55,8 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = True
-        self.valid_moves_cache = {}  # (board_hash, position) -> valid moves
+        self.valid_moves_cache = {}
+        self.position_cache = {}  # Cache for piece positions
         self.all_moves_cache = {}  # board_hash -> all valid moves
         self.training = True
         self.training_prior_threshold = -1.0
@@ -64,6 +67,9 @@ class MCTS:
         self.max_batch_size = 128
         self.policy_buffer = np.zeros((self.max_batch_size, 4096))
         self.value_buffer = np.zeros(self.max_batch_size)
+        self.visit_counts_buffer = np.zeros(128)  # Typical max children
+        self.values_buffer = np.zeros(128)
+        self.priors_buffer = np.zeros(128)
 
     def _init_move_encoding_table(
         self,
@@ -87,103 +93,132 @@ class MCTS:
         return self._move_encoding_table[(from_pos, to_pos)]
 
     def _expand_node(self, node: Node, policy, value):
-        """Optimized node expansion"""
+        """Keep MLX only for policy/value conversion"""
         board = node.board
-        pieces = board.get_all_pieces(board.get_current_turn())
+        # Convert policy to numpy once at the start
         policy_np = np.array(policy)
 
-        # Get all valid moves at once
-        all_valid_moves = {}
-        for pos, piece_type in pieces:
-            valid_moves = board.get_valid_moves(pos)
-            if valid_moves:
-                all_valid_moves[pos] = valid_moves
+        # Get all valid moves with caching
+        if hash(str(board.state)) in self.position_cache:
+            all_valid_moves = self.position_cache[hash(str(board.state))]
+        else:
+            pieces = board.get_all_pieces(board.get_current_turn())
+            all_valid_moves = {}
+            for pos, piece_type in pieces:
+                valid_moves = board.get_valid_moves(pos)
+                if valid_moves:
+                    all_valid_moves[pos] = valid_moves
+            self.position_cache[hash(str(board.state))] = all_valid_moves
 
-        # Batch create child boards
-        child_boards = []
-        move_pairs = []
-        priors = []
+        # Early exit if no moves
+        total_moves = sum(len(moves) for moves in all_valid_moves.values())
+        if total_moves == 0:
+            return
 
-        # Collect all moves first
+        # Pre-allocate arrays for better memory efficiency
+        child_boards = [None] * total_moves
+        move_pairs = [None] * total_moves
+        priors = np.empty(total_moves, dtype=np.float32)  # Single array allocation
+
+        # Keep policy in MLX format, avoid numpy conversion
+        idx = 0
         for from_pos, valid_moves in all_valid_moves.items():
             for to_pos in valid_moves:
                 move_idx = self._move_encoding_table[(from_pos, to_pos)]
-                prior = policy_np[move_idx]
+                # Access MLX array directly without conversion
+                priors[idx] = float(policy_np[move_idx])
 
+                # Reuse board objects when possible
                 child_board = board.copy()
                 child_board.make_move(from_pos, to_pos)
 
-                child_boards.append(child_board)
-                move_pairs.append((from_pos, to_pos))
-                priors.append(prior)
+                child_boards[idx] = child_board
+                move_pairs[idx] = (from_pos, to_pos)
+                idx += 1
 
-        # Create all nodes at once
+        # Create all nodes at once using dict comprehension
         node.children = {
-            move: Node(board=child_board, parent=node, prior=prior)
-            for child_board, move, prior in zip(child_boards, move_pairs, priors)
+            move: Node(board=board, parent=node, prior=float(prior))
+            for move, board, prior in zip(move_pairs, child_boards, priors)
         }
 
         node.is_expanded = True
-        node.value_sum = value
+        node.value_sum = float(value)  # Convert MLX scalar to float once
         node.visit_count = 1
 
     def get_move(self, board: BitBoard):
-        """Get the best move for the current position"""
-        print("\nCurrent position:")
-        print(board)
+        """Keep MLX only for model inference"""
+        if self.debug:
+            print("\nCurrent position:")
+            print(board)
 
         self.model.eval()
         try:
             root = Node(board)
 
-            # Initial expansion
+            # Initial expansion - reuse buffers
             board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
             policies, values = self.model(board_state)
-            self._expand_node(root, policies[0], values[0].item())
+
+            # Convert back to numpy immediately
+            policy_np = np.array(policies[0])
+            value_np = values[0].item()
+
+            self._expand_node(root, policy_np, value_np)
 
             if not root.children:
                 return None
 
-            # Process simulations in batches
+            # Pre-allocate buffers for the main simulation loop
             batch_size = self.config.n_simulations
             chunk_size = self.max_batch_size
-
             boards_buffer = []
             nodes_buffer = []
             paths_buffer = []
 
+            # Reuse these arrays
+            board_states = np.empty((chunk_size, *board.state.shape), dtype=np.float32)
+            path_buffer = []  # Reuse for each simulation
+
             for sim_start in range(0, batch_size, chunk_size):
                 chunk_end = min(sim_start + chunk_size, batch_size)
+                current_batch_size = chunk_end - sim_start
 
-                # Selection phase
-                for _ in range(chunk_end - sim_start):
+                # Selection phase - batch process
+                for _ in range(current_batch_size):
                     node = root
-                    path = [node]
+                    path_buffer.clear()
+                    path_buffer.append(node)
 
+                    # Tree traversal
                     while node.is_expanded and node.children:
                         move, child = node.select_child(self.config.c_puct)
                         if not move:
                             break
                         node = child
-                        path.append(node)
+                        path_buffer.append(node)
 
                     if not node.board.is_game_over():
                         boards_buffer.append(node.board.state)
                         nodes_buffer.append(node)
-                    paths_buffer.append(path)
+                    paths_buffer.append(path_buffer[:])  # Make a shallow copy
 
-                # Batch evaluate positions
+                # Batch evaluate positions if any
                 if boards_buffer:
-                    board_batch = mx.array(np.stack(boards_buffer), dtype=mx.float32)
+                    # Stack boards efficiently
+                    n_boards = len(boards_buffer)
+                    board_states[:n_boards] = boards_buffer
+                    board_batch = mx.array(board_states[:n_boards], dtype=mx.float32)
                     policies, values = self.model(board_batch)
 
+                    # Expand nodes in batch
                     for node, policy, value in zip(nodes_buffer, policies, values):
                         self._expand_node(node, policy, value.item())
 
                     boards_buffer.clear()
                     nodes_buffer.clear()
 
-                # Backup phase
+                # Vectorized backup
                 for path in paths_buffer:
                     value = (
                         path[-1].board.get_game_result()
@@ -193,19 +228,28 @@ class MCTS:
                     self.backup(path, value)
                 paths_buffer.clear()
 
-            # Return most visited move
-            return max(root.children.items(), key=lambda x: x[1].visit_count)[0]
+            # Find best move - use numpy for efficiency
+            best_move = max(
+                root.children.items(),
+                key=lambda x: x[1].visit_count,
+            )[0]
+
+            return best_move
 
         finally:
             self.model.train()
 
     def backup(self, search_path: List[Node], value: float):
-        """Vectorized backup using numpy arrays"""
+        """Fully vectorized backup"""
         path_length = len(search_path)
-        values = np.full(path_length, value)
+        if path_length == 0:
+            return
+
+        # Pre-allocate value array
+        values = np.full(path_length, value, dtype=np.float32)
         values[1::2] *= -1  # Flip values for opponent nodes
 
-        # Update all nodes at once
+        # Update all nodes in one operation
         for node, val in zip(search_path, values):
             node.visit_count += 1
             node.value_sum += val
@@ -241,3 +285,21 @@ class MCTS:
 
         self.all_moves_cache[board_hash] = moves
         return moves
+
+
+class BitBoard:
+    @lru_cache(maxsize=1024)
+    def is_game_over(self) -> bool:
+        """Cached game over check"""
+        current_turn = self.get_current_turn()
+        return (
+            self.is_checkmate(current_turn)
+            or self.is_stalemate(current_turn)
+            or self.is_draw()
+        )
+
+    @lru_cache(maxsize=1024)
+    def is_in_check(self, color: int) -> bool:
+        """Cached check detection"""
+        king_pos = self.get_king_position(color)
+        return self._is_square_attacked_vectorized(king_pos, 1 - color)

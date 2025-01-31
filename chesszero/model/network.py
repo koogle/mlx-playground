@@ -233,12 +233,22 @@ class ChessNet(nn.Module):
         # Save model weights
         self.save_weights(str(model_path))
 
+        # Convert optimizer state arrays to regular Python lists for JSON serialization
+        if optimizer_state is not None:
+            optimizer_state = {
+                "step": int(optimizer_state["step"]),  # Convert uint64 to int
+                "learning_rate": float(
+                    optimizer_state["learning_rate"]
+                ),  # Convert to float
+            }
+
         # Save training state
         state = {
             "epoch": epoch,
             "optimizer_state": optimizer_state,
             "config": vars(self.config),
         }
+        print(f"{state}")
         state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
         with open(state_path, "w") as f:
             json.dump(state, f)
@@ -257,6 +267,15 @@ class ChessNet(nn.Module):
         state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
         with open(state_path) as f:
             state = json.load(f)
+
+        # Convert optimizer state back to MLX arrays if it exists
+        if state["optimizer_state"] is not None:
+            state["optimizer_state"] = {
+                "step": mx.array(state["optimizer_state"]["step"], dtype=mx.uint64),
+                "learning_rate": mx.array(
+                    state["optimizer_state"]["learning_rate"], dtype=mx.float32
+                ),
+            }
 
         # Recreate model with saved config
         config = ModelConfig(**state["config"])

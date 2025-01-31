@@ -19,7 +19,7 @@ class RandomPlayer:
         # Create a temporary game to use its move generation
         game = ChessGame()
         game.board = board
-        game.current_turn = board.current_turn
+        game.current_turn = board.get_current_turn()
 
         # Get all valid moves in algebraic notation
         valid_moves = game.get_all_valid_moves()
@@ -29,7 +29,7 @@ class RandomPlayer:
             print("Current board state:")
             print(board)
             print(
-                f"Current turn: {'White' if board.current_turn == Color.WHITE else 'Black'}"
+                f"Current turn: {'White' if board.get_current_turn() == 0 else 'Black'}"
             )
             return None
 

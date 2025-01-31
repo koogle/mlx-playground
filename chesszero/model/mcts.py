@@ -8,6 +8,7 @@ from config.model_config import ModelConfig
 from utils.board_utils import encode_board
 from typing import List, Tuple
 import mlx.core as mx
+from chess_engine.bitboard import BitBoard
 
 
 class Node:
@@ -51,7 +52,7 @@ class MCTS:
     def __init__(self, model, config: ModelConfig):
         self.model = model
         self.config = config
-        self.debug = False
+        self.debug = True
         self.board_cache = {}
         # Add training flag and different thresholds
         self.training = True
@@ -73,7 +74,7 @@ class MCTS:
             "total_inferences": 0,  # New: track total model inferences
         }
 
-    def get_move(self, board: Board):
+    def get_move(self, board: BitBoard):
         """Get the best move for the current position after running MCTS"""
         start_time = time.time()
         self.model.eval()
@@ -82,8 +83,7 @@ class MCTS:
 
             # Initial model inference and expansion
             t0 = time.time()
-            encoded_board = encode_board(board)[None, ...]
-            policies, values = self.model(encoded_board)
+            policies, values = self.model(board.state[None, ...])
             policy = mx.array(policies[0])
             value = values[0].item()
             self.perf_stats["model_inference"] += time.time() - t0
@@ -257,64 +257,23 @@ class MCTS:
     def _expand_node(self, node: Node, policy, value):
         """Expand node with all valid moves"""
         board = node.board
-        is_white = board.current_turn == Color.WHITE
-        pieces = board.white_pieces if is_white else board.black_pieces
+        current_turn = board.get_current_turn()
+        pieces = board.get_all_pieces(current_turn)
 
-        # Time move validation
-        t0 = time.time()
-        piece_moves = {}
-        for piece, pos in pieces:
+        # Get valid moves for each piece
+        for pos, piece_type in pieces:
             valid_moves = board.get_valid_moves(pos)
-            self.perf_stats["move_validations"] += 1
-            if valid_moves:
-                piece_moves[pos] = valid_moves
-        self.perf_stats["move_validation"] += time.time() - t0
-
-        # Enhanced debugging for move generation
-        if self.debug:
-            print("\nExpanding node:")
-            print(f"Number of pieces with valid moves: {len(piece_moves)}")
-            total_moves = sum(len(moves) for moves in piece_moves.values())
-            print(f"Total valid moves: {total_moves}")
-
-        # Batch create children
-        children = {}
-        moves_pruned = 0
-        for from_pos, moves in piece_moves.items():
-            for to_pos in moves:
-                move_idx = self.encode_move(from_pos, to_pos)
+            for to_pos in valid_moves:
+                move_idx = self.encode_move(pos, to_pos)
                 prior = policy[move_idx]
 
-                # Create child regardless of prior (removed pruning)
-                t0 = time.time()
                 child_board = board.copy()
-                child_board.move_piece(from_pos, to_pos)
-                self.perf_stats["board_copy"] += time.time() - t0
-                self.perf_stats["board_copies"] += 1
+                child_board.make_move(pos, to_pos)
 
-                children[(from_pos, to_pos)] = Node(
+                node.children[(pos, to_pos)] = Node(
                     board=child_board, parent=node, prior=prior
                 )
 
-        if not children and self.debug:
-            print(f"\nNo children created for node!")
-            print(f"Number of pieces: {len(pieces)}")
-            print(
-                f"Valid moves found: {sum(len(moves) for moves in piece_moves.values())}"
-            )
-            print(f"Policy range: [{mx.min(policy):.4f}, {mx.max(policy):.4f}]")
-            print(
-                f"Prior threshold: {self.training_prior_threshold if self.training else self.eval_prior_threshold}"
-            )
-
-            # Print some sample moves and their priors
-            print("\nSample moves and their priors:")
-            for from_pos, moves in piece_moves.items():
-                for to_pos in moves:
-                    move_idx = self.encode_move(from_pos, to_pos)
-                    print(f"Move {from_pos}->{to_pos}: prior={policy[move_idx]:.4f}")
-
-        node.children = children
         node.is_expanded = True
         node.value_sum = value
         node.visit_count = 1

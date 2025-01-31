@@ -42,11 +42,12 @@ class BitBoard:
 
     def __init__(self):
         self.state = np.zeros((19, 8, 8), dtype=np.float32)
-        self.initialize_board()
         # Add pre-computed attack tables
         self.knight_attacks = self._init_knight_attacks()
         self.king_attacks = self._init_king_attacks()
         self.pawn_attacks = self._init_pawn_attacks()
+        self._moves_cache = {}  # Cache for valid moves
+        self.initialize_board()
 
     def initialize_board(self):
         """Set up the initial chess position"""
@@ -649,3 +650,110 @@ class BitBoard:
                     if 0 <= new_row < 8 and 0 <= new_col < 8:
                         attacks[row, col, new_row, new_col] = True
         return attacks
+
+    def _make_move_on_board(
+        self, board: np.ndarray, from_pos: Tuple[int, int], to_pos: Tuple[int, int]
+    ):
+        """Make move on a board array without validation"""
+        from_row, from_col = from_pos
+        to_row, to_col = to_pos
+
+        # Get piece details
+        color = -1
+        piece_type = -1
+        for pt in range(6):
+            if board[pt, from_row, from_col]:
+                color = 0
+                piece_type = pt
+                break
+            elif board[pt + 6, from_row, from_col]:
+                color = 1
+                piece_type = pt
+                break
+
+        if color == -1:
+            return
+
+        # Clear source square
+        channel = piece_type if color == 0 else piece_type + 6
+        board[channel, from_row, from_col] = 0
+
+        # Clear destination square (capture)
+        board[:12, to_row, to_col] = 0
+
+        # Place piece at destination
+        board[channel, to_row, to_col] = 1
+
+    def _is_in_check_vectorized(self, boards: np.ndarray, color: int) -> np.ndarray:
+        """Check if positions are in check (vectorized)"""
+        batch_size = boards.shape[0]
+        in_check = np.zeros(batch_size, dtype=bool)
+
+        # Find kings
+        king_channel = 5 if color == 0 else 11
+        for i in range(batch_size):
+            king_pos = np.where(boards[i, king_channel] > 0)
+            if len(king_pos[0]) == 0:
+                in_check[i] = True
+                continue
+            king_row, king_col = king_pos[0][0], king_pos[1][0]
+
+            # Check if king is attacked
+            enemy_color = 1 - color
+            in_check[i] = self._is_square_attacked_vectorized(
+                boards[i], (king_row, king_col), enemy_color
+            )
+
+        return in_check
+
+    def _is_square_attacked_vectorized(
+        self, board: np.ndarray, square: Tuple[int, int], attacker_color: int
+    ) -> bool:
+        """Check if a square is attacked in a position (vectorized)"""
+        row, col = square
+
+        # Knight attacks - convert float board to bool for bitwise operations
+        knight_channel = 1 if attacker_color == 0 else 7
+        if np.any(self.knight_attacks[row, col] & (board[knight_channel] > 0)):
+            return True
+
+        # King attacks
+        king_channel = 5 if attacker_color == 0 else 11
+        if np.any(self.king_attacks[row, col] & (board[king_channel] > 0)):
+            return True
+
+        # Pawn attacks
+        pawn_direction = -1 if attacker_color == 0 else 1
+        pawn_channel = 0 if attacker_color == 0 else 6
+        for dcol in [-1, 1]:
+            attack_row = row + pawn_direction
+            attack_col = col + dcol
+            if (
+                0 <= attack_row < 8
+                and 0 <= attack_col < 8
+                and board[pawn_channel, attack_row, attack_col] > 0
+            ):
+                return True
+
+        # Sliding piece attacks (bishop, rook, queen)
+        for piece_type, directions in [
+            (2, [(1, 1), (1, -1), (-1, 1), (-1, -1)]),  # Bishop
+            (3, [(1, 0), (-1, 0), (0, 1), (0, -1)]),  # Rook
+        ]:
+            piece_channel = piece_type if attacker_color == 0 else piece_type + 6
+            queen_channel = 4 if attacker_color == 0 else 10
+
+            for drow, dcol in directions:
+                current_row, current_col = row + drow, col + dcol
+                while 0 <= current_row < 8 and 0 <= current_col < 8:
+                    if (
+                        board[piece_channel, current_row, current_col] > 0
+                        or board[queen_channel, current_row, current_col] > 0
+                    ):
+                        return True
+                    if np.any(board[:12, current_row, current_col] > 0):
+                        break
+                    current_row += drow
+                    current_col += dcol
+
+        return False

@@ -295,6 +295,9 @@ class MCTS:
         pieces = board.get_all_pieces(board.get_current_turn())
         get_pieces_time = time.time() - t0
 
+        # Convert MLX policy array to numpy for indexing
+        policy_np = np.array(policy)
+
         # Timing variables
         move_encoding_time = 0
         node_creation_time = 0
@@ -312,7 +315,7 @@ class MCTS:
             for to_pos in valid_moves:
                 t1 = time.time()
                 move_idx = self.encode_move(pos, to_pos)
-                prior = policy[move_idx]
+                prior = policy_np[move_idx]  # Use numpy array for indexing
                 move_encoding_time += time.time() - t1
 
                 t1 = time.time()

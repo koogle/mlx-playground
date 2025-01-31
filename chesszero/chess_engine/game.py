@@ -326,6 +326,8 @@ class ChessGame:
                 return (row, 4), (row, to_col)
             return None, None
 
+        if len(move_str) > 4:
+            return None, None
         # Handle direct coordinate notation (e.g. "e2e4")
         if (
             len(move_str) == 4 and move_str.isalnum()

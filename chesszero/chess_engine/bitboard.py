@@ -1,5 +1,4 @@
 import numpy as np
-from enum import Enum
 from typing import List, Tuple, Set
 from dataclasses import dataclass
 
@@ -32,55 +31,58 @@ PIECE_PATTERNS = {
 class BitBoard:
     """
     Chess board representation using bit boards for efficient move generation and state updates.
-    Uses 14 channels:
+    Uses 19 channels:
     0-5: White pieces (Pawn, Knight, Bishop, Rook, Queen, King)
     6-11: Black pieces (Pawn, Knight, Bishop, Rook, Queen, King)
-    12: Current turn (1 for white, 0 for black)
-    13: Castle rights
+    12: Color to move (1 for white, 0 for black)
+    13-16: Castling rights (WK, WQ, BK, BQ)
+    17: Move count (normalized by dividing by max moves)
+    18: No-progress count (normalized by dividing by 50)
     """
 
     def __init__(self):
         # Initialize board state as numpy array for efficient operations
-        self.state = np.zeros((14, 8, 8), dtype=np.uint8)
+        self.state = np.zeros((19, 8, 8), dtype=np.float32)  # Changed to float32
         self.initialize_board()
 
     def initialize_board(self):
         """Set up the initial chess position"""
         # White pieces (channels 0-5)
-        # Pawns
-        self.state[0, 1, :] = 1
-        # Knights
-        self.state[1, 0, [1, 6]] = 1
-        # Bishops
-        self.state[2, 0, [2, 5]] = 1
-        # Rooks
-        self.state[3, 0, [0, 7]] = 1
-        # Queen
-        self.state[4, 0, 3] = 1
-        # King
-        self.state[5, 0, 4] = 1
-
-        # Black pieces (channels 6-11)
-        # Pawns
-        self.state[6, 6, :] = 1
-        # Knights
-        self.state[7, 7, [1, 6]] = 1
-        # Bishops
-        self.state[8, 7, [2, 5]] = 1
-        # Rooks
-        self.state[9, 7, [0, 7]] = 1
-        # Queen
-        self.state[10, 7, 3] = 1
-        # King
-        self.state[11, 7, 4] = 1
+        self.state[0:6] = self._init_pieces(0)  # White pieces
+        self.state[6:12] = self._init_pieces(1)  # Black pieces
 
         # White to move
-        self.state[12] = 1
+        self.state[12].fill(1)  # White to move = 1
 
-        # Initial castling rights - set for king and rook squares
-        self.state[13] = 0  # Clear all castling rights first
-        self.state[13, 0, [0, 4, 7]] = 1  # White castling rights
-        self.state[13, 7, [0, 4, 7]] = 1  # Black castling rights
+        # Initialize castling rights (one plane each)
+        self.state[13].fill(1)  # White kingside
+        self.state[14].fill(1)  # White queenside
+        self.state[15].fill(1)  # Black kingside
+        self.state[16].fill(1)  # Black queenside
+
+        # Move counters start at 0
+        self.state[17:].fill(0)
+
+    def _init_pieces(self, color: int) -> np.ndarray:
+        """Initialize piece positions for given color"""
+        pieces = np.zeros((6, 8, 8), dtype=np.float32)
+        rank = 0 if color == 0 else 7
+        pawn_rank = 1 if color == 0 else 6
+
+        # Pawns
+        pieces[0, pawn_rank] = 1
+        # Knights
+        pieces[1, rank, [1, 6]] = 1
+        # Bishops
+        pieces[2, rank, [2, 5]] = 1
+        # Rooks
+        pieces[3, rank, [0, 7]] = 1
+        # Queen
+        pieces[4, rank, 3] = 1
+        # King
+        pieces[5, rank, 4] = 1
+
+        return pieces
 
     def get_piece_at(self, row: int, col: int) -> Tuple[int, int]:
         """Returns (color, piece_type) at given position, where:
@@ -114,6 +116,10 @@ class BitBoard:
         if color == -1 or color != self.get_current_turn():
             return False
 
+        # Check if move resets progress counter (pawn move or capture)
+        is_capture = any(self.state[c, to_row, to_col] == 1 for c in range(12))
+        resets_progress = piece_type == 0 or is_capture  # Pawn move or capture
+
         # Clear source square
         channel = piece_type if color == 0 else piece_type + 6
         self.state[channel, from_row, from_col] = 0
@@ -125,21 +131,46 @@ class BitBoard:
         # Place piece at destination
         self.state[channel, to_row, to_col] = 1
 
-        # Update castling rights
+        # Update castling rights (now using separate planes)
         if piece_type == 5:  # King move
-            row = 0 if color == 0 else 7
-            self.state[13, row, :] = 0
+            if color == 0:
+                self.state[13:15].fill(0)  # Clear white castling
+            else:
+                self.state[15:17].fill(0)  # Clear black castling
         elif piece_type == 3:  # Rook move
-            row = 0 if color == 0 else 7
-            if from_col == 0:  # Queenside rook
-                self.state[13, row, [0, 4]] = 0
-            elif from_col == 7:  # Kingside rook
-                self.state[13, row, [4, 7]] = 0
+            if color == 0:
+                if from_col == 0:
+                    self.state[14].fill(0)  # Clear white queenside
+                elif from_col == 7:
+                    self.state[13].fill(0)  # Clear white kingside
+            else:
+                if from_col == 0:
+                    self.state[16].fill(0)  # Clear black queenside
+                elif from_col == 7:
+                    self.state[15].fill(0)  # Clear black kingside
+
+        # Update move counters (normalized)
+        moves = self.get_move_count() + 1
+        self.state[17].fill(min(moves / 200, 1.0))  # Normalize by max moves
+
+        if resets_progress:
+            self.state[18].fill(0)
+        else:
+            progress = self.get_moves_without_progress() + 1
+            self.state[18].fill(min(progress / 50, 1.0))  # Normalize by 50 move rule
 
         # Update turn
         self.state[12] = 1 - self.state[12]
 
         return True
+
+    def get_move_count(self) -> int:
+        """Get total number of moves played"""
+        return int(self.state[17, 0, 0] * 200)  # Denormalize
+
+    def get_moves_without_progress(self) -> int:
+        """Get number of moves without a pawn move or capture"""
+        return int(self.state[18, 0, 0] * 50)  # Denormalize
 
     def copy(self) -> "BitBoard":
         """Create a deep copy of the board"""
@@ -235,13 +266,16 @@ class BitBoard:
             if self.get_piece_at(new_row, col)[0] == -1:  # Square must be empty
                 moves.add((new_row, col))
 
-                # Initial two-square move - only if path is clear and on starting rank
-                if row == start_row:
+                # Initial two-square move - only if pawn is on its starting rank
+                if row == start_row:  # Changed condition to check starting rank
                     two_forward = row + 2 * direction
                     # Check if both squares are empty
                     if (
-                        self.get_piece_at(new_row, col)[0] == -1
-                        and self.get_piece_at(two_forward, col)[0] == -1
+                        0 <= two_forward < 8  # Make sure we're on the board
+                        and self.get_piece_at(new_row, col)[0]
+                        == -1  # First square empty
+                        and self.get_piece_at(two_forward, col)[0]
+                        == -1  # Second square empty
                     ):
                         moves.add((two_forward, col))
 
@@ -499,6 +533,17 @@ class BitBoard:
                 return True
 
         return False
+
+    def is_game_over(self) -> bool:
+        """Check if the game is over (checkmate, stalemate, draw, or max moves reached)"""
+        current_turn = self.get_current_turn()
+        return (
+            self.is_checkmate(current_turn)
+            or self.is_stalemate(current_turn)
+            or self.is_draw()
+            or self.get_moves_without_progress() >= 75  # 75-move rule
+            or self.get_move_count() >= 200  # Maximum game length
+        )
 
     def __str__(self) -> str:
         """Return string representation of the board"""

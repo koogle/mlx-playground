@@ -5,8 +5,8 @@ from chess_engine.bitboard import BitBoard
 
 def encode_board(board: BitBoard) -> mx.array:
     """Convert BitBoard state to network input format"""
-    # BitBoard's state is already in the correct format
-    return mx.array(board.state)
+    # Convert uint8 to float32 when creating MLX array
+    return mx.array(board.state, dtype=mx.float32)
 
 
 def decode_policy(policy_output: mx.array) -> list:

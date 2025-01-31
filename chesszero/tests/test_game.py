@@ -158,6 +158,13 @@ class TestGame(unittest.TestCase):
                 f"Move {move} should be invalid but was accepted",
             )
 
+        # Try invalid move e7e6e5 (too many squares)
+        self.assertEqual(
+            (None, None),  # Expected result
+            self.game.parse_move("e7e6e5"),  # Should return None,None for invalid move
+            "Move e7e6e5 should be invalid but got {}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,4 @@
 from typing import Tuple
-from chess_engine.board import Color
 from chess_engine.game import ChessGame
 from utils.random_player import RandomPlayer
 from model.mcts import MCTS
@@ -19,8 +18,8 @@ def play_game(mcts: MCTS, opponent, mcts_player_color) -> Tuple[int, int]:
         if state != "Normal":
             if "Checkmate" in state:
                 winner = "Black" if "White wins" in state else "White"
-                if (winner == "White" and mcts_player_color == Color.WHITE) or (
-                    winner == "Black" and mcts_player_color == Color.BLACK
+                if (winner == "White" and mcts_player_color == 0) or (
+                    winner == "Black" and mcts_player_color == 1
                 ):
                     return 1, 1
                 return 0, 1
@@ -29,6 +28,8 @@ def play_game(mcts: MCTS, opponent, mcts_player_color) -> Tuple[int, int]:
         if game.get_current_turn() == mcts_player_color:
             # MCTS player's turn
             move = mcts.get_move(game.board)
+
+            print("MCTS move: ", move)
         else:
             # Opponent's turn
             move = opponent.select_move(game.board)
@@ -52,7 +53,7 @@ def evaluate_against_random(model, config: ModelConfig, n_games: int = 100) -> f
     total_games = 0
 
     # Play as both white and black
-    for color in [Color.WHITE, Color.BLACK]:
+    for color in [0, 1]:
         for _ in range(n_games // 2):
             wins, games = play_game(mcts, random_player, color)
             total_wins += wins

@@ -55,11 +55,14 @@ class Trainer:
 
     def train(self, n_epochs: Optional[int] = None):
         """Main training loop"""
-        self.mcts.training = True  # Enable training mode
         n_epochs = n_epochs or self.config.n_epochs
 
         for epoch in range(self.start_epoch, n_epochs):
             print(f"\nEpoch {epoch + 1}/{n_epochs}")
+
+            # Set MCTS to training mode for self-play
+            self.mcts.training = True
+            self.mcts.debug = self.config.debug  # Ensure debug flag is passed through
 
             # Initial training against random opponent
             if epoch < 5:  # First 5 epochs
@@ -140,6 +143,10 @@ class Trainer:
     def evaluate(self, n_games: int = 100) -> float:
         """Evaluate current model against random player"""
         print("\nEvaluating against random player...")
+        # Set MCTS to evaluation mode
+        self.mcts.training = False
+        self.mcts.debug = self.config.debug  # Ensure debug flag is passed through
+
         random_player = RandomPlayer()
         total_wins = 0
         total_games = 0

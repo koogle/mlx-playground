@@ -101,7 +101,7 @@ class ChessNet(nn.Module):
 
         # Input convolution block
         self.conv_input = nn.Conv2d(
-            in_channels=14,  # Input channels for chess board encoding
+            in_channels=19,  # Updated for new BitBoard state (19 channels)
             out_channels=config.n_filters,
             kernel_size=3,
             padding=1,
@@ -165,11 +165,11 @@ class ChessNet(nn.Module):
     def __call__(self, x: mx.array) -> Tuple[mx.array, mx.array]:
         """Forward pass"""
         # Input comes as [batch_size, channels, height, width]
-        x = mx.transpose(x, (0, 2, 3, 1))
+        x = mx.transpose(x, (0, 2, 3, 1))  # to [batch_size, height, width, channels]
 
         # Input block
-        x = self.conv_input(x)
-        x = self.bn_input(x)  # Always use running stats in eval mode
+        x = self.conv_input(x)  # Now expects 19 input channels
+        x = self.bn_input(x)
         x = self.relu(x)
 
         # Residual tower
@@ -248,7 +248,6 @@ class ChessNet(nn.Module):
             "optimizer_state": optimizer_state,
             "config": vars(self.config),
         }
-        print(f"{state}")
         state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
         with open(state_path, "w") as f:
             json.dump(state, f)

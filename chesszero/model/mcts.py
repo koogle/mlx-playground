@@ -1,9 +1,6 @@
 import math
 import time
-from random import randint
 
-from tqdm import tqdm
-from chess_engine.board import Board, Color
 from config.model_config import ModelConfig
 from utils.board_utils import encode_board
 from typing import List, Tuple
@@ -14,7 +11,7 @@ from chess_engine.bitboard import BitBoard
 class Node:
     """Tree node storing state, prior probabilities, visit counts, and Q-values"""
 
-    def __init__(self, board: Board, parent=None, prior=0.0):
+    def __init__(self, board: BitBoard, parent=None, prior=0.0):
         self.board = board
         self.parent = parent
         self.prior = prior
@@ -79,11 +76,16 @@ class MCTS:
         start_time = time.time()
         self.model.eval()
         try:
+            if self.debug:
+                print(f"\nBoard state shape: {board.state.shape}")
+
             root = Node(board)
 
             # Initial model inference and expansion
             t0 = time.time()
-            policies, values = self.model(board.state[None, ...])
+            # Convert numpy array to MLX array with float32 dtype
+            board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
+            policies, values = self.model(board_state)
             policy = mx.array(policies[0])
             value = values[0].item()
             self.perf_stats["model_inference"] += time.time() - t0
@@ -107,13 +109,10 @@ class MCTS:
                 print("\nWarning: Root node has no children after expansion!")
                 print(f"Board state:\n{board}")
                 print(f"Root value: {value}")
+                print(f"Game over: {board.is_game_over()}")
                 valid_moves = []
-                pieces = (
-                    board.white_pieces
-                    if board.current_turn == Color.WHITE
-                    else board.black_pieces
-                )
-                for piece, pos in pieces:
+                pieces = board.get_all_pieces(board.get_current_turn())
+                for pos, piece_type in pieces:
                     moves = board.get_valid_moves(pos)
                     if moves:
                         valid_moves.extend([(pos, move) for move in moves])
@@ -151,7 +150,9 @@ class MCTS:
                     if not node.board.is_game_over():
                         board_hash = hash(str(node.board))
                         if board_hash not in self.board_cache:
-                            self.board_cache[board_hash] = encode_board(node.board)
+                            # Ensure encode_board returns correct shape
+                            encoded = encode_board(node.board)
+                            self.board_cache[board_hash] = encoded
                         encoded_boards.append(self.board_cache[board_hash])
                         nodes_to_expand.append(node)
                     search_paths.append((path, node))
@@ -257,8 +258,11 @@ class MCTS:
     def _expand_node(self, node: Node, policy, value):
         """Expand node with all valid moves"""
         board = node.board
-        current_turn = board.get_current_turn()
-        pieces = board.get_all_pieces(current_turn)
+        pieces = (
+            board.get_all_pieces(0)
+            if board.get_current_turn() == 0
+            else board.get_all_pieces(1)
+        )
 
         # Get valid moves for each piece
         for pos, piece_type in pieces:

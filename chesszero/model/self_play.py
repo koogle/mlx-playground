@@ -1,6 +1,5 @@
 import numpy as np
 from chess_engine.game import ChessGame
-from chess_engine.board import Color
 from config.model_config import ModelConfig
 from utils.random_player import RandomPlayer
 from model.mcts import MCTS
@@ -147,11 +146,11 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
             print(f"Generating game {game_idx + 1}/{config.n_games_per_iteration}")
 
         # Play as both white and black alternately
-        color = Color.WHITE if game_idx % 2 == 0 else Color.BLACK
+        color = 0 if game_idx % 2 == 0 else 1
         game = ChessGame()
         states, policies, values = [], [], []
 
-        print(f"\nStarting new game as {'White' if color == Color.WHITE else 'Black'}")
+        print(f"\nStarting new game as {'White' if color == 0 else 'Black'}")
         print("---------------------------")
 
         move_count = 0
@@ -194,7 +193,7 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
         print(f"\nGame over. Result: {result}")
 
         # Adjust result based on our player's color
-        if color == Color.BLACK:
+        if color == 1:
             result = -result
 
         # Fill in the values array based on game result

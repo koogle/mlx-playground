@@ -14,7 +14,7 @@ class ModelConfig:
     # Network Architecture
     n_residual_blocks: int = 19
     n_filters: int = 256
-    input_shape: tuple = (8, 8, 119)  # Board size + input planes
+    input_shape: tuple = (8, 8, 19)  # Board size + input planes (19 channels)
     policy_output_dim: int = 4672  # All possible moves: 8x8x73
 
     # MCTS
@@ -38,7 +38,7 @@ class ModelConfig:
     weight_decay: float = 1e-4
 
     # Self-play
-    n_games_per_iteration: int = 1  # 5000
+    n_games_per_iteration: int = 100  # 5000
     temperature: float = 1.0  # Initial temperature for move selection
     temp_decay_steps: int = 10  # Number of moves before temperature decay
     temp_final: float = 0.1  # Final temperature after decay
@@ -51,4 +51,4 @@ class ModelConfig:
     n_history_moves: int = 8  # Number of previous board states to include
 
     # Debug options
-    debug: bool = True  # Print debug information including tensor shapes
+    debug: bool = False

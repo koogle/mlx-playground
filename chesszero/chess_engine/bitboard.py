@@ -263,33 +263,69 @@ class BitBoard:
 
         # Handle pawns separately due to special rules
         if piece_type == 0:  # Pawn
-            moves.update(self._get_pawn_moves(row, col, color))
+            moves = self._get_pawn_moves(row, col, color)
         elif piece_type == 1:  # Knight
-            moves.update(
-                self._get_step_moves(row, col, PIECE_PATTERNS[1].directions, color)
-            )
+            moves = self._get_step_moves(row, col, PIECE_PATTERNS[1].directions, color)
         else:
             pattern = PIECE_PATTERNS[piece_type]
             if pattern.sliding:
-                moves.update(
-                    self._get_sliding_moves(row, col, pattern.directions, color)
-                )
+                moves = self._get_sliding_moves(row, col, pattern.directions, color)
             else:
-                moves.update(self._get_step_moves(row, col, pattern.directions, color))
+                moves = self._get_step_moves(row, col, pattern.directions, color)
 
-        # Only filter for check resolution if actually in check
-        current_turn = self.get_current_turn()
-        if self.is_in_check(current_turn):
-            resolving_moves = self._get_check_resolving_moves(pos, moves)
-            moves = moves & resolving_moves
-
-        # Filter pinned piece moves
-        allowed_direction = self._get_pin_info(pos)
-        if allowed_direction:
-            moves = self._filter_pinned_moves(pos, moves, allowed_direction)
+        # Check if piece is pinned
+        pin_direction = self._get_pin_info(pos)
+        if pin_direction:
+            moves = self._filter_pinned_moves(pos, moves, pin_direction)
 
         # Filter moves that would leave king in check
-        return self._filter_valid_moves(pos, moves)
+        if self.is_in_check(color):
+            moves = self._get_check_resolving_moves(pos, moves)
+
+        return moves
+
+    def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
+        """Get all valid pawn moves including captures"""
+        moves = set()
+        direction = 1 if color == 0 else -1
+        start_row = 1 if color == 0 else 6
+
+        # Forward moves
+        new_row = row + direction
+        if 0 <= new_row < 8 and self.get_piece_at(new_row, col)[0] == -1:
+            moves.add((new_row, col))
+            # Double move from start
+            if row == start_row:
+                two_forward = row + 2 * direction
+                if self.get_piece_at(two_forward, col)[0] == -1:
+                    moves.add((two_forward, col))
+
+        # Captures
+        for col_delta in [-1, 1]:
+            capture_col = col + col_delta
+            if 0 <= capture_col < 8:
+                capture_row = row + direction
+                if 0 <= capture_row < 8:
+                    target_color, _ = self.get_piece_at(capture_row, capture_col)
+                    if target_color == (1 - color):  # Enemy piece
+                        moves.add((capture_row, capture_col))
+
+        return moves
+
+    def _get_step_moves(
+        self, row: int, col: int, directions: List[Tuple[int, int]], color: int
+    ) -> Set[Tuple[int, int]]:
+        """Get moves for non-sliding pieces (knight, king)"""
+        moves = set()
+        for dr, dc in directions:
+            new_row, new_col = row + dr, col + dc
+            if 0 <= new_row < 8 and 0 <= new_col < 8:
+                target_color, _ = self.get_piece_at(new_row, new_col)
+                if target_color == -1 or target_color == (
+                    1 - color
+                ):  # Empty or enemy square
+                    moves.add((new_row, new_col))
+        return moves
 
     def _get_sliding_moves(
         self, row: int, col: int, directions: List[Tuple[int, int]], color: int
@@ -314,52 +350,6 @@ class BitBoard:
                 current_row += row_delta
                 current_col += col_delta
 
-        return moves
-
-    def _get_step_moves(
-        self, row: int, col: int, directions: List[Tuple[int, int]], color: int
-    ) -> Set[Tuple[int, int]]:
-        """Get moves for non-sliding pieces"""
-        moves = set()
-        for dr, dc in directions:
-            new_row = row + dr
-            new_col = col + dc
-            if 0 <= new_row < 8 and 0 <= new_col < 8:
-                target_color, _ = self.get_piece_at(new_row, new_col)
-                if target_color != color:  # Can move to empty or enemy square
-                    moves.add((new_row, new_col))
-        return moves
-
-    def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
-        moves = set()
-        direction = 1 if color == 0 else -1
-        start_row = 1 if color == 0 else 6
-
-        # Single move
-        new_row = row + direction
-        if 0 <= new_row < 8:
-            if self.get_piece_at(new_row, col)[0] == -1:
-                moves.add((new_row, col))
-
-                # Double move
-                if row == start_row:
-                    two_forward = row + 2 * direction
-                    if 0 <= two_forward < 8:
-                        if (
-                            self.get_piece_at(new_row, col)[0] == -1
-                            and self.get_piece_at(two_forward, col)[0] == -1
-                        ):
-                            moves.add((two_forward, col))
-
-        # Captures
-        for col_delta in [-1, 1]:
-            capture_col = col + col_delta
-            if 0 <= capture_col < 8:
-                capture_row = new_row
-                if 0 <= capture_row < 8:
-                    target_color, _ = self.get_piece_at(capture_row, capture_col)
-                    if target_color == (1 - color):
-                        moves.add((capture_row, capture_col))
         return moves
 
     def get_king_position(self, color: int) -> Optional[Tuple[int, int]]:

@@ -56,20 +56,25 @@ class MCTS:
         self.config = config
         self.debug = True
         self.valid_moves_cache = {}
-        self.position_cache = {}  # Cache for piece positions
-        self.all_moves_cache = {}  # board_hash -> all valid moves
+        self.position_cache = {}
+        self.all_moves_cache = {}
         self.training = True
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
+        self.root_node = None  # Initialize root_node
 
         # Pre-compute move encoding table and buffers
         self._move_encoding_table = self._init_move_encoding_table()
         self.max_batch_size = 128
         self.policy_buffer = np.zeros((self.max_batch_size, 4096))
         self.value_buffer = np.zeros(self.max_batch_size)
-        self.visit_counts_buffer = np.zeros(128)  # Typical max children
+        self.visit_counts_buffer = np.zeros(128)
         self.values_buffer = np.zeros(128)
         self.priors_buffer = np.zeros(128)
+
+        # Pre-allocate buffers
+        self.boards_buffer = np.zeros((128, 19, 8, 8), dtype=np.float32)
+        self.moves_buffer = np.zeros((218, 2), dtype=np.int8)
 
     def _init_move_encoding_table(
         self,
@@ -95,20 +100,15 @@ class MCTS:
     def _expand_node(self, node: Node, policy, value):
         """Keep MLX only for policy/value conversion"""
         board = node.board
-        # Convert policy to numpy once at the start
         policy_np = np.array(policy)
 
-        # Get all valid moves with caching
-        if hash(str(board.state)) in self.position_cache:
-            all_valid_moves = self.position_cache[hash(str(board.state))]
+        # Get valid moves
+        board_hash = node.board.get_hash()  # Use faster hashing
+        if board_hash in self.position_cache:
+            all_valid_moves = self.position_cache[board_hash]
         else:
-            pieces = board.get_all_pieces(board.get_current_turn())
-            all_valid_moves = {}
-            for pos, piece_type in pieces:
-                valid_moves = board.get_valid_moves(pos)
-                if valid_moves:
-                    all_valid_moves[pos] = valid_moves
-            self.position_cache[hash(str(board.state))] = all_valid_moves
+            all_valid_moves = self._get_all_valid_moves(node.board)
+            self.position_cache[board_hash] = all_valid_moves
 
         # Early exit if no moves
         total_moves = sum(len(moves) for moves in all_valid_moves.values())
@@ -154,87 +154,46 @@ class MCTS:
 
         self.model.eval()
         try:
-            root = Node(board)
-
-            # Initial expansion - reuse buffers
+            # Create root and do initial evaluation
+            self.root_node = Node(board)  # Store root node as instance variable
             board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
             policies, values = self.model(board_state)
+            self._expand_node(self.root_node, policies[0], values[0].item())
 
-            # Convert back to numpy immediately
-            policy_np = np.array(policies[0])
-            value_np = values[0].item()
-
-            self._expand_node(root, policy_np, value_np)
-
-            if not root.children:
+            if not self.root_node.children:
                 return None
 
-            # Pre-allocate buffers for the main simulation loop
-            batch_size = self.config.n_simulations
-            chunk_size = self.max_batch_size
-            boards_buffer = []
-            nodes_buffer = []
-            paths_buffer = []
+            # Pre-allocate buffers once
+            boards_buffer = np.zeros(
+                (self.max_batch_size, *board.state.shape), dtype=np.float32
+            )
+            paths_buffer = [[] for _ in range(self.max_batch_size)]
 
-            # Reuse these arrays
-            board_states = np.empty((chunk_size, *board.state.shape), dtype=np.float32)
-            path_buffer = []  # Reuse for each simulation
+            # Batch process simulations with early stopping check
+            for sim_start in range(0, self.config.n_simulations, self.max_batch_size):
+                batch_size = min(
+                    self.max_batch_size, self.config.n_simulations - sim_start
+                )
 
-            for sim_start in range(0, batch_size, chunk_size):
-                chunk_end = min(sim_start + chunk_size, batch_size)
-                current_batch_size = chunk_end - sim_start
+                self._batch_simulate(
+                    self.root_node,
+                    batch_size,
+                    boards_buffer[:batch_size],
+                    paths_buffer[:batch_size],
+                )
 
-                # Selection phase - batch process
-                for _ in range(current_batch_size):
-                    node = root
-                    path_buffer.clear()
-                    path_buffer.append(node)
+                # Check if a move clearly dominates
+                if self.should_stop(self.root_node):
+                    if self.debug:
+                        print(
+                            f"Stopping simulations early at simulation {sim_start + batch_size} of {self.config.n_simulations}"
+                        )
+                    break
 
-                    # Tree traversal
-                    while node.is_expanded and node.children:
-                        move, child = node.select_child(self.config.c_puct)
-                        if not move:
-                            break
-                        node = child
-                        path_buffer.append(node)
-
-                    if not node.board.is_game_over():
-                        boards_buffer.append(node.board.state)
-                        nodes_buffer.append(node)
-                    paths_buffer.append(path_buffer[:])  # Make a shallow copy
-
-                # Batch evaluate positions if any
-                if boards_buffer:
-                    # Stack boards efficiently
-                    n_boards = len(boards_buffer)
-                    board_states[:n_boards] = boards_buffer
-                    board_batch = mx.array(board_states[:n_boards], dtype=mx.float32)
-                    policies, values = self.model(board_batch)
-
-                    # Expand nodes in batch
-                    for node, policy, value in zip(nodes_buffer, policies, values):
-                        self._expand_node(node, policy, value.item())
-
-                    boards_buffer.clear()
-                    nodes_buffer.clear()
-
-                # Vectorized backup
-                for path in paths_buffer:
-                    value = (
-                        path[-1].board.get_game_result()
-                        if path[-1].board.is_game_over()
-                        else path[-1].value()
-                    )
-                    self.backup(path, value)
-                paths_buffer.clear()
-
-            # Find best move - use numpy for efficiency
-            best_move = max(
-                root.children.items(),
-                key=lambda x: x[1].visit_count,
-            )[0]
-
-            return best_move
+            # Return most visited move
+            return max(self.root_node.children.items(), key=lambda x: x[1].visit_count)[
+                0
+            ]
 
         finally:
             self.model.train()
@@ -258,7 +217,7 @@ class MCTS:
         self, board: BitBoard, pos: Tuple[int, int]
     ) -> Set[Tuple[int, int]]:
         """Get valid moves with caching"""
-        board_hash = hash(str(board.state))
+        board_hash = board.get_hash()
         cache_key = (board_hash, pos)
 
         if cache_key in self.valid_moves_cache:
@@ -272,7 +231,7 @@ class MCTS:
         self, board: BitBoard
     ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
         """Get all valid moves for current player with caching"""
-        board_hash = hash(str(board.state))
+        board_hash = board.get_hash()
         if board_hash in self.all_moves_cache:
             return self.all_moves_cache[board_hash]
 
@@ -285,6 +244,97 @@ class MCTS:
 
         self.all_moves_cache[board_hash] = moves
         return moves
+
+    def _get_moves_fast(
+        self, board: BitBoard, moves_buffer: np.ndarray
+    ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
+        """Fast move generation using pre-allocated buffer"""
+        moves = {}
+        pieces = board.get_all_pieces(board.get_current_turn())
+
+        for pos, piece_type in pieces:
+            valid_moves = board.get_valid_moves(pos)
+            if valid_moves:
+                moves[pos] = valid_moves
+
+        return moves
+
+    def _batch_simulate(
+        self,
+        root: Node,
+        batch_size: int,
+        boards_buffer: np.ndarray,
+        paths_buffer: List[List[Node]],
+    ):
+        """Batch process multiple MCTS simulations"""
+        # Selection phase - batch process
+        nodes_to_expand = []
+        for i in range(batch_size):
+            node = root
+            path = []
+            path.append(node)
+
+            # Tree traversal
+            while node.is_expanded and node.children:
+                move, child = node.select_child(self.config.c_puct)
+                if not move:
+                    break
+                node = child
+                path.append(node)
+
+            if not node.board.is_game_over():
+                boards_buffer[len(nodes_to_expand)] = node.board.state
+                nodes_to_expand.append(node)
+            paths_buffer[i] = path
+
+        # Batch evaluate positions if any
+        if nodes_to_expand:
+            # Convert boards for model inference
+            n_boards = len(nodes_to_expand)
+            board_batch = mx.array(boards_buffer[:n_boards], dtype=mx.float32)
+            policies, values = self.model(board_batch)
+
+            # Expand nodes in batch
+            for node, policy, value in zip(nodes_to_expand, policies, values):
+                self._expand_node(node, policy, value.item())
+
+        # Backup phase
+        for path in paths_buffer[:batch_size]:
+            if not path:  # Skip empty paths
+                continue
+            value = (
+                path[-1].board.get_game_result()
+                if path[-1].board.is_game_over()
+                else path[-1].value()
+            )
+            self.backup(path, value)
+
+    def should_stop(self, root: Node) -> bool:
+        """
+        Check if we can stop further simulations early.
+        For example, if the best child visit count is sufficiently high compared
+        to the others, we can return True.
+        """
+        if not root.children:
+            return False
+        # Gather visit counts from all children of the root
+        visit_counts = [child.visit_count for child in root.children.values()]
+        best = max(visit_counts)
+        if len(visit_counts) > 1:
+            # Get second best, note that the list is unsorted so sort it
+            sorted_counts = sorted(visit_counts, reverse=True)
+            second_best = sorted_counts[1]
+        else:
+            second_best = 0
+
+        # If best has reached a minimal threshold and is significantly ahead of second best, stop.
+        if best >= 20 and best > second_best * 1.5:
+            if self.debug:
+                print(
+                    f"Early stop triggered: best = {best}, second best = {second_best}"
+                )
+            return True
+        return False
 
 
 class BitBoard:

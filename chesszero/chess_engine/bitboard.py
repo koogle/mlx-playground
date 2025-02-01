@@ -41,7 +41,8 @@ class BitBoard:
     """
 
     def __init__(self):
-        self.state = np.zeros((19, 8, 8), dtype=np.float32)
+        # Use contiguous memory layout
+        self.state = np.zeros((19, 8, 8), dtype=np.float32, order="C")
         # Add pre-computed attack tables
         self.knight_attacks = self._init_knight_attacks()
         self.king_attacks = self._init_king_attacks()
@@ -130,29 +131,28 @@ class BitBoard:
         from_row, from_col = from_pos
         to_row, to_col = to_pos
 
-        # Get piece details
+        # Get piece details first
         color, piece_type = self.get_piece_at(from_row, from_col)
         if color == -1 or color != self.get_current_turn():
             return False
 
+        # Save piece channel
+        channel = piece_type if color == 0 else piece_type + 6
+
+        # Check for capture
+        is_capture = any(self.state[c, to_row, to_col] == 1 for c in range(12))
+        resets_progress = piece_type == 0 or is_capture
+
+        # Clear destination square
+        self.state[:12, to_row, to_col] = 0
+
+        # Move piece
+        self.state[channel, to_row, to_col] = 1
+        self.state[channel, from_row, from_col] = 0
+
         # Update king position if moving king
         if piece_type == 5:  # King
             self.king_positions[color] = (to_row, to_col)
-
-        # Check if move resets progress counter (pawn move or capture)
-        is_capture = any(self.state[c, to_row, to_col] == 1 for c in range(12))
-        resets_progress = piece_type == 0 or is_capture  # Pawn move or capture
-
-        # Clear source square
-        channel = piece_type if color == 0 else piece_type + 6
-        self.state[channel, from_row, from_col] = 0
-
-        # Clear destination square (capture)
-        for c in range(12):
-            self.state[c, to_row, to_col] = 0
-
-        # Place piece at destination
-        self.state[channel, to_row, to_col] = 1
 
         # Update castling rights (now using separate planes)
         if piece_type == 5:  # King move

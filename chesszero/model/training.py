@@ -15,6 +15,9 @@ from utils.board_utils import encode_board
 from config.model_config import ModelConfig
 import numpy as np
 from pathlib import Path
+import time
+import logging
+from tqdm import tqdm
 
 
 class Trainer:
@@ -30,8 +33,29 @@ class Trainer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+        # Set up training log file
+        self.log_dir = self.checkpoint_dir / "logs"
+        self.log_dir.mkdir(exist_ok=True)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        self.training_log = self.log_dir / f"training_log_{timestamp}.txt"
+
+        self.last_eval_time = time.time()
+        self.logger = logging.getLogger(__name__)
+
+        # Add file handler for training log
+        file_handler = logging.FileHandler(self.training_log)
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        )
+        self.logger.addHandler(file_handler)
+
+        # Log initial setup
+        self.logger.info("=== Training Session Started ===")
+        self.logger.info(f"Checkpoint directory: {self.checkpoint_dir}")
+        self.logger.info(f"Model config:\n{vars(config)}")
+
         if resume_epoch is not None:
-            print(f"Resuming from epoch {resume_epoch}")
+            self.logger.info(f"Resuming from epoch {resume_epoch}")
             self.model, state = ChessNet.load_checkpoint(checkpoint_dir, resume_epoch)
             self.start_epoch = resume_epoch + 1
             # Recreate optimizer with saved state if needed
@@ -56,58 +80,79 @@ class Trainer:
     def train(self, n_epochs: Optional[int] = None):
         """Main training loop"""
         n_epochs = n_epochs or self.config.n_epochs
+        start_time = time.time()
+        self.logger.info("\n=== Training Started ===")
 
         for epoch in range(self.start_epoch, n_epochs):
-            print(f"\nEpoch {epoch + 1}/{n_epochs}")
+            epoch_start_time = time.time()
+            self.logger.info(f"\n{'='*50}")
+            self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
+            self.logger.info(f"{'='*50}")
 
             # Set MCTS to training mode for self-play
             self.mcts.training = True
-            self.mcts.debug = self.config.debug  # Ensure debug flag is passed through
+            self.mcts.debug = self.config.debug
 
-            # Initial training against random opponent
-            if epoch < 5:  # First 5 epochs
-                print("Playing against random opponent for initial training...")
-                games = generate_random_opponent_games(self.mcts, self.config)
-            else:
-                games = generate_games(self.mcts, self.config)
+            # Generate self-play games
+            game_start_time = time.time()
+            games = generate_games(self.mcts, self.config)
+            game_time = time.time() - game_start_time
+            self.logger.info(f"Self-play completed in {game_time:.1f}s")
+
+            # Log game statistics
+            total_positions = sum(len(states) for states, _, _ in games)
+            avg_moves = total_positions / len(games) if games else 0
+            self.logger.info(f"Average moves per game: {avg_moves:.1f}")
+            self.logger.info(f"Total training positions: {total_positions}")
 
             # Train on game data
-            print("Training on game data...")
+            self.logger.info("Training on game data...")
             total_loss = 0
             n_batches = 0
+            policy_loss = 0
+            value_loss = 0
 
-            for batch in create_batches(games, self.config.batch_size):
-                loss = self.train_on_batch(batch)
+            batches = list(create_batches(games, self.config.batch_size))
+            for batch in tqdm(batches, desc="Training batches"):
+                loss, p_loss, v_loss = self.train_on_batch(batch)
                 total_loss += loss
+                policy_loss += p_loss
+                value_loss += v_loss
                 n_batches += 1
 
             avg_loss = total_loss / n_batches if n_batches > 0 else 0
-            print(f"Average loss: {avg_loss:.4f}")
+            avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
+            avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
+            epoch_time = time.time() - epoch_start_time
 
-            # Save checkpoint every N epochs
-            if (epoch + 1) % 5 == 0:
-                print("Saving checkpoint...")
+            # Log detailed training statistics
+            self.logger.info(f"Epoch completed in {epoch_time:.1f}s")
+            self.logger.info(f"Average total loss: {avg_loss:.4f}")
+            self.logger.info(f"Average policy loss: {avg_policy_loss:.4f}")
+            self.logger.info(f"Average value loss: {avg_value_loss:.4f}")
+
+            # Check if it's time for evaluation
+            current_time = time.time()
+            minutes_since_last_eval = (current_time - self.last_eval_time) / 60
+
+            if minutes_since_last_eval >= self.config.eval_interval_minutes:
+                self.logger.info("\n=== Running Evaluation ===")
+                win_rate = self.evaluate()
+                self.logger.info(f"Win rate vs random: {win_rate:.2%}")
+
+                # Save checkpoint after evaluation
+                self.logger.info("Saving checkpoint...")
                 self.model.save_checkpoint(
                     self.checkpoint_dir, epoch + 1, optimizer_state=self.optimizer.state
                 )
+                self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
 
-            # Evaluate periodically
-            if (epoch + 1) % 5 == 0:
-                win_rate = self.evaluate()
-                print(f"Win rate vs random: {win_rate:.2%}")
+                # Update last eval time
+                self.last_eval_time = current_time
 
-    def get_policy_distribution(self, root_node):
-        """Convert MCTS visit counts to policy distribution"""
-        policy = mx.zeros(self.config.policy_output_dim)
-
-        for move, child in root_node.children.items():
-            move_idx = self.mcts.encode_move(move[0], move[1])
-            if move_idx < len(policy):
-                policy[move_idx] = child.visit_count
-
-        # Normalize
-        policy = policy / mx.sum(policy)
-        return policy
+        total_time = time.time() - start_time
+        self.logger.info("\n=== Training Completed ===")
+        self.logger.info(f"Total training time: {total_time/3600:.1f} hours")
 
     def get_game_outcome(self, state: str) -> float:
         """Convert game state to value"""
@@ -123,12 +168,12 @@ class Trainer:
         def loss_fn(params, states, policies, values):
             self.model.update(params)
             pred_policies, pred_values = self.model(states)
-            policy_loss = -mx.mean(policies * mx.log(pred_policies + 1e-8))
-            value_loss = mx.mean((values - pred_values) ** 2)
-            return policy_loss + value_loss
+            p_loss = -mx.mean(policies * mx.log(pred_policies + 1e-8))
+            v_loss = mx.mean((values - pred_values) ** 2)
+            return p_loss + v_loss, p_loss, v_loss
 
         # Compute loss and gradients
-        loss, grads = mx.value_and_grad(loss_fn)(
+        (loss, p_loss, v_loss), grads = mx.value_and_grad(loss_fn, has_aux=True)(
             self.model.parameters(), states, policies, values
         )
 
@@ -137,12 +182,15 @@ class Trainer:
 
         # Evaluate to get actual loss value
         mx.eval(loss)
+        mx.eval(p_loss)
+        mx.eval(v_loss)
 
-        return loss.item()
+        return loss.item(), p_loss.item(), v_loss.item()
 
     def evaluate(self, n_games: int = 100) -> float:
         """Evaluate current model against random player"""
-        print("\nEvaluating against random player...")
+        self.logger.info("\nEvaluating against random player...")
+
         # Set MCTS to evaluation mode
         self.mcts.training = False
         self.mcts.debug = self.config.debug  # Ensure debug flag is passed through
@@ -154,18 +202,20 @@ class Trainer:
         # Play as both white and black
         for color in [Color.WHITE, Color.BLACK]:
             for game_idx in range(n_games // 2):
-                if game_idx % 10 == 0:  # Progress update
-                    print(
-                        f"Playing game {game_idx + 1}/{n_games//2} as {'White' if color == Color.WHITE else 'Black'}"
-                    )
+                # Show board for first evaluation game of each color if enabled
+                show_board = self.config.display_eval_game and game_idx == 0
 
-                wins, games = self.play_evaluation_game(random_player, color)
+                wins, games = self.play_evaluation_game(
+                    random_player, color, show_board=show_board
+                )
                 total_wins += wins
                 total_games += games
 
         return total_wins / total_games
 
-    def play_evaluation_game(self, opponent, mcts_player_color) -> Tuple[int, int]:
+    def play_evaluation_game(
+        self, opponent, mcts_player_color, show_board: bool = False
+    ) -> Tuple[int, int]:
         """Play a single evaluation game"""
         game = ChessGame()
 
@@ -190,3 +240,6 @@ class Trainer:
                 return 0.5, 1  # Draw - no valid moves
 
             game.make_move(move[0], move[1])
+
+            if show_board:
+                print(game.board)

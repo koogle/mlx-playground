@@ -8,6 +8,8 @@ from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
 import time
+import random
+import logging
 
 
 def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
@@ -94,17 +96,62 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
     return states, policies, values
 
 
-def generate_games(mcts, config: ModelConfig) -> List:
-    """Generate multiple self-play games sequentially"""
-    print(f"Generating {config.n_games_per_iteration} games")
+def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
+    """Generate self-play games"""
+    logger = logging.getLogger(__name__)
+    logger.info(f"\nGenerating {config.n_games_per_iteration} self-play games")
+    games = []
 
-    all_games = []
-    for i in range(config.n_games_per_iteration):
-        print(f"\nGenerating game {i+1}/{config.n_games_per_iteration}")
-        states, policies, values = play_self_play_game(mcts, config)
-        all_games.append((states, policies, values))
+    for game_idx in tqdm(range(config.n_games_per_iteration), desc="Generating games"):
+        game = ChessGame()
+        total_moves = 0  # Track total moves
 
-    return all_games
+        states, policies, values = [], [], []
+
+        # Add a maximum move limit to prevent infinite games
+        max_moves = 200
+        while not game.board.is_game_over() and total_moves < max_moves:
+            state = game.board.state
+            move = mcts.get_move(
+                game.board
+            )  # This will set up the MCTS tree and set root_node
+
+            if not move:
+                logger.info(f"No valid moves found after {total_moves} moves")
+                break
+
+            # Ensure we have a root_node
+            if not mcts.root_node:
+                continue
+
+            policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
+            states.append(state)
+            policies.append(policy)
+
+            game.make_move(move[0], move[1])
+            total_moves += 1
+
+            # Log board state periodically
+            if total_moves % 10 == 0:
+                logger.debug(
+                    f"\nGame {game_idx + 1}, Move {total_moves}:\n{game.board}"
+                )
+
+        # Add game result
+        result = game.board.get_game_result()
+        values.extend([result] * len(states))
+
+        if len(states) > 0:  # Only add if we have moves
+            games.append((states, policies, values))
+        logger.info(
+            f"Game {game_idx + 1} completed with {total_moves} moves, result: {result}"
+            + (f" (max moves reached)" if total_moves >= max_moves else "")
+        )
+
+    if len(games) == 0:
+        logger.warning("No valid games were generated!")
+    logger.info(f"Generated {len(games)} games with valid moves")
+    return games
 
 
 def create_batches(games: List[Tuple], batch_size: int):
@@ -203,3 +250,24 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
             games_data.append((states, policies, values))
 
     return games_data
+
+
+def get_policy_distribution(root_node, policy_output_dim: int):
+    """Convert MCTS visit counts to policy distribution"""
+    # Use numpy array for indexing, convert to MLX at the end
+    policy = np.zeros(policy_output_dim, dtype=np.float32)
+
+    for move, child in root_node.children.items():
+        # Calculate move index directly since we don't have mcts instance
+        from_pos, to_pos = move
+        from_idx = from_pos[0] * 8 + from_pos[1]
+        to_idx = to_pos[0] * 8 + to_pos[1]
+        move_idx = from_idx * 64 + to_idx
+        if move_idx < len(policy):
+            policy[move_idx] = child.visit_count
+
+    # Normalize using numpy first
+    policy = policy / np.sum(policy) if np.sum(policy) > 0 else policy
+
+    # Convert to MLX array at the end
+    return mx.array(policy)

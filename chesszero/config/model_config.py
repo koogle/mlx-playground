@@ -18,7 +18,7 @@ class ModelConfig:
     policy_output_dim: int = 4672  # All possible moves: 8x8x73
 
     # MCTS
-    n_simulations: int = 1600  # 1600  # Number of MCTS simulations per move
+    n_simulations: int = 800  # Reduced number of simulations for faster training
     c_puct: float = 1.0  # Exploration constant
     dirichlet_alpha: float = 0.3  # Dirichlet noise parameter
     dirichlet_epsilon: float = 0.25  # Weight of Dirichlet noise
@@ -38,13 +38,13 @@ class ModelConfig:
     weight_decay: float = 1e-4
 
     # Self-play
-    n_games_per_iteration: int = 100  # 5000
+    n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
     temperature: float = 1.0  # Initial temperature for move selection
     temp_decay_steps: int = 10  # Number of moves before temperature decay
     temp_final: float = 0.1  # Final temperature after decay
 
     # Evaluation
-    eval_games: int = 400
+    eval_games: int = 40  # Reduced number of evaluation games
     winning_threshold: float = 0.55  # Win rate needed to update network
 
     # History
@@ -52,3 +52,7 @@ class ModelConfig:
 
     # Debug options
     debug: bool = False
+
+    # Logging
+    eval_interval_minutes: int = 15  # Run evaluation every 15 minutes
+    display_eval_game: bool = True  # Show board positions during evaluation

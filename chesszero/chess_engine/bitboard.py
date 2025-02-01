@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Optional
 from dataclasses import dataclass
 
 
@@ -128,6 +128,17 @@ class BitBoard:
 
     def make_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> bool:
         """Make a move on the board. Returns True if successful."""
+        # First validate current board state
+        white_king_count = np.sum(self.state[5])
+        black_king_count = np.sum(self.state[11])
+        if white_king_count != 1 or black_king_count != 1:
+            print(f"\nInvalid board state detected before move!")
+            print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
+            print(f"Attempted move: {from_pos} -> {to_pos}")
+            print("Current position:")
+            print(self)
+            return False
+
         from_row, from_col = from_pos
         to_row, to_col = to_pos
 
@@ -136,19 +147,42 @@ class BitBoard:
         if color == -1 or color != self.get_current_turn():
             return False
 
-        # Save piece channel
-        channel = piece_type if color == 0 else piece_type + 6
+        # Check destination square
+        target_color, target_piece = self.get_piece_at(to_row, to_col)
 
-        # Check for capture
-        is_capture = any(self.state[c, to_row, to_col] == 1 for c in range(12))
+        # Prevent capturing kings
+        if target_piece == 5:  # King is piece_type 5
+            print(f"Illegal move: Cannot capture king at {to_pos}")
+            return False
+
+        # Correct capture detection - only enemy pieces count
+        is_capture = (target_color != -1) and (target_color != color)
         resets_progress = piece_type == 0 or is_capture
 
         # Clear destination square
         self.state[:12, to_row, to_col] = 0
 
         # Move piece
-        self.state[channel, to_row, to_col] = 1
-        self.state[channel, from_row, from_col] = 0
+        self.state[piece_type if color == 0 else piece_type + 6, to_row, to_col] = 1
+        self.state[piece_type if color == 0 else piece_type + 6, from_row, from_col] = 0
+
+        # Validate board state after move
+        white_king_count = np.sum(self.state[5])
+        black_king_count = np.sum(self.state[11])
+        if white_king_count != 1 or black_king_count != 1:
+            print(f"\nInvalid board state after move!")
+            print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
+            print(f"Move that caused error: {from_pos} -> {to_pos}")
+            print("Resulting position:")
+            print(self)
+            # Revert the move
+            self.state[piece_type if color == 0 else piece_type + 6, to_row, to_col] = 0
+            self.state[
+                piece_type if color == 0 else piece_type + 6, from_row, from_col
+            ] = 1
+            if is_capture:  # TODO: Need to track what piece was captured
+                pass  # Would need to restore captured piece
+            return False
 
         # Update king position if moving king
         if piece_type == 5:  # King
@@ -223,6 +257,16 @@ class BitBoard:
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
         """Get all valid moves for a piece at the given position, considering check"""
+        # First validate board state
+        white_king_count = np.sum(self.state[5])
+        black_king_count = np.sum(self.state[11])
+        if white_king_count != 1 or black_king_count != 1:
+            print(f"\nInvalid board state detected in get_valid_moves!")
+            print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
+            print("Current position:")
+            print(self)
+            return set()  # Return no valid moves for invalid board
+
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
         if color == -1 or color != self.get_current_turn():
@@ -267,8 +311,12 @@ class BitBoard:
             if self.can_castle_queenside(color):
                 moves.add((row, 2))
 
-        # Filter moves that would leave king in check
-        valid_moves = self._filter_valid_moves(pos, moves)
+        # Explicitly remove any moves targeting kings
+        valid_moves = {
+            move
+            for move in moves
+            if self.get_piece_at(*move)[1] != 5  # Filter king targets
+        }
 
         self._moves_cache[cache_key] = valid_moves
         return valid_moves
@@ -350,9 +398,16 @@ class BitBoard:
 
         return moves
 
-    def get_king_position(self, color: int) -> Tuple[int, int]:
-        """Fast king position lookup"""
-        return self.king_positions[color]
+    def get_king_position(self, color: int) -> Optional[Tuple[int, int]]:
+        """Return the position of the king for the given color.
+        Returns None if the king is not found (error state)."""
+        # For white, king is stored in channel 5; for black, in channel 11.
+        channel = 5 if color == 0 else 11
+        king_locations = np.argwhere(self.state[channel] == 1)
+        if king_locations.size == 0:
+            return None
+        # Return as (row, col)
+        return tuple(king_locations[0])
 
     def get_all_pieces(self, color: int) -> List[Tuple[Tuple[int, int], int]]:
         """Get all pieces for the given color as [(position, piece_type),...]"""
@@ -431,26 +486,19 @@ class BitBoard:
     def _filter_valid_moves(
         self, pos: Tuple[int, int], moves: Set[Tuple[int, int]]
     ) -> Set[Tuple[int, int]]:
-        """Vectorized check validation"""
-        if not moves:
-            return moves
-
-        # Convert moves to arrays
-        move_rows, move_cols = zip(*moves)
-        moves_array = np.array([move_rows, move_cols])
-
-        # Create board copies in one operation
-        boards = np.tile(self.state, (len(moves), 1, 1, 1))
-
-        # Make all moves at once
-        for i, (to_row, to_col) in enumerate(zip(move_rows, move_cols)):
-            self._make_move_on_board(boards[i], pos, (to_row, to_col))
-
-        # Check all positions for check in parallel
-        valid_mask = ~self._is_in_check_vectorized(boards, self.get_current_turn())
-
-        # Filter moves using mask
-        return {move for move, valid in zip(moves, valid_mask) if valid}
+        """Return only those moves which do not leave the king in check.
+        It simulates each move on a copy of the board and uses is_in_check().
+        """
+        valid = set()
+        current_turn = self.get_current_turn()
+        for move in moves:
+            new_board = self.copy()
+            # Use make_move without printing or extra validation (it will update state)
+            if new_board.make_move(pos, move):
+                king_pos = new_board.get_king_position(current_turn)
+                if king_pos is not None and not new_board.is_in_check(current_turn):
+                    valid.add(move)
+        return valid
 
     def can_castle_kingside(self, color: int) -> bool:
         """Check if kingside castling is possible"""

@@ -1,6 +1,10 @@
-from chess_engine.board import Color, Piece, PieceType
+# from chess_engine.board import Color, Piece, PieceType
 from typing import Tuple, List, Optional, Set
-from chess_engine.bitboard import BitBoard
+
+# from chess_engine.bitboard import BitBoard
+
+from board import Color, Piece, PieceType
+from bitboard import BitBoard
 
 
 class ChessGame:
@@ -175,40 +179,33 @@ class ChessGame:
     def _move_to_algebraic(
         self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], piece: Piece
     ) -> str:
-        """Convert a move to algebraic notation."""
-        files = "abcdefgh"
-        ranks = "12345678"
+        """Convert a move to algebraic notation"""
+        from_row, from_col = from_pos
+        to_row, to_col = to_pos
 
         # Special case for castling
-        if piece.piece_type == PieceType.KING and abs(to_pos[1] - from_pos[1]) == 2:
-            return "O-O" if to_pos[1] > from_pos[1] else "O-O-O"
+        if piece.piece_type == PieceType.KING and abs(to_col - from_col) == 2:
+            return "O-O" if to_col > from_col else "O-O-O"
 
-        piece_symbol = ""
-        if piece.piece_type != PieceType.PAWN:
-            piece_symbol = self._get_piece_symbol(piece.piece_type)
+        # Get target square algebraic coordinates
+        to_square = f"{chr(to_col + 97)}{to_row + 1}"
 
-        # Add capture symbol if needed
-        target_color, _ = self.board.get_piece_at(*to_pos)
-        capture = ""
-        if target_color != -1:  # There is a piece at target square
-            # For pawns, include the file of origin
-            if piece.piece_type == PieceType.PAWN:
-                capture = files[from_pos[1]] + "x"
-            else:
-                capture = "x"
+        # Check if move is a capture by checking target square before the move
+        target_color, _ = self.board.get_piece_at(to_row, to_col)
+        is_capture = target_color != -1 and target_color != piece.color.value
 
-        # Add destination square
-        destination = files[to_pos[1]] + ranks[to_pos[0]]
+        # Get piece symbol (empty for pawns)
+        piece_symbol = self._get_piece_symbol(piece.piece_type)
 
-        # Add promotion indicator
-        promotion = ""
+        # For pawn captures, include the file of origin
         if piece.piece_type == PieceType.PAWN:
-            if (piece.color == Color.WHITE and to_pos[0] == 7) or (
-                piece.color == Color.BLACK and to_pos[0] == 0
-            ):
-                promotion = "=Q"  # Default to queen promotion
+            if is_capture:
+                return f"{chr(from_col + 97)}x{to_square}"
+            return to_square
 
-        return f"{piece_symbol}{capture}{destination}{promotion}"
+        # For other pieces
+        capture_symbol = "x" if is_capture else ""
+        return f"{piece_symbol}{capture_symbol}{to_square}"
 
     def load_game_history(self, history_str: str) -> bool:
         """Load and replay a game from a history string."""

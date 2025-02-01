@@ -1,9 +1,8 @@
 from typing import Tuple, List, Optional, Set
 
-from chess_engine.bitboard import BitBoard
+# from chess_engine.bitboard import BitBoard
 
-# from board import Color, Piece, PieceType
-# from bitboard import BitBoard
+from bitboard import BitBoard
 
 
 class ChessGame:
@@ -110,10 +109,6 @@ class ChessGame:
             self.move_history.append(move_str)
             return True
         return False
-
-    def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
-        """Get valid moves for a piece"""
-        return self.board.get_valid_moves(pos)
 
     def get_game_state(self) -> str:
         """Get the current game state as a string"""

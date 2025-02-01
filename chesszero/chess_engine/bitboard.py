@@ -249,27 +249,28 @@ class BitBoard:
         """Get all valid moves considering checks and pins"""
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
-        print(
-            f"Getting moves for piece at ({row},{col}): color={color}, type={piece_type}"
-        )  # DEBUG
 
         if color == -1 or color != self.get_current_turn():
-            print(
-                f"Invalid piece or wrong turn: color={color}, current_turn={self.get_current_turn()}"
-            )  # DEBUG
             return set()
 
         # Generate basic moves first
         moves = set()
 
+        # Map piece types to pattern indices
+        pattern_map = {
+            0: 0,  # Pawn
+            1: 1,  # Knight
+            2: 2,  # Bishop
+            3: 3,  # Rook
+            4: 4,  # Queen
+            5: 5,  # King
+        }
+
         # Handle pawns separately due to special rules
         if piece_type == 0:  # Pawn
             moves = self._get_pawn_moves(row, col, color)
-            print(f"Pawn moves generated: {moves}")  # DEBUG
-        elif piece_type == 1:  # Knight
-            moves = self._get_step_moves(row, col, PIECE_PATTERNS[1].directions, color)
         else:
-            pattern = PIECE_PATTERNS[piece_type]
+            pattern = PIECE_PATTERNS[pattern_map[piece_type]]
             if pattern.sliding:
                 moves = self._get_sliding_moves(row, col, pattern.directions, color)
             else:
@@ -289,7 +290,9 @@ class BitBoard:
     def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
         """Get all valid pawn moves including captures"""
         moves = set()
-        direction = 1 if color == 0 else -1
+        direction = (
+            1 if color == 0 else -1
+        )  # White moves up (+1), Black moves down (-1)
         start_row = 1 if color == 0 else 6
 
         # Forward moves
@@ -301,13 +304,12 @@ class BitBoard:
                 # Double move from start
                 if row == start_row:
                     two_forward = row + 2 * direction
-                    if (
-                        0 <= two_forward < 8
-                        and self.get_piece_at(two_forward, col)[0] == -1
-                    ):
-                        moves.add((two_forward, col))
+                    if 0 <= two_forward < 8:
+                        two_forward_color = self.get_piece_at(two_forward, col)[0]
+                        if two_forward_color == -1:
+                            moves.add((two_forward, col))
 
-        # Captures
+        # Diagonal captures
         for col_delta in [-1, 1]:
             capture_col = col + col_delta
             if 0 <= capture_col < 8:
@@ -332,6 +334,7 @@ class BitBoard:
                     1 - color
                 ):  # Empty or enemy square
                     moves.add((new_row, new_col))
+
         return moves
 
     def _get_sliding_moves(
@@ -392,7 +395,7 @@ class BitBoard:
         pawn_channel = 0 if by_color == 0 else 6
         pawn_direction = (
             -1 if by_color == 0 else 1
-        )  # CHANGED: Pawns attack in opposite direction
+        )  # Pawns attack in opposite direction
         for col_delta in [-1, 1]:
             attack_row = row + pawn_direction
             attack_col = col + col_delta
@@ -411,14 +414,14 @@ class BitBoard:
                     current_row, current_col = (
                         row - row_delta,
                         col - col_delta,
-                    )  # CHANGED: Look backwards
+                    )  # Look backwards
                     while 0 <= current_row < 8 and 0 <= current_col < 8:
                         if self.state[channel, current_row, current_col]:
                             return True
                         target_color, _ = self.get_piece_at(current_row, current_col)
                         if target_color != -1:  # Hit any piece
                             break
-                        current_row -= row_delta  # CHANGED: Move backwards
+                        current_row -= row_delta
                         current_col -= col_delta
             else:
                 # For non-sliding pieces, just check the pattern squares
@@ -432,17 +435,9 @@ class BitBoard:
         return False
 
     def is_in_check(self, color: int) -> bool:
-        """Optimized check detection with caching"""
-        board_hash = hash(self.state.tobytes())
-        cache_key = (board_hash, color)
-
-        if cache_key in self._in_check_cache:
-            return self._in_check_cache[cache_key]
-
-        king_pos = self.king_positions[color]  # Direct lookup
-        result = self._is_square_attacked_vectorized(self.state, king_pos, 1 - color)
-        self._in_check_cache[cache_key] = result
-        return result
+        """Check if the given color is in check"""
+        king_pos = self.king_positions[color]
+        return self.is_square_attacked(king_pos, 1 - color)
 
     def _filter_valid_moves(
         self, pos: Tuple[int, int], moves: Set[Tuple[int, int]]

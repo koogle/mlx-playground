@@ -1,4 +1,3 @@
-from board import Color
 from game import ChessGame
 import random
 import argparse
@@ -58,8 +57,8 @@ def main():
     # If playing against AI, randomly assign colors
     ai_color = None
     if args.mode == "ai":
-        ai_color = random.choice([Color.WHITE, Color.BLACK])
-        print(f"\nYou are playing as {'Black' if ai_color == Color.WHITE else 'White'}")
+        ai_color = random.choice([0, 1])
+        print(f"\nYou are playing as {'Black' if ai_color == 0 else 'White'}")
 
     while not game.is_game_over():
         print(game)  # Show the board and current turn

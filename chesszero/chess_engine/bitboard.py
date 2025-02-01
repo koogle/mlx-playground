@@ -906,4 +906,5 @@ class BitBoard:
         elif self.is_draw():
             return 0.0  # Draw
 
-        raise ValueError("Game is not over")
+        # If game is not over, return 0.0
+        return 0.0

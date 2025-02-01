@@ -17,9 +17,8 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
 
     print("\nStarting new self-play game")
     print("---------------------------")
-
-    # Add temperature parameter for move selection
-    temperature = 1.0  # Start with high temperature
+    print("\nInitial position:")
+    print(game.board)
 
     move_count = 0
     for move_count in range(201):  # Removed tqdm to see board positions clearly
@@ -29,17 +28,14 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
         # Print current move number
         print(f"\nMove {move_count + 1}")
 
-        # Reduce temperature over time to favor exploitation in later moves
-        if move_count > 30:
-            temperature = 0.5
-
         # Get move with temperature
+        temperature = 0.5 if move_count > 30 else 1.0
         move = get_move_with_temperature(mcts, game.board, temperature)
         if move is None:
             print("No valid moves found!")
             break
 
-        # Store state and create policy from visit counts
+        # Store state and create policy from visits
         encoded_state = encode_board(game.board)
         policy = create_policy_from_visits(mcts.root_node, config.policy_output_dim)
 
@@ -49,12 +45,16 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
         # Print the move being made
         from_square = f"{chr(move[0][1] + 97)}{move[0][0] + 1}"
         to_square = f"{chr(move[1][1] + 97)}{move[1][0] + 1}"
-        print(f"Playing: {from_square} -> {to_square}")
+        print(f"AI plays: {from_square}{to_square}")
 
+        # Make the move and print resulting position
         game.make_move_coords(move[0], move[1], f"{move[0]}{move[1]}")
+        print("\nPosition after move:")
+        print(game.board)
+
         move_count += 1
 
-    # Game is over - get result and reason
+    # Game is over - print final position and outcome
     result = game.get_result()
 
     print("\n=== Game Complete ===")
@@ -89,52 +89,61 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
     logger.info(f"\nGenerating {config.n_games_per_iteration} self-play games")
     games = []
 
-    for game_idx in tqdm(range(config.n_games_per_iteration), desc="Generating games"):
+    for game_idx in range(config.n_games_per_iteration):
+        print(f"\n=== Game {game_idx + 1}/{config.n_games_per_iteration} ===")
         game = ChessGame()
-        total_moves = 0  # Track total moves
-
+        total_moves = 0
         states, policies, values = [], [], []
 
-        # Add a maximum move limit to prevent infinite games
-        max_moves = 200
-        while not game.board.is_game_over() and total_moves < max_moves:
+        print("\nInitial position:")
+        print(game.board)
+
+        while not game.board.is_game_over() and total_moves < 200:
+            print(f"\nMove {total_moves + 1}")
+
             state = game.board.state
-            move = mcts.get_move(
-                game.board
-            )  # This will set up the MCTS tree and set root_node
+            move = mcts.get_move(game.board)
 
             if not move:
-                logger.info(f"No valid moves found after {total_moves} moves")
+                print("No valid moves found!")
                 break
 
-            # Ensure we have a root_node
             if not mcts.root_node:
                 continue
+
+            # Print the move being made
+            from_square = f"{chr(move[0][1] + 97)}{move[0][0] + 1}"
+            to_square = f"{chr(move[1][1] + 97)}{move[1][0] + 1}"
+            print(f"AI plays: {from_square}{to_square}")
 
             policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
             states.append(state)
             policies.append(policy)
 
             game.make_move(move[0], move[1])
+            print("\nPosition after move:")
+            print(game.board)
+
             total_moves += 1
 
-            # Log board state periodically
-            if total_moves % 10 == 0:
-                logger.debug(
-                    f"\nGame {game_idx + 1}, Move {total_moves}:\n{game.board}"
-                )
-
-        # Add game result
+        # Game is over - print outcome
         result = game.board.get_game_result()
         values.extend([result] * len(states))
 
-        if len(states) > 0:  # Only add if we have moves
+        print("\n=== Game Complete ===")
+        print("\nFinal position:")
+        print(game.board)
+        print(f"Result: {result}")
+        print(f"Total moves: {total_moves}")
+        print("===================\n")
+
+        if len(states) > 0:
             games.append((states, policies, values))
+
         logger.info(
             f"Game {game_idx + 1} completed with {total_moves} moves, result: {result}"
-            + (" (max moves reached)" if total_moves >= max_moves else "")
+            + (" (max moves reached)" if total_moves >= 200 else "")
         )
-        logger.info(game.board)
 
     if len(games) == 0:
         logger.warning("No valid games were generated!")

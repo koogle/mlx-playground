@@ -132,7 +132,7 @@ class BitBoard:
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
         if white_king_count != 1 or black_king_count != 1:
-            print(f"\nInvalid board state detected before move!")
+            print("\nInvalid board state detected before move!")
             print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
             print(f"Attempted move: {from_pos} -> {to_pos}")
             print("Current position:")
@@ -170,7 +170,7 @@ class BitBoard:
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
         if white_king_count != 1 or black_king_count != 1:
-            print(f"\nInvalid board state after move!")
+            print("\nInvalid board state after move!")
             print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
             print(f"Move that caused error: {from_pos} -> {to_pos}")
             print("Resulting position:")
@@ -236,66 +236,40 @@ class BitBoard:
 
     def copy(self) -> "BitBoard":
         """Create a deep copy of the board"""
-        new_board = BitBoard.__new__(BitBoard)
-        new_board.state = self.state.copy()
-
-        # Copy the pre-computed tables by reference
-        new_board.knight_attacks = self.knight_attacks
-        new_board.king_attacks = self.king_attacks
-        new_board.pawn_attacks = self.pawn_attacks
-
-        # Create new caches
+        new_board = BitBoard()
+        new_board.state = np.copy(self.state)
+        new_board.king_positions = self.king_positions.copy()
+        # Reset caches for the copy
         new_board._moves_cache = {}
         new_board._game_over_cache = {}
         new_board._in_check_cache = {}
-        new_board._valid_moves_count = None
-
-        # Copy king positions
-        new_board.king_positions = self.king_positions.copy()
-
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
-        """Get all valid moves for a piece at the given position, considering check"""
+        """Get all valid moves considering checks and pins"""
         # First validate board state
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
         if white_king_count != 1 or black_king_count != 1:
-            print(f"\nInvalid board state detected in get_valid_moves!")
-            print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
-            print("Current position:")
-            print(self)
-            return set()  # Return no valid moves for invalid board
+            return set()
 
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
         if color == -1 or color != self.get_current_turn():
             return set()
 
-        # Create compact position hash using only piece positions
-        pieces_hash = hash(tuple(map(tuple, np.where(self.state[:12] > 0))))
-        cache_key = (pieces_hash, pos)
-
-        if cache_key in self._moves_cache:
-            return self._moves_cache[cache_key]
-
+        # Generate basic moves first
         moves = set()
 
         # Handle pawns separately due to special rules
         if piece_type == 0:  # Pawn
             moves.update(self._get_pawn_moves(row, col, color))
         elif piece_type == 1:  # Knight
-            # Use pre-computed attacks
-            valid = self.knight_attacks[row, col]
-            # Filter occupied squares
             moves.update(
-                (r, c)
-                for r, c in zip(*np.where(valid))
-                if self.get_piece_at(r, c)[0] != color
+                self._get_step_moves(row, col, PIECE_PATTERNS[1].directions, color)
             )
         else:
             pattern = PIECE_PATTERNS[piece_type]
-            # Generate moves based on piece pattern
             if pattern.sliding:
                 moves.update(
                     self._get_sliding_moves(row, col, pattern.directions, color)
@@ -303,23 +277,19 @@ class BitBoard:
             else:
                 moves.update(self._get_step_moves(row, col, pattern.directions, color))
 
-        # Add castling moves for king
-        if piece_type == 5 and not self.is_in_check(color):  # King, not in check
-            row = 0 if color == 0 else 7
-            if self.can_castle_kingside(color):
-                moves.add((row, 6))
-            if self.can_castle_queenside(color):
-                moves.add((row, 2))
+        # Only filter for check resolution if actually in check
+        current_turn = self.get_current_turn()
+        if self.is_in_check(current_turn):
+            resolving_moves = self._get_check_resolving_moves(pos, moves)
+            moves = moves & resolving_moves
 
-        # Explicitly remove any moves targeting kings
-        valid_moves = {
-            move
-            for move in moves
-            if self.get_piece_at(*move)[1] != 5  # Filter king targets
-        }
+        # Filter pinned piece moves
+        allowed_direction = self._get_pin_info(pos)
+        if allowed_direction:
+            moves = self._filter_pinned_moves(pos, moves, allowed_direction)
 
-        self._moves_cache[cache_key] = valid_moves
-        return valid_moves
+        # Filter moves that would leave king in check
+        return self._filter_valid_moves(pos, moves)
 
     def _get_sliding_moves(
         self, row: int, col: int, directions: List[Tuple[int, int]], color: int
@@ -349,53 +319,47 @@ class BitBoard:
     def _get_step_moves(
         self, row: int, col: int, directions: List[Tuple[int, int]], color: int
     ) -> Set[Tuple[int, int]]:
-        """Get moves for non-sliding pieces (king, knight)"""
+        """Get moves for non-sliding pieces"""
         moves = set()
-
-        for row_delta, col_delta in directions:
-            new_row, new_col = row + row_delta, col + col_delta
-
+        for dr, dc in directions:
+            new_row = row + dr
+            new_col = col + dc
             if 0 <= new_row < 8 and 0 <= new_col < 8:
                 target_color, _ = self.get_piece_at(new_row, new_col)
-                if target_color != color:  # Empty or enemy piece
+                if target_color != color:  # Can move to empty or enemy square
                     moves.add((new_row, new_col))
-
         return moves
 
     def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
-        """Get valid pawn moves including captures and initial double move"""
         moves = set()
-        direction = 1 if color == 0 else -1  # White moves up, black moves down
+        direction = 1 if color == 0 else -1
         start_row = 1 if color == 0 else 6
 
-        # Forward move
+        # Single move
         new_row = row + direction
         if 0 <= new_row < 8:
-            # Check if square in front is empty
-            if self.get_piece_at(new_row, col)[0] == -1:  # Square must be empty
+            if self.get_piece_at(new_row, col)[0] == -1:
                 moves.add((new_row, col))
 
-                # Initial two-square move - only if pawn is on its starting rank
-                if row == start_row:  # Changed condition to check starting rank
+                # Double move
+                if row == start_row:
                     two_forward = row + 2 * direction
-                    # Check if both squares are empty
-                    if (
-                        0 <= two_forward < 8  # Make sure we're on the board
-                        and self.get_piece_at(new_row, col)[0]
-                        == -1  # First square empty
-                        and self.get_piece_at(two_forward, col)[0]
-                        == -1  # Second square empty
-                    ):
-                        moves.add((two_forward, col))
+                    if 0 <= two_forward < 8:
+                        if (
+                            self.get_piece_at(new_row, col)[0] == -1
+                            and self.get_piece_at(two_forward, col)[0] == -1
+                        ):
+                            moves.add((two_forward, col))
 
         # Captures
         for col_delta in [-1, 1]:
-            new_col = col + col_delta
-            if 0 <= new_col < 8 and 0 <= new_row < 8:
-                target_color, _ = self.get_piece_at(new_row, new_col)
-                if target_color == (1 - color):  # Enemy piece
-                    moves.add((new_row, new_col))
-
+            capture_col = col + col_delta
+            if 0 <= capture_col < 8:
+                capture_row = new_row
+                if 0 <= capture_row < 8:
+                    target_color, _ = self.get_piece_at(capture_row, capture_col)
+                    if target_color == (1 - color):
+                        moves.add((capture_row, capture_col))
         return moves
 
     def get_king_position(self, color: int) -> Optional[Tuple[int, int]]:
@@ -654,51 +618,24 @@ class BitBoard:
         return False
 
     def is_game_over(self) -> bool:
-        """Fast game over check with caching"""
-        board_hash = hash(str(self.state))
-
-        if board_hash in self._game_over_cache:
-            return self._game_over_cache[board_hash]
-
-        # Quick draw checks first (these are faster)
-        if (
-            self.get_moves_without_progress() >= 100  # 50-move rule
-            or self.get_move_count() >= 200
-        ):  # Max moves
-            self._game_over_cache[board_hash] = True
-            return True
-
+        """Check if the game is over (checkmate or draw)"""
         current_turn = self.get_current_turn()
+        cache_key = hash(self.state.tobytes())
 
-        # Check if we've cached the valid moves count
-        if self._valid_moves_count is None:
-            # Get all pieces for current player
-            pieces = self.get_all_pieces(current_turn)
+        if cache_key in self._game_over_cache:
+            return self._game_over_cache[cache_key]
 
-            # Count valid moves (stop early if we find any)
-            total_moves = 0
-            for pos, _ in pieces:
-                moves = self.get_valid_moves(pos)
-                total_moves += len(moves)
-                if total_moves > 0:  # Early exit if we find any valid move
-                    break
-            self._valid_moves_count = total_moves
+        # Check all pieces for valid moves
+        has_moves = False
+        for (r, c), piece_type in self.get_all_pieces(current_turn):
+            if self.get_valid_moves((r, c)):
+                has_moves = True
+                break
 
-        # If no valid moves, must be checkmate or stalemate
-        if self._valid_moves_count == 0:
-            # Only check for check if we have no moves
-            in_check = self.is_in_check(current_turn)
-            result = True  # Game is over
-            self._game_over_cache[board_hash] = result
-            return result
-
-        # Check for insufficient material (relatively fast)
-        if self._has_insufficient_material():
-            self._game_over_cache[board_hash] = True
-            return True
-
-        self._game_over_cache[board_hash] = False
-        return False
+        # Check for checkmate/stalemate
+        result = not has_moves
+        self._game_over_cache[cache_key] = result
+        return result
 
     def _has_insufficient_material(self) -> bool:
         """Fast insufficient material check"""
@@ -872,16 +809,47 @@ class BitBoard:
         """Vectorized square attack check"""
         row, col = square
 
-        # Use pre-computed attack tables with numpy operations
+        # Check pawn attacks
+        pawn_channel = 0 if attacker_color == 1 else 6
+        if np.any(self.pawn_attacks[row, col] & (board[pawn_channel] > 0)):
+            return True
+
+        # Check knight attacks
         knight_channel = 1 if attacker_color == 0 else 7
         if np.any(self.knight_attacks[row, col] & (board[knight_channel] > 0)):
             return True
 
+        # Check sliding pieces (bishop, rook, queen)
+        # Bishop/Queen diagonals
+        bishop_channel = 2 if attacker_color == 0 else 8
+        queen_channel = 4 if attacker_color == 0 else 10
+        for dr, dc in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            r, c = row + dr, col + dc
+            while 0 <= r < 8 and 0 <= c < 8:
+                if board[bishop_channel, r, c] > 0 or board[queen_channel, r, c] > 0:
+                    return True
+                if np.any(board[:12, r, c] > 0):  # Blocked by any piece
+                    break
+                r += dr
+                c += dc
+
+        # Check rook/Queen straight lines
+        rook_channel = 3 if attacker_color == 0 else 9
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            r, c = row + dr, col + dc
+            while 0 <= r < 8 and 0 <= c < 8:
+                if board[rook_channel, r, c] > 0 or board[queen_channel, r, c] > 0:
+                    return True
+                if np.any(board[:12, r, c] > 0):  # Blocked by any piece
+                    break
+                r += dr
+                c += dc
+
+        # Check king attacks
         king_channel = 5 if attacker_color == 0 else 11
         if np.any(self.king_attacks[row, col] & (board[king_channel] > 0)):
             return True
 
-        # Rest of the attack checks...
         return False
 
     def get_game_result(self) -> float:
@@ -908,3 +876,148 @@ class BitBoard:
 
         # If game is not over, return 0.0
         return 0.0
+
+    def _get_ray_between(
+        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]
+    ) -> Set[Tuple[int, int]]:
+        """Get all squares between two positions (exclusive) along a straight line"""
+        from_row, from_col = from_pos
+        to_row, to_col = to_pos
+
+        # Check if positions are aligned
+        if from_row == to_row:
+            step = 1 if to_col > from_col else -1
+            return {(from_row, col) for col in range(from_col + step, to_col, step)}
+        elif from_col == to_col:
+            step = 1 if to_row > from_row else -1
+            return {(row, from_col) for row in range(from_row + step, to_row, step)}
+        elif abs(to_row - from_row) == abs(to_col - from_col):
+            row_step = 1 if to_row > from_row else -1
+            col_step = 1 if to_col > from_col else -1
+            return {
+                (from_row + i * row_step, from_col + i * col_step)
+                for i in range(1, abs(to_row - from_row))
+            }
+        return set()  # Not aligned
+
+    def _is_pinned(self, pos: Tuple[int, int]) -> bool:
+        """Check if a piece is pinned to the king"""
+        row, col = pos
+        color, piece_type = self.get_piece_at(row, col)
+        if color == -1 or piece_type == 5:  # King can't be pinned
+            return False
+
+        king_pos = self.king_positions[color]
+        attacker_color = 1 - color
+
+        # Check if there's a line from an attacker to the king through this piece
+        attackers = self.get_all_pieces(attacker_color)
+        for (ar, ac), atype in attackers:
+            ray = self._get_ray_between((ar, ac), king_pos)
+            if ray and (row, col) in ray:
+                return True
+        return False
+
+    def _get_check_resolving_moves(
+        self, pos: Tuple[int, int], moves: Set[Tuple[int, int]]
+    ) -> Set[Tuple[int, int]]:
+        """Get moves that help resolve a check situation"""
+        color = self.get_current_turn()
+        king_pos = self.king_positions[color]
+
+        # Get all pieces attacking the king
+        attackers = []
+        for piece_pos, piece_type in self.get_all_pieces(1 - color):
+            if self._is_square_attacked_vectorized(self.state, king_pos, 1 - color):
+                attackers.append(piece_pos)
+
+        # If multiple attackers, only king moves can resolve
+        if len(attackers) > 1:
+            if self.get_piece_at(*pos)[1] != 5:  # If not king
+                return set()
+            return moves
+
+        # For single attacker - can block or capture
+        if attackers:
+            attacker_pos = attackers[0]
+            blocking_squares = self._get_ray_between(attacker_pos, king_pos)
+            blocking_squares.add(attacker_pos)
+            return {move for move in moves if move in blocking_squares}
+
+        return moves
+
+    def _get_pin_info(self, pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        """Get pin direction if piece is pinned, returns (dr, dc) or None"""
+        row, col = pos
+        color, piece_type = self.get_piece_at(row, col)
+        if color == -1 or piece_type == 5:  # King can't be pinned
+            return None
+
+        king_pos = self.king_positions[color]
+        k_row, k_col = king_pos
+        attacker_color = 1 - color
+
+        # Check all potential attackers
+        for (ar, ac), piece_type in self.get_all_pieces(attacker_color):
+            ray = self._get_ray_between((ar, ac), king_pos)
+            if (row, col) in ray:
+                # Calculate pin direction (king to attacker vector)
+                dr = ar - k_row
+                dc = ac - k_col
+                if dr != 0:
+                    dr //= abs(dr)
+                if dc != 0:
+                    dc //= abs(dc)
+                return (dr, dc)
+        return None
+
+    def _filter_pinned_moves(
+        self,
+        pos: Tuple[int, int],
+        moves: Set[Tuple[int, int]],
+        direction: Tuple[int, int],
+    ) -> Set[Tuple[int, int]]:
+        """Filter moves for a pinned piece.
+        Only allows moves along the pin line (between king and attacking piece)."""
+        row, col = pos
+        king_pos = self.king_positions[self.get_current_turn()]
+        kr, kc = king_pos
+        dr, dc = direction
+
+        valid = set()
+        for move in moves:
+            mr, mc = move
+
+            # Move must be along the same line as the pin
+            if dr != 0:  # Vertical pin
+                if mc == col:  # Must stay in same column
+                    valid.add(move)
+            elif dc != 0:  # Horizontal pin
+                if mr == row:  # Must stay in same row
+                    valid.add(move)
+            else:  # Diagonal pin
+                # Check if move is along the same diagonal
+                move_dr = mr - kr
+                move_dc = mc - kc
+                if move_dr != 0 and move_dc != 0:
+                    if abs(move_dr / move_dc) == 1:  # Same diagonal
+                        valid.add(move)
+
+        return valid
+
+    def _calculate_pawn_attacks(self, row: int, col: int) -> int:
+        """Calculate pawn attacks for both colors"""
+        attacks = 0
+        # White pawns (attack up-left/up-right)
+        if row < 7:
+            if col > 0:
+                attacks |= 1 << ((row + 1) * 8 + (col - 1))  # Up-left
+            if col < 7:
+                attacks |= 1 << ((row + 1) * 8 + (col + 1))  # Up-right
+        # Black pawns (attack down-left/down-right)
+        if row > 0:
+            if col > 0:
+                attacks |= 1 << ((row - 1) * 8 + (col - 1))  # Down-left
+            if col < 7:
+                attacks |= 1 << ((row - 1) * 8 + (col + 1))  # Down-right
+        return attacks

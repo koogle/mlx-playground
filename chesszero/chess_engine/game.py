@@ -1,4 +1,3 @@
-from chess_engine.board import Color, Piece, PieceType
 from typing import Tuple, List, Optional, Set
 
 from chess_engine.bitboard import BitBoard
@@ -44,7 +43,7 @@ class ChessGame:
         return similar_pieces
 
     def _can_move(
-        self, piece: Piece, from_square: Tuple[int, int], to_square: Tuple[int, int]
+        self, from_square: Tuple[int, int], to_square: Tuple[int, int]
     ) -> bool:
         """Check if a piece can move from from_square to to_square."""
         valid_moves = self.board.get_valid_moves(from_square)
@@ -58,9 +57,9 @@ class ChessGame:
 
         for pos, piece_type in pieces:
             moves = self.board.get_valid_moves(pos)
-            piece = Piece(
-                piece_type=piece_type,
-                color=Color.WHITE if current_turn == 0 else Color.BLACK,
+            piece = (
+                piece_type,
+                current_turn,
             )
             for move in moves:
                 move_str = self._move_to_algebraic(pos, move, piece)
@@ -74,21 +73,18 @@ class ChessGame:
         piece = self.board.get_piece_at(*from_pos)
         target = self.board.get_piece_at(*to_pos)
 
-        if piece[1] == PieceType.PAWN or target[0] != -1:  # -1 means no piece
+        # piece[1] == 0 is pawn
+        if piece[1] == 0 or target[0] != -1:  # -1 means no piece
             self.moves_without_progress = 0
         else:
             self.moves_without_progress += 1
 
         if self.board.make_move(from_pos, to_pos):
             # Convert move to algebraic notation
-
             move_str = self._move_to_algebraic(
                 from_pos,
                 to_pos,
-                Piece(
-                    piece_type=piece[1],
-                    color=Color.WHITE if piece[0] == 0 else Color.BLACK,
-                ),
+                (piece[1], piece[0]),  # (piece_type, color)
             )
 
             self.move_history.append(move_str)
@@ -103,7 +99,8 @@ class ChessGame:
         piece = self.board.get_piece_at(*from_pos)
         target = self.board.get_piece_at(*to_pos)
 
-        if piece[1] == PieceType.PAWN or target[0] != -1:
+        # Check for pawn
+        if piece[1] == 0 or target[0] != -1:
             self.moves_without_progress = 0
         else:
             self.moves_without_progress += 1
@@ -177,28 +174,29 @@ class ChessGame:
         return str(self.board)
 
     def _move_to_algebraic(
-        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], piece: Piece
+        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], piece: Tuple[int, int]
     ) -> str:
         """Convert a move to algebraic notation"""
         from_row, from_col = from_pos
         to_row, to_col = to_pos
+        piece_type, color = piece
 
         # Special case for castling
-        if piece.piece_type == PieceType.KING and abs(to_col - from_col) == 2:
+        if piece_type == 5 and abs(to_col - from_col) == 2:  # 5 is king
             return "O-O" if to_col > from_col else "O-O-O"
 
         # Get target square algebraic coordinates
         to_square = f"{chr(to_col + 97)}{to_row + 1}"
 
-        # Check if move is a capture by checking target square before the move
+        # Check if move is a capture
         target_color, _ = self.board.get_piece_at(to_row, to_col)
-        is_capture = target_color != -1 and target_color != piece.color.value
+        is_capture = target_color != -1 and target_color != color
 
         # Get piece symbol (empty for pawns)
-        piece_symbol = self._get_piece_symbol(piece.piece_type)
+        piece_symbol = self._get_piece_symbol(piece_type)
 
         # For pawn captures, include the file of origin
-        if piece.piece_type == PieceType.PAWN:
+        if piece_type == 0:  # Pawn
             if is_capture:
                 return f"{chr(from_col + 97)}x{to_square}"
             return to_square

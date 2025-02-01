@@ -1,7 +1,6 @@
 import mlx.core as mx
 import mlx.optimizers as optim
 from typing import Tuple, Optional
-from chess_engine.board import Color
 from chess_engine.game import ChessGame
 from model.network import ChessNet
 from model.mcts import MCTS
@@ -195,7 +194,7 @@ class Trainer:
         total_games = 0
 
         # Play as both white and black
-        for color in [Color.WHITE, Color.BLACK]:
+        for color in [0, 1]:
             for game_idx in range(n_games // 2):
                 # Show board for first evaluation game of each color if enabled
                 show_board = self.config.display_eval_game and game_idx == 0
@@ -219,8 +218,8 @@ class Trainer:
             if state != "Normal":
                 if "Checkmate" in state:
                     winner = "Black" if "White wins" in state else "White"
-                    if (winner == "White" and mcts_player_color == Color.WHITE) or (
-                        winner == "Black" and mcts_player_color == Color.BLACK
+                    if (winner == "White" and mcts_player_color == 0) or (
+                        winner == "Black" and mcts_player_color == 1
                     ):
                         return 1, 1
                     return 0, 1

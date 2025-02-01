@@ -1,5 +1,4 @@
 import math
-import time
 import numpy as np
 from typing import List, Tuple, Set, Dict
 import mlx.core as mx

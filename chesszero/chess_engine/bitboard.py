@@ -247,15 +247,16 @@ class BitBoard:
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
         """Get all valid moves considering checks and pins"""
-        # First validate board state
-        white_king_count = np.sum(self.state[5])
-        black_king_count = np.sum(self.state[11])
-        if white_king_count != 1 or black_king_count != 1:
-            return set()
-
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
+        print(
+            f"Getting moves for piece at ({row},{col}): color={color}, type={piece_type}"
+        )  # DEBUG
+
         if color == -1 or color != self.get_current_turn():
+            print(
+                f"Invalid piece or wrong turn: color={color}, current_turn={self.get_current_turn()}"
+            )  # DEBUG
             return set()
 
         # Generate basic moves first
@@ -264,6 +265,7 @@ class BitBoard:
         # Handle pawns separately due to special rules
         if piece_type == 0:  # Pawn
             moves = self._get_pawn_moves(row, col, color)
+            print(f"Pawn moves generated: {moves}")  # DEBUG
         elif piece_type == 1:  # Knight
             moves = self._get_step_moves(row, col, PIECE_PATTERNS[1].directions, color)
         else:
@@ -292,13 +294,18 @@ class BitBoard:
 
         # Forward moves
         new_row = row + direction
-        if 0 <= new_row < 8 and self.get_piece_at(new_row, col)[0] == -1:
-            moves.add((new_row, col))
-            # Double move from start
-            if row == start_row:
-                two_forward = row + 2 * direction
-                if self.get_piece_at(two_forward, col)[0] == -1:
-                    moves.add((two_forward, col))
+        if 0 <= new_row < 8:
+            target_color = self.get_piece_at(new_row, col)[0]
+            if target_color == -1:  # Empty square
+                moves.add((new_row, col))
+                # Double move from start
+                if row == start_row:
+                    two_forward = row + 2 * direction
+                    if (
+                        0 <= two_forward < 8
+                        and self.get_piece_at(two_forward, col)[0] == -1
+                    ):
+                        moves.add((two_forward, col))
 
         # Captures
         for col_delta in [-1, 1]:
@@ -506,11 +513,13 @@ class BitBoard:
         """Check if the given color is in checkmate"""
         # First verify the king is in check
         if not self.is_in_check(color):
+            print(f"{color} is not in check")
             return False
 
         # Check if any piece has valid moves
         for piece_pos, _ in self.get_all_pieces(color):
             if self.get_valid_moves(piece_pos):
+                print(f"{piece_pos} has valid moves")
                 return False
 
         return True
@@ -968,7 +977,7 @@ class BitBoard:
         direction: Tuple[int, int],
     ) -> Set[Tuple[int, int]]:
         """Filter moves for a pinned piece.
-        Only allows moves along the pin line (between king and attacking piece)."""
+        Only allows moves along the pin line between king and attacker."""
         row, col = pos
         king_pos = self.king_positions[self.get_current_turn()]
         kr, kc = king_pos
@@ -981,16 +990,16 @@ class BitBoard:
             # Move must be along the same line as the pin
             if dr != 0:  # Vertical pin
                 if mc == col:  # Must stay in same column
-                    valid.add(move)
+                    # Must stay between king and attacker
+                    min_row = min(kr, row + dr * 8)  # Attacker's row
+                    max_row = max(kr, row + dr * 8)
+                    if min_row <= mr <= max_row:
+                        valid.add(move)
             elif dc != 0:  # Horizontal pin
                 if mr == row:  # Must stay in same row
-                    valid.add(move)
-            else:  # Diagonal pin
-                # Check if move is along the same diagonal
-                move_dr = mr - kr
-                move_dc = mc - kc
-                if move_dr != 0 and move_dc != 0:
-                    if abs(move_dr / move_dc) == 1:  # Same diagonal
+                    min_col = min(kc, col + dc * 8)  # Attacker's col
+                    max_col = max(kc, col + dc * 8)
+                    if min_col <= mc <= max_col:
                         valid.add(move)
 
         return valid

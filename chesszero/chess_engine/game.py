@@ -1,10 +1,10 @@
-# from chess_engine.board import Color, Piece, PieceType
+from chess_engine.board import Color, Piece, PieceType
 from typing import Tuple, List, Optional, Set
 
-# from chess_engine.bitboard import BitBoard
+from chess_engine.bitboard import BitBoard
 
-from board import Color, Piece, PieceType
-from bitboard import BitBoard
+# from board import Color, Piece, PieceType
+# from bitboard import BitBoard
 
 
 class ChessGame:

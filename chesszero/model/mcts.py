@@ -6,62 +6,64 @@ import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
 from functools import lru_cache
+import random
 
 
 class Node:
     """Tree node storing state, prior probabilities, visit counts, and Q-values"""
 
     def __init__(self, board: BitBoard, parent=None, prior=0.0):
+        self.visit_count = 0
+        self.value_sum = 0.0
         self.board = board
         self.parent = parent
         self.prior = prior
         self.children = {}
-        # Use numpy for these operations
-        self.visit_count = np.array(0)
-        self.value_sum = np.array(0.0)
         self.is_expanded = False
 
     def value(self):
         if self.visit_count == 0:
             return 0.0
-        return float(self.value_sum / self.visit_count)  # Convert back to Python float
+        return self.value_sum / self.visit_count  # already a Python float
 
     def select_child(self, c_puct):
-        """Use numpy for UCB computation"""
+        """Optimized child selection"""
         if not self.children:
             return None, None
 
-        moves = list(self.children.keys())
-        children = list(self.children.values())
+        # Use list comprehension instead of numpy for small arrays
+        visit_counts = [child.visit_count for child in self.children.values()]
+        total_visits = sum(visit_counts)
+        sqrt_total = math.sqrt(total_visits)
 
-        # Use numpy arrays for vectorized operations
-        visit_counts = np.array([child.visit_count for child in children])
-        total_visits = np.sum(visit_counts)
+        # Calculate UCB scores directly
+        best_score = float("-inf")
+        best_move = None
+        best_child = None
 
-        # Ensure we don't divide by zero
-        visit_counts_adjusted = np.maximum(visit_counts, 1)
+        for move, child in self.children.items():
+            if child.visit_count == 0:
+                q_value = 0
+            else:
+                q_value = (
+                    -child.value()
+                )  # Negative because we want to maximize opponent's loss
 
-        # Calculate Q-values (negative because we want to maximize opponent's loss)
-        values = np.array(
-            [
-                child.value_sum / visit_counts_adjusted[i]
-                for i, child in enumerate(children)
-            ]
-        )
-        priors = np.array([child.prior for child in children])
+            # UCB formula
+            exploration = c_puct * child.prior * sqrt_total / (1 + child.visit_count)
+            ucb_score = q_value + exploration
 
-        # Modified UCB formula with better exploration term
-        exploration_term = c_puct * priors * np.sqrt(total_visits) / (1 + visit_counts)
-        q_values = -values  # Negative because we want to maximize opponent's loss
-        ucb_scores = q_values + exploration_term
+            if child.parent is None:  # Root node
+                ucb_score = (
+                    0.75 * ucb_score + 0.25 * random.random()
+                )  # Simplified noise
 
-        # Add noise to root node for additional exploration
-        if self.parent is None:  # Root node
-            noise = np.random.dirichlet([0.3] * len(children))
-            ucb_scores = 0.75 * ucb_scores + 0.25 * noise
+            if ucb_score > best_score:
+                best_score = ucb_score
+                best_move = move
+                best_child = child
 
-        best_idx = int(np.argmax(ucb_scores))
-        return moves[best_idx], children[best_idx]
+        return best_move, best_child
 
 
 class MCTS:
@@ -112,53 +114,44 @@ class MCTS:
         return self._move_encoding_table[(from_pos, to_pos)]
 
     def _expand_node(self, node: Node, policy, value):
-        """Keep MLX only for policy/value conversion"""
+        """Optimized node expansion"""
         board = node.board
         policy_np = np.array(policy)
 
-        # Get valid moves
+        # Get valid moves using cached lookup
         board_hash = node.board.get_hash()
-        if board_hash in self.position_cache:
-            all_valid_moves = self.position_cache[board_hash]
-        else:
+        all_valid_moves = self.position_cache.get(board_hash)
+        if all_valid_moves is None:
             all_valid_moves = self._get_all_valid_moves(node.board)
             self.position_cache[board_hash] = all_valid_moves
 
         # Early exit if no moves
-        total_moves = sum(len(moves) for moves in all_valid_moves.values())
-        if total_moves == 0:
+        if not all_valid_moves:
             return
 
-        # Calculate priors for valid moves only
-        valid_priors = []
-        valid_moves_list = []
+        # Calculate priors more efficiently
+        total_prior = 0.0
+        children = {}
 
         for from_pos, valid_moves in all_valid_moves.items():
             for to_pos in valid_moves:
                 move_idx = self._move_encoding_table[(from_pos, to_pos)]
-                prior = float(policy_np[move_idx])
-                # Ensure non-negative prior
-                prior = max(prior, 1e-8)  # Small positive number
-                valid_priors.append(prior)
-                valid_moves_list.append((from_pos, to_pos))
+                prior = max(float(policy_np[move_idx]), 1e-8)
+                total_prior += prior
 
-        # Normalize valid move probabilities
-        valid_priors = np.array(valid_priors)
-        sum_priors = np.sum(valid_priors)
-        if sum_priors > 0:
-            valid_priors = valid_priors / sum_priors
-        else:
-            # If all priors are zero, use uniform distribution
-            valid_priors = np.ones_like(valid_priors) / len(valid_priors)
+                # Create child board and node
+                child_board = board.copy()
+                child_board.make_move(from_pos, to_pos)
+                children[(from_pos, to_pos)] = Node(
+                    board=child_board, parent=node, prior=prior
+                )
 
-        # Create children with normalized priors
-        for (from_pos, to_pos), prior in zip(valid_moves_list, valid_priors):
-            child_board = board.copy()
-            child_board.make_move(from_pos, to_pos)
-            node.children[(from_pos, to_pos)] = Node(
-                board=child_board, parent=node, prior=prior
-            )
+        # Normalize priors in one pass
+        if total_prior > 0:
+            for child in children.values():
+                child.prior /= total_prior
 
+        node.children = children
         node.is_expanded = True
         node.value_sum = float(value)
         node.visit_count = 1
@@ -217,18 +210,14 @@ class MCTS:
 
     def backup(self, search_path: List[Node], value: float):
         """Fully vectorized backup"""
-        path_length = len(search_path)
-        if path_length == 0:
-            return
-
-        # Pre-allocate value array
-        values = np.full(path_length, value, dtype=np.float32)
-        values[1::2] *= -1  # Flip values for opponent nodes
-
-        # Update all nodes in one operation
-        for node, val in zip(search_path, values):
+        # Using native int/float updates
+        # Precompute the values for each node along the path:
+        values_along_path = [
+            value if idx % 2 == 0 else -value for idx in range(len(search_path))
+        ]
+        for node, v in zip(search_path, values_along_path):
             node.visit_count += 1
-            node.value_sum += val
+            node.value_sum += v
 
     def _get_valid_moves(
         self, board: BitBoard, pos: Tuple[int, int]
@@ -283,9 +272,12 @@ class MCTS:
         boards_buffer: np.ndarray,
         paths_buffer: List[List[Node]],
     ):
-        """Batch process multiple MCTS simulations"""
-        # Selection phase - batch process
+        """Optimized batch simulation"""
+        # Pre-allocate arrays for better performance
         nodes_to_expand = []
+        board_states = []  # Store states directly instead of copying boards
+
+        # Selection phase - batch process
         for i in range(batch_size):
             node = root
             path = []
@@ -300,22 +292,22 @@ class MCTS:
                 path.append(node)
 
             if not node.board.is_game_over():
-                boards_buffer[len(nodes_to_expand)] = node.board.state
+                # Store state directly instead of copying
+                board_states.append(node.board.state)
                 nodes_to_expand.append(node)
             paths_buffer[i] = path
 
         # Batch evaluate positions if any
         if nodes_to_expand:
-            # Convert boards for model inference
-            n_boards = len(nodes_to_expand)
-            board_batch = mx.array(boards_buffer[:n_boards], dtype=mx.float32)
+            # Convert boards for model inference - do it once
+            board_batch = mx.array(np.stack(board_states), dtype=mx.float32)
             policies, values = self.model(board_batch)
 
             # Expand nodes in batch
             for node, policy, value in zip(nodes_to_expand, policies, values):
                 self._expand_node(node, policy, value.item())
 
-        # Backup phase
+        # Backup phase - use native Python types for speed
         for path in paths_buffer[:batch_size]:
             if not path:  # Skip empty paths
                 continue

@@ -36,15 +36,29 @@ class Node:
 
         # Use numpy arrays for vectorized operations
         visit_counts = np.array([child.visit_count for child in children])
+        total_visits = np.sum(visit_counts)
+
+        # Ensure we don't divide by zero
+        visit_counts_adjusted = np.maximum(visit_counts, 1)
+
+        # Calculate Q-values (negative because we want to maximize opponent's loss)
         values = np.array(
-            [child.value_sum / max(1, vc) for child, vc in zip(children, visit_counts)]
+            [
+                child.value_sum / visit_counts_adjusted[i]
+                for i, child in enumerate(children)
+            ]
         )
         priors = np.array([child.prior for child in children])
 
-        # Vectorized UCB computation
-        sqrt_total_visits = math.sqrt(max(1, self.visit_count))
-        q_values = np.where(visit_counts > 0, -values, 0)
-        ucb_scores = q_values + c_puct * sqrt_total_visits * priors / (1 + visit_counts)
+        # Modified UCB formula with better exploration term
+        exploration_term = c_puct * priors * np.sqrt(total_visits) / (1 + visit_counts)
+        q_values = -values  # Negative because we want to maximize opponent's loss
+        ucb_scores = q_values + exploration_term
+
+        # Add noise to root node for additional exploration
+        if self.parent is None:  # Root node
+            noise = np.random.dirichlet([0.3] * len(children))
+            ucb_scores = 0.75 * ucb_scores + 0.25 * noise
 
         best_idx = int(np.argmax(ucb_scores))
         return moves[best_idx], children[best_idx]
@@ -103,7 +117,7 @@ class MCTS:
         policy_np = np.array(policy)
 
         # Get valid moves
-        board_hash = node.board.get_hash()  # Use faster hashing
+        board_hash = node.board.get_hash()
         if board_hash in self.position_cache:
             all_valid_moves = self.position_cache[board_hash]
         else:
@@ -115,35 +129,38 @@ class MCTS:
         if total_moves == 0:
             return
 
-        # Pre-allocate arrays for better memory efficiency
-        child_boards = [None] * total_moves
-        move_pairs = [None] * total_moves
-        priors = np.empty(total_moves, dtype=np.float32)  # Single array allocation
+        # Calculate priors for valid moves only
+        valid_priors = []
+        valid_moves_list = []
 
-        # Keep policy in MLX format, avoid numpy conversion
-        idx = 0
         for from_pos, valid_moves in all_valid_moves.items():
             for to_pos in valid_moves:
                 move_idx = self._move_encoding_table[(from_pos, to_pos)]
-                # Access MLX array directly without conversion
-                priors[idx] = float(policy_np[move_idx])
+                prior = float(policy_np[move_idx])
+                # Ensure non-negative prior
+                prior = max(prior, 1e-8)  # Small positive number
+                valid_priors.append(prior)
+                valid_moves_list.append((from_pos, to_pos))
 
-                # Reuse board objects when possible
-                child_board = board.copy()
-                child_board.make_move(from_pos, to_pos)
+        # Normalize valid move probabilities
+        valid_priors = np.array(valid_priors)
+        sum_priors = np.sum(valid_priors)
+        if sum_priors > 0:
+            valid_priors = valid_priors / sum_priors
+        else:
+            # If all priors are zero, use uniform distribution
+            valid_priors = np.ones_like(valid_priors) / len(valid_priors)
 
-                child_boards[idx] = child_board
-                move_pairs[idx] = (from_pos, to_pos)
-                idx += 1
-
-        # Create all nodes at once using dict comprehension
-        node.children = {
-            move: Node(board=board, parent=node, prior=float(prior))
-            for move, board, prior in zip(move_pairs, child_boards, priors)
-        }
+        # Create children with normalized priors
+        for (from_pos, to_pos), prior in zip(valid_moves_list, valid_priors):
+            child_board = board.copy()
+            child_board.make_move(from_pos, to_pos)
+            node.children[(from_pos, to_pos)] = Node(
+                board=child_board, parent=node, prior=prior
+            )
 
         node.is_expanded = True
-        node.value_sum = float(value)  # Convert MLX scalar to float once
+        node.value_sum = float(value)
         node.visit_count = 1
 
     def get_move(self, board: BitBoard):
@@ -312,28 +329,33 @@ class MCTS:
     def should_stop(self, root: Node) -> bool:
         """
         Check if we can stop further simulations early.
-        For example, if the best child visit count is sufficiently high compared
-        to the others, we can return True.
+        If the best child visit count is significantly ahead of the second best,
+        we can return True to stop simulations.
         """
         if not root.children:
             return False
+
         # Gather visit counts from all children of the root
         visit_counts = [child.visit_count for child in root.children.values()]
-        best = max(visit_counts)
-        if len(visit_counts) > 1:
-            # Get second best, note that the list is unsorted so sort it
-            sorted_counts = sorted(visit_counts, reverse=True)
-            second_best = sorted_counts[1]
-        else:
-            second_best = 0
 
-        # If best has reached a minimal threshold and is significantly ahead of second best, stop.
-        if best >= 20 and best > second_best * 1.5:
+        if len(visit_counts) <= 1:
+            return False  # not enough moves to compare
+
+        sorted_counts = sorted(visit_counts, reverse=True)
+        best = sorted_counts[0]
+        second_best = sorted_counts[1]
+
+        # Define minimal visits required and ratio factor for early stopping
+        minimal_visits = 20
+        threshold_ratio = 2.0  # adjust as needed; e.g., 2.0 means best must be at least twice the second best
+
+        if best >= minimal_visits and best > second_best * threshold_ratio:
             if self.debug:
                 print(
-                    f"Early stop triggered: best = {best}, second best = {second_best}"
+                    f"Early stop triggered: best visit count = {best}, second best = {second_best}"
                 )
             return True
+
         return False
 
 

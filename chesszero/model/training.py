@@ -1,6 +1,6 @@
 import mlx.core as mx
 import mlx.optimizers as optim
-from typing import Tuple, List, Optional
+from typing import Tuple, Optional
 from chess_engine.board import Color
 from chess_engine.game import ChessGame
 from model.network import ChessNet
@@ -8,12 +8,9 @@ from model.mcts import MCTS
 from model.self_play import (
     generate_games,
     create_batches,
-    generate_random_opponent_games,
 )
 from utils.random_player import RandomPlayer
-from utils.board_utils import encode_board
 from config.model_config import ModelConfig
-import numpy as np
 from pathlib import Path
 import time
 import logging
@@ -81,13 +78,11 @@ class Trainer:
         """Main training loop"""
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()
-        self.logger.info("\n=== Training Started ===")
 
         for epoch in range(self.start_epoch, n_epochs):
             epoch_start_time = time.time()
-            self.logger.info(f"\n{'='*50}")
+
             self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
-            self.logger.info(f"{'='*50}")
 
             # Set MCTS to training mode for self-play
             self.mcts.training = True

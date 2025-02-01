@@ -7,88 +7,75 @@ from utils.board_utils import encode_board
 from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
-import time
-import random
 import logging
 
 
 def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
     """Play a single game of self-play and return the training data"""
-    perf_stats = {
-        "move_generation": 0.0,
-        "state_encoding": 0.0,
-        "policy_creation": 0.0,
-        "move_execution": 0.0,
-        "total_time": 0.0,
-    }
-
-    start_time = time.time()
     game = ChessGame()
     states, policies, values = [], [], []
 
     print("\nStarting new self-play game")
     print("---------------------------")
 
+    # Add temperature parameter for move selection
+    temperature = 1.0  # Start with high temperature
+
     move_count = 0
-    for move_count in tqdm(range(201), desc="Playing game"):
+    for move_count in range(201):  # Removed tqdm to see board positions clearly
         if game.is_over():
             break
 
-        if move_count % 20 == 0:
-            print(f"\nMove {move_count}")
-            print(game.board)
+        # Print current move number
+        print(f"\nMove {move_count + 1}")
 
-        # Time move generation
-        t0 = time.time()
-        move = mcts.get_move(game.board)
-        perf_stats["move_generation"] += time.time() - t0
+        # Reduce temperature over time to favor exploitation in later moves
+        if move_count > 30:
+            temperature = 0.5
 
-        # Time state encoding
-        t0 = time.time()
+        # Get move with temperature
+        move = get_move_with_temperature(mcts, game.board, temperature)
+        if move is None:
+            print("No valid moves found!")
+            break
+
+        # Store state and create policy from visit counts
         encoded_state = encode_board(game.board)
-        perf_stats["state_encoding"] += time.time() - t0
-
-        # Time policy creation
-        t0 = time.time()
-        policy = np.zeros(config.policy_output_dim)
-        move_idx = mcts.encode_move(move[0], move[1])
-        policy[move_idx] = 1.0
-        perf_stats["policy_creation"] += time.time() - t0
+        policy = create_policy_from_visits(mcts.root_node, config.policy_output_dim)
 
         states.append(encoded_state)
         policies.append(policy)
 
-        # Time move execution
-        t0 = time.time()
-        game.make_move_coords(move[0], move[1], f"{move[0]}{move[1]}")
-        perf_stats["move_execution"] += time.time() - t0
+        # Print the move being made
+        from_square = f"{chr(move[0][1] + 97)}{move[0][0] + 1}"
+        to_square = f"{chr(move[1][1] + 97)}{move[1][0] + 1}"
+        print(f"Playing: {from_square} -> {to_square}")
 
+        game.make_move_coords(move[0], move[1], f"{move[0]}{move[1]}")
         move_count += 1
 
-    perf_stats["total_time"] = time.time() - start_time
-
-    # Print performance statistics
-    print("\nSelf-play Performance Statistics:")
-    print(f"Total game time: {perf_stats['total_time']:.2f}s")
-    print(f"Moves: {move_count}")
-    print(f"Time per move: {perf_stats['total_time']/move_count:.3f}s")
-    print("\nTime breakdown:")
-    print(
-        f"Move generation: {perf_stats['move_generation']/perf_stats['total_time']*100:.1f}%"
-    )
-    print(
-        f"State encoding: {perf_stats['state_encoding']/perf_stats['total_time']*100:.1f}%"
-    )
-    print(
-        f"Policy creation: {perf_stats['policy_creation']/perf_stats['total_time']*100:.1f}%"
-    )
-    print(
-        f"Move execution: {perf_stats['move_execution']/perf_stats['total_time']*100:.1f}%"
-    )
-
-    # Game is over - get result
+    # Game is over - get result and reason
     result = game.get_result()
-    print(f"\nGame over. Result: {result}")
+
+    print("\n=== Game Complete ===")
+    print("\nFinal position:")
+    print(game.board)
+    print("\nGame ended because:", end=" ")
+
+    if game.board.is_checkmate(game.board.get_current_turn()):
+        print("Checkmate!")
+    elif game.board.is_stalemate(game.board.get_current_turn()):
+        print("Stalemate!")
+    elif game.board.is_draw():
+        print("Draw by insufficient material or repetition!")
+    elif move_count >= 200:
+        print("Maximum moves reached!")
+    else:
+        print("Unknown reason")
+
+    print(f"Result: {result}")
+    print(f"Total moves: {move_count}")
+    print("===================\n")
 
     # Fill in the values array based on game result
     values = [result if i % 2 == 0 else -result for i in range(len(states))]
@@ -145,8 +132,9 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
             games.append((states, policies, values))
         logger.info(
             f"Game {game_idx + 1} completed with {total_moves} moves, result: {result}"
-            + (f" (max moves reached)" if total_moves >= max_moves else "")
+            + (" (max moves reached)" if total_moves >= max_moves else "")
         )
+        logger.info(game.board)
 
     if len(games) == 0:
         logger.warning("No valid games were generated!")
@@ -253,6 +241,46 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
 
 
 def get_policy_distribution(root_node, policy_output_dim: int):
+    """Convert MCTS visit counts to policy distribution"""
+    # Use numpy array for indexing, convert to MLX at the end
+    policy = np.zeros(policy_output_dim, dtype=np.float32)
+
+    for move, child in root_node.children.items():
+        # Calculate move index directly since we don't have mcts instance
+        from_pos, to_pos = move
+        from_idx = from_pos[0] * 8 + from_pos[1]
+        to_idx = to_pos[0] * 8 + to_pos[1]
+        move_idx = from_idx * 64 + to_idx
+        if move_idx < len(policy):
+            policy[move_idx] = child.visit_count
+
+    # Normalize using numpy first
+    policy = policy / np.sum(policy) if np.sum(policy) > 0 else policy
+
+    # Convert to MLX array at the end
+    return mx.array(policy)
+
+
+def get_move_with_temperature(mcts: MCTS, board, temperature: float):
+    """Select move based on visit count distribution with temperature"""
+    mcts.get_move(board)  # Run MCTS simulations
+
+    visits = np.array([child.visit_count for child in mcts.root_node.children.values()])
+    moves = list(mcts.root_node.children.keys())
+
+    if temperature == 0:
+        # Select most visited move
+        return moves[np.argmax(visits)]
+
+    # Apply temperature
+    visits = visits ** (1 / temperature)
+    probs = visits / np.sum(visits)
+
+    # Sample move based on visit count distribution
+    return moves[np.random.choice(len(moves), p=probs)]
+
+
+def create_policy_from_visits(root_node, policy_output_dim: int):
     """Convert MCTS visit counts to policy distribution"""
     # Use numpy array for indexing, convert to MLX at the end
     policy = np.zeros(policy_output_dim, dtype=np.float32)

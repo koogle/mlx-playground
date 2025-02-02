@@ -112,7 +112,7 @@ class MCTS:
         self.current_game_moves = 0  # Track moves in current game
 
     def clear_all_caches(self):
-        """Clear all caches between games"""
+        """Clear all caches between games and force garbage collection"""
         self.valid_moves_cache.clear()
         self.position_cache.clear()
         self.all_moves_cache.clear()

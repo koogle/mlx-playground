@@ -67,7 +67,7 @@ class Node:
         # Reduced random noise
         ucb_scores += np.random.normal(
             0, 0.001, size=len(ucb_scores)
-        )  # Reduced from 0.01
+        )  # Reduced from 0.01ex
 
         selected_idx = np.argmax(ucb_scores)
         return moves[selected_idx], children[selected_idx]

@@ -194,7 +194,7 @@ class MCTS:
         return policy, value
 
     def _expand_node(self, node: Node, policy, value):
-        """Expand node with proper cleanup of temporary boards"""
+        """Expand node with proper cleanup"""
         board_hash = node.board.get_hash()
 
         # Check for cycles
@@ -225,10 +225,8 @@ class MCTS:
         if not all_valid_moves:
             return
 
-        # Create children with temporary boards
         children = {}
         total_prior = 0.0
-        temp_boards = []  # Track temporary boards
 
         for from_pos, valid_moves in all_valid_moves.items():
             for to_pos in valid_moves:
@@ -238,10 +236,10 @@ class MCTS:
 
                 child_board = board.copy()
                 child_board.make_move(from_pos, to_pos)
+
                 children[(from_pos, to_pos)] = Node(
                     board=child_board, parent=node, prior=prior
                 )
-                temp_boards.append(child_board)  # Track for cleanup
 
         # Normalize priors
         if total_prior > 0:
@@ -255,9 +253,6 @@ class MCTS:
 
         if len(node.children) > 0:
             self._tree_cache[board_hash] = node.children
-
-        # Clean up temporary boards that weren't used
-        del temp_boards
 
     def _get_transposition_key(self, board: BitBoard) -> str:
         """Get unique key for equivalent positions"""
@@ -320,7 +315,7 @@ class MCTS:
 
             # Select move based on temperature
             move = self._select_move_with_temperature(self.root_node, temperature)
-
+            self._cleanup_tree(self.root_node)
             return move
 
         finally:
@@ -611,3 +606,17 @@ class MCTS:
 
     def _is_game_over(self, node: Node) -> bool:
         return node.board.is_game_over()
+
+    def _cleanup_tree(self, node: Node):
+        """Recursively cleanup the MCTS tree"""
+        if not node:
+            return
+
+        # Recursively cleanup children
+        for child in node.children.values():
+            self._cleanup_tree(child)
+
+        # Clear node references
+        node.children.clear()
+        node.parent = None
+        node.board = None  # Remove board reference

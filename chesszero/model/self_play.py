@@ -1,3 +1,4 @@
+from functools import lru_cache
 import numpy as np
 from chess_engine.game import ChessGame
 from chess_engine.bitboard import BitBoard
@@ -37,7 +38,7 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
 
         # Store state and create policy from visits
         encoded_state = encode_board(game.board)
-        policy = create_policy_from_visits(mcts.root_node, config.policy_output_dim)
+        policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
 
         states.append(encoded_state)
         policies.append(policy)
@@ -276,6 +277,7 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
     return games_data
 
 
+@lru_cache(maxsize=10000)
 def get_policy_distribution(root_node, policy_output_dim: int):
     """Convert MCTS visit counts to policy distribution"""
     # Use numpy array for indexing, convert to MLX at the end
@@ -297,27 +299,7 @@ def get_policy_distribution(root_node, policy_output_dim: int):
     return mx.array(policy)
 
 
-def create_policy_from_visits(root_node, policy_output_dim: int):
-    """Convert MCTS visit counts to policy distribution"""
-    # Use numpy array for indexing, convert to MLX at the end
-    policy = np.zeros(policy_output_dim, dtype=np.float32)
-
-    for move, child in root_node.children.items():
-        # Calculate move index directly since we don't have mcts instance
-        from_pos, to_pos = move
-        from_idx = from_pos[0] * 8 + from_pos[1]
-        to_idx = to_pos[0] * 8 + to_pos[1]
-        move_idx = from_idx * 64 + to_idx
-        if move_idx < len(policy):
-            policy[move_idx] = child.visit_count
-
-    # Normalize using numpy first
-    policy = policy / np.sum(policy) if np.sum(policy) > 0 else policy
-
-    # Convert to MLX array at the end
-    return mx.array(policy)
-
-
+@lru_cache(maxsize=10000)
 def encode_board(board: BitBoard) -> mx.array:
     """Convert BitBoard state to network input format"""
     # Convert uint8 to float32 when creating MLX array

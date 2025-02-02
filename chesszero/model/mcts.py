@@ -70,6 +70,7 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = False
+        self.cache_max_size = 50000  # Adjust this based on memory constraints
         self.valid_moves_cache = {}
         self.position_cache = {}
         self.all_moves_cache = {}
@@ -203,6 +204,10 @@ class MCTS:
 
     def get_move(self, board: BitBoard):
         """Reuse calculations for transpositions"""
+        # Clean caches periodically
+        if len(self.valid_moves_cache) > self.cache_max_size:
+            self._prune_caches()
+
         key = self._get_transposition_key(board)
         if key in self.transposition_table:
             cached_node = self.transposition_table[key]
@@ -444,13 +449,26 @@ class MCTS:
 
         return max(1, total_length // sample_size)
 
-    def _prune_caches(self, max_size=10000):
-        """Prevent unbounded cache growth"""
-        if len(self._value_cache) > max_size:
-            # Keep only most recent entries
-            self._value_cache = dict(list(self._value_cache.items())[-max_size:])
-            self._policy_cache = dict(list(self._policy_cache.items())[-max_size:])
-            self._tree_cache = dict(list(self._tree_cache.items())[-max_size:])
+    def _prune_caches(self):
+        """More aggressive cache pruning"""
+        # Keep only 75% of max size to prevent frequent pruning
+        target_size = int(self.cache_max_size * 0.75)
+
+        # Prune all caches
+        self.valid_moves_cache = dict(
+            list(self.valid_moves_cache.items())[-target_size:]
+        )
+        self.position_cache = dict(list(self.position_cache.items())[-target_size:])
+        self.all_moves_cache = dict(list(self.all_moves_cache.items())[-target_size:])
+        self._value_cache = dict(list(self._value_cache.items())[-target_size:])
+        self._policy_cache = dict(list(self._policy_cache.items())[-target_size:])
+        self._tree_cache = dict(list(self._tree_cache.items())[-target_size:])
+
+        # Clear transposition table completely since it's less critical
+        self.transposition_table.clear()
+
+        if self.debug:
+            print(f"Pruned caches to {target_size} entries")
 
 
 class BitBoard:

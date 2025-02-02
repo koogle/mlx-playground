@@ -94,18 +94,17 @@ class Trainer:
             self.logger.info(f"Self-play completed in {game_time:.1f}s")
 
             # Log game statistics and verify game data
-            total_positions = sum(len(states) for states, _, _ in games)
+            total_positions = sum(len(game_history) for game_history, _ in games)
             avg_moves = total_positions / len(games) if games else 0
             self.logger.info(f"Average moves per game: {avg_moves:.1f}")
             self.logger.info(f"Total training positions: {total_positions}")
 
             # Debug game data structure
             self.logger.info("Game data structure:")
-            for i, (states, policies, values) in enumerate(games):
+            for i, (game_history, result) in enumerate(games):
                 self.logger.info(f"Game {i+1}:")
-                self.logger.info(f"  States shape: {states.shape}")
-                self.logger.info(f"  Policies shape: {policies.shape}")
-                self.logger.info(f"  Values shape: {values.shape}")
+                self.logger.info(f"  Moves: {len(game_history)}")
+                self.logger.info(f"  Result: {result}")
 
             # Create and verify batches
             batches = list(create_batches(games, self.config.batch_size))
@@ -166,7 +165,7 @@ class Trainer:
 
     def train_on_batch(self, batch):
         """Train on a single batch of data with adjusted loss calculation"""
-        states, policies, values = batch
+        states, policies, values = batch  # Unpack the batch correctly
 
         # Debug output for input tensors
         self.logger.info(f"States shape: {states.shape}, dtype: {states.dtype}")

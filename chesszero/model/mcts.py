@@ -78,7 +78,7 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = config.debug
-        self.cache_max_size = 50000  # Adjust this based on memory constraints
+        self.cache_max_size = 5000  # Adjust this based on memory constraints
         self.valid_moves_cache = {}
         self.position_cache = {}
         self.all_moves_cache = {}
@@ -111,8 +111,6 @@ class MCTS:
         self.path_lengths = []  # Track all path lengths
         self.current_game_moves = 0  # Track moves in current game
 
-        self._game_over_cache = {}  # Cache for game over checks
-
     def clear_all_caches(self):
         """Clear all caches between games"""
         self.valid_moves_cache.clear()
@@ -123,6 +121,7 @@ class MCTS:
         self._policy_cache.clear()
         self._tree_cache.clear()
         self.root_node = None
+
         # Reset counters
         self.total_nodes_visited = 0
         self.moves_made = 0
@@ -588,28 +587,4 @@ class MCTS:
             print(f"Pruned caches to {target_size} entries")
 
     def _is_game_over(self, node: Node) -> bool:
-        """Cached game over check"""
-        board_hash = node.board.get_hash()
-
-        if board_hash in self._game_over_cache:
-            return self._game_over_cache[board_hash]
-
-        result = node.board.is_game_over()
-        self._game_over_cache[board_hash] = result
-        return result
-
-
-class BitBoard:
-    def is_game_over(self) -> bool:
-        """Cached game over check"""
-        current_turn = self.get_current_turn()
-        return (
-            self.is_checkmate(current_turn)
-            or self.is_stalemate(current_turn)
-            or self.is_draw()
-        )
-
-    def is_in_check(self, color: int) -> bool:
-        """Cached check detection"""
-        king_pos = self.get_king_position(color)
-        return self._is_square_attacked_vectorized(king_pos, 1 - color)
+        return node.board.is_game_over()

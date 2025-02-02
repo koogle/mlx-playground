@@ -1,7 +1,6 @@
 import numpy as np
 from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
-from functools import lru_cache
 
 
 @dataclass
@@ -41,6 +40,9 @@ class BitBoard:
     18: No-progress count (normalized by dividing by 50)
     """
 
+    _game_over_cache = {}
+    _pin_cache = {}
+
     def __init__(self):
         # Use contiguous memory layout
         self.state = np.zeros((19, 8, 8), dtype=np.float32, order="C")
@@ -48,12 +50,6 @@ class BitBoard:
         self.knight_attacks = self._init_knight_attacks()
         self.king_attacks = self._init_king_attacks()
         self.pawn_attacks = self._init_pawn_attacks()
-
-        # Cache structures
-        self._moves_cache = {}
-        self._game_over_cache = {}
-        self._in_check_cache = {}
-        self._valid_moves_count = None
 
         # Track king positions directly - (row, col) for each color
         self.king_positions = {
@@ -246,18 +242,6 @@ class BitBoard:
         # Update turn
         self.state[12] = 1 - self.state[12]
 
-        # Clear caches
-        self._game_over_cache.clear()
-        self._in_check_cache.clear()
-        self._valid_moves_count = None
-
-        # Clear caches after successful move
-        self._pin_cache.clear()
-        self._attack_cache.clear()
-        self._moves_cache.clear()
-        self._game_over_cache.clear()
-        self._in_check_cache.clear()
-
         return True
 
     def get_move_count(self) -> int:
@@ -273,14 +257,9 @@ class BitBoard:
         new_board = BitBoard()
         new_board.state = np.copy(self.state)
         new_board.king_positions = self.king_positions.copy()
-        # Reset caches for the copy
-        new_board._moves_cache = {}
-        new_board._game_over_cache = {}
-        new_board._in_check_cache = {}
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
-        """Cache valid moves for positions"""
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
 
@@ -464,7 +443,6 @@ class BitBoard:
         return pieces
 
     def is_square_attacked(self, pos: Tuple[int, int], by_color: int) -> bool:
-        """Cache attack calculations"""
         row, col = pos
 
         # Check pawn attacks
@@ -682,19 +660,19 @@ class BitBoard:
         current_turn = self.get_current_turn()
         cache_key = hash(self.state.tobytes())
 
-        if cache_key in self._game_over_cache:
-            return self._game_over_cache[cache_key]
+        if cache_key in BitBoard._game_over_cache:
+            return BitBoard._game_over_cache[cache_key]
 
         # Check all pieces for valid moves
         has_moves = False
-        for (r, c), piece_type in self.get_all_pieces(current_turn):
+        for (r, c), _ in self.get_all_pieces(current_turn):
             if self.get_valid_moves((r, c)):
                 has_moves = True
                 break
 
         # Check for checkmate/stalemate
         result = not has_moves
-        self._game_over_cache[cache_key] = result
+        BitBoard._game_over_cache[cache_key] = result
         return result
 
     def get_game_result(self, perspective_color: Optional[int] = None) -> float:
@@ -982,11 +960,11 @@ class BitBoard:
         board_hash = self.get_hash()
         cache_key = (board_hash, pos)
 
-        if cache_key in self._pin_cache:
-            return self._pin_cache[cache_key]
+        if cache_key in BitBoard._pin_cache:
+            return BitBoard._pin_cache[cache_key]
 
         result = self._calculate_pin_info(pos)
-        self._pin_cache[cache_key] = result
+        BitBoard._pin_cache[cache_key] = result
         return result
 
     def _calculate_pin_info(self, pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:

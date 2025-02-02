@@ -104,7 +104,8 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
         move_count = 0
 
         while not game.board.is_game_over() and move_count < 200:
-            state = game.board.state
+            # Convert state to MLX array immediately
+            state = mx.array(game.board.state, dtype=mx.float32)
             move = mcts.get_move(game.board, temperature=1.0)
             if not move:
                 break

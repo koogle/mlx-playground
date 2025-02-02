@@ -697,6 +697,35 @@ class BitBoard:
         self._game_over_cache[cache_key] = result
         return result
 
+    def get_game_result(self, perspective_color: Optional[int] = None) -> float:
+        """Get the game result from the given color's perspective
+        Args:
+            perspective_color: 0 for white, 1 for black. If None, uses current turn
+        Returns:
+            1.0 for win
+            -1.0 for loss
+            0.0 for draw
+        """
+        if perspective_color is None:
+            perspective_color = self.get_current_turn()
+
+        opponent_color = 1 - perspective_color
+
+        # Check if perspective player is checkmated
+        if self.is_checkmate(perspective_color):
+            return -1.0  # Loss
+
+        # Check if opponent is checkmated
+        elif self.is_checkmate(opponent_color):
+            return 1.0  # Win
+
+        # Check for draw
+        elif self.is_draw():
+            return 0.0  # Draw
+
+        # Game not over
+        return 0.0
+
     def _has_insufficient_material(self) -> bool:
         """Fast insufficient material check"""
         # Get piece counts (use numpy operations)
@@ -889,31 +918,6 @@ class BitBoard:
             or np.any(queen_mask & piece_positions[4])
             or np.any(king_mask & piece_positions[5])
         )
-
-    def get_game_result(self) -> float:
-        """Get the game result from current player's perspective
-        Returns:
-            1.0 for win
-            -1.0 for loss
-            0.0 for draw
-        """
-        current_turn = self.get_current_turn()
-        opponent_turn = 1 - current_turn
-
-        # Check if current player is checkmated
-        if self.is_checkmate(current_turn):
-            return -1.0  # Current player is checkmated
-
-        # Check if opponent is checkmated
-        elif self.is_checkmate(opponent_turn):
-            return 1.0  # Current player delivered checkmate
-
-        # Check for draw
-        elif self.is_draw():
-            return 0.0  # Draw
-
-        # If game is not over, return 0.0
-        return 0.0
 
     def _get_ray_between(
         self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]

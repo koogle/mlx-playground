@@ -133,9 +133,6 @@ class MCTS:
         self.total_paths = 0
         self.current_game_moves = 0
 
-        if self.debug:
-            print("\nClearing all caches and resetting stats")
-
     def _init_move_encoding_table(
         self,
     ) -> Dict[Tuple[Tuple[int, int], Tuple[int, int]], int]:
@@ -183,27 +180,23 @@ class MCTS:
         return policies[0], values[0].item()
 
     def _expand_node(self, node: Node, policy, value):
-        """Cache common subtrees and prevent cycles"""
-        if self.debug:
-            initial_children = len(node.children) if node.children else 0
-
+        """Expand node with proper cleanup of temporary boards"""
         board_hash = node.board.get_hash()
 
-        # Check if this position has occurred in the current search path
+        # Check for cycles
         current = node
         path_positions = {board_hash}
         while current.parent:
             parent_hash = current.parent.board.get_hash()
             if parent_hash in path_positions:
-                # Position repeats - treat as a draw
                 node.is_expanded = True
-                node.value_sum = 0.0  # Draw value
+                node.value_sum = 0.0
                 node.visit_count = 1
                 return
             path_positions.add(parent_hash)
             current = current.parent
 
-        # Rest of existing expansion code...
+        # Use cached subtree if available
         if board_hash in self._tree_cache:
             node.children = self._tree_cache[board_hash]
             node.is_expanded = True
@@ -213,21 +206,15 @@ class MCTS:
 
         board = node.board
         policy_np = np.array(policy)
+        all_valid_moves = self._get_all_valid_moves(board)
 
-        # Get valid moves using cached lookup
-        board_hash = node.board.get_hash()
-        all_valid_moves = self.position_cache.get(board_hash)
-        if all_valid_moves is None:
-            all_valid_moves = self._get_all_valid_moves(node.board)
-            self.position_cache[board_hash] = all_valid_moves
-
-        # Early exit if no moves
         if not all_valid_moves:
             return
 
-        # Calculate priors more efficiently
-        total_prior = 0.0
+        # Create children with temporary boards
         children = {}
+        total_prior = 0.0
+        temp_boards = []  # Track temporary boards
 
         for from_pos, valid_moves in all_valid_moves.items():
             for to_pos in valid_moves:
@@ -235,14 +222,14 @@ class MCTS:
                 prior = max(float(policy_np[move_idx]), 1e-8)
                 total_prior += prior
 
-                # Create child board and node
                 child_board = board.copy()
                 child_board.make_move(from_pos, to_pos)
                 children[(from_pos, to_pos)] = Node(
                     board=child_board, parent=node, prior=prior
                 )
+                temp_boards.append(child_board)  # Track for cleanup
 
-        # Normalize priors in one pass
+        # Normalize priors
         if total_prior > 0:
             for child in children.values():
                 child.prior /= total_prior
@@ -252,19 +239,11 @@ class MCTS:
         node.value_sum = float(value)
         node.visit_count = 1
 
-        # Cache the subtree
         if len(node.children) > 0:
             self._tree_cache[board_hash] = node.children
 
-        if self.debug and node.children:
-            print(f"\nNode expansion stats:")
-            print(f"Initial children: {initial_children}")
-            print(f"Final children: {len(node.children)}")
-            print(f"Policy shape: {policy.shape}")
-            if len(node.children) > 0:
-                print(
-                    f"Average prior: {sum(c.prior for c in node.children.values())/len(node.children):.3f}"
-                )
+        # Clean up temporary boards that weren't used
+        del temp_boards
 
     def _get_transposition_key(self, board: BitBoard) -> str:
         """Get unique key for equivalent positions"""
@@ -273,23 +252,6 @@ class MCTS:
     def get_move(self, board: BitBoard, temperature: float = 0.0):
         """Get best move using MCTS with optional temperature sampling"""
         self.current_game_moves += 1
-
-        if (
-            self.current_game_moves % 10 == 0 and self.debug
-        ):  # Print stats every 10 moves
-            avg_path = (
-                sum(self.path_lengths) / len(self.path_lengths)
-                if self.path_lengths
-                else 0
-            )
-            print(f"\nMCTS Stats at move {self.current_game_moves}:")
-            print(f"Max path length: {self.max_path_length}")
-            print(f"Average path length: {avg_path:.2f}")
-            print(f"Total paths explored: {self.total_paths}")
-            print(
-                f"Cache sizes - Valid moves: {len(self.valid_moves_cache)}, Position: {len(self.position_cache)}"
-            )
-            print(f"Tree cache size: {len(self._tree_cache)}")
 
         # Don't switch to eval mode during training
         if not self.training:
@@ -343,7 +305,9 @@ class MCTS:
                     break
 
             # Select move based on temperature
-            return self._select_move_with_temperature(self.root_node, temperature)
+            move = self._select_move_with_temperature(self.root_node, temperature)
+
+            return move
 
         finally:
             # Restore training mode if we were training
@@ -461,14 +425,6 @@ class MCTS:
         paths = []
         max_depth_this_batch = 0
 
-        if self.debug:
-            print(f"\nStarting batch simulation with size {batch_size}")
-            print("Root node children:", len(root.children))
-            print("Root node visits:", root.visit_count)
-            visited_expanded = 0
-            new_leaves = 0
-            start_time = time.time()
-
         # Selection phase - find nodes to evaluate
         for i in range(batch_size):
             # Check time limit periodically (every 8 simulations)
@@ -499,8 +455,6 @@ class MCTS:
 
                 # Use cached game over check
                 if self._is_game_over(node):
-                    if self.debug:
-                        visited_expanded += 1
                     break
 
                 if not node.is_expanded:
@@ -509,8 +463,6 @@ class MCTS:
                         nodes_to_expand.append(node)
                         board_states.append(node.board.state)
                         paths.append(path)
-                        if self.debug:
-                            new_leaves += 1
                     break
 
                 # Node is expanded - select child based on UCB
@@ -531,13 +483,6 @@ class MCTS:
 
         if self.debug:
             elapsed = time.time() - start_time
-            print(f"Batch simulation results (took {elapsed:.3f}s):")
-            print(f"New leaf nodes found: {len(nodes_to_expand)}")
-            print(f"Visited expanded nodes: {visited_expanded}")
-            print(f"Max depth this batch: {max_depth_this_batch}")
-            print(
-                f"Average depth: {sum(self.path_lengths[-batch_size:])/batch_size:.2f}"
-            )
             if elapsed > 1.0:  # Warn about slow batches
                 print(f"WARNING: Slow batch simulation ({elapsed:.3f}s)")
 
@@ -585,20 +530,8 @@ class MCTS:
         best_move, best_visits, best_value = moves_data[0]
         second_best = moves_data[1]
 
-        if self.debug:
-            print("\nEarly stopping check:")
-            print(f"Total root visits: {root.visit_count}")
-            print(
-                f"Best move {best_move}: visits={best_visits}, value={best_value:.3f}"
-            )
-            print(
-                f"Second best {second_best[0]}: visits={second_best[1]}, value={second_best[2]:.3f}"
-            )
-
         # Need minimum visits before considering stopping
         if root.visit_count < 100 or best_visits < 50:
-            if self.debug:
-                print("Not enough visits - continue searching")
             return False
 
         # Only stop if we have clear dominance in both visits and value

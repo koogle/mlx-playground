@@ -14,6 +14,7 @@ from pathlib import Path
 import time
 import logging
 from tqdm import tqdm
+import numpy as np
 
 
 class Trainer:

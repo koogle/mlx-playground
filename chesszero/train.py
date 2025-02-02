@@ -56,7 +56,7 @@ def main():
         if args.profile:
             profiler.disable()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            stats_file = Path(args.checkpoint_dir) / f"profile_stats_{timestamp}.stats"
+            stats_file = Path(f"mcts_stats_{timestamp}.stats")
             profiler.dump_stats(str(stats_file))
             logger.info(f"Profile stats saved to {stats_file}")
 

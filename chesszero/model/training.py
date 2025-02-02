@@ -80,12 +80,10 @@ class Trainer:
 
         for epoch in range(self.start_epoch, n_epochs):
             epoch_start_time = time.time()
-
             self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
-            # Set model and MCTS to training mode
-            self.model.train()  # Explicitly set to train mode
-            self.mcts.training = True
+            # Set model to training mode
+            self.model.train()
             self.mcts.debug = self.config.debug
 
             # Generate self-play games
@@ -94,11 +92,27 @@ class Trainer:
             game_time = time.time() - game_start_time
             self.logger.info(f"Self-play completed in {game_time:.1f}s")
 
-            # Log game statistics
+            # Log game statistics and verify game data
             total_positions = sum(len(states) for states, _, _ in games)
             avg_moves = total_positions / len(games) if games else 0
             self.logger.info(f"Average moves per game: {avg_moves:.1f}")
             self.logger.info(f"Total training positions: {total_positions}")
+
+            # Debug game data structure
+            self.logger.info("Game data structure:")
+            for i, (states, policies, values) in enumerate(games):
+                self.logger.info(f"Game {i+1}:")
+                self.logger.info(f"  States shape: {states.shape}")
+                self.logger.info(f"  Policies shape: {policies.shape}")
+                self.logger.info(f"  Values shape: {values.shape}")
+
+            # Create and verify batches
+            batches = list(create_batches(games, self.config.batch_size))
+            self.logger.info(f"Created {len(batches)} batches")
+
+            if not batches:
+                self.logger.warning("No batches created for training!")
+                continue
 
             # Train on game data
             self.logger.info("Training on game data...")
@@ -107,8 +121,8 @@ class Trainer:
             policy_loss = 0
             value_loss = 0
 
-            batches = list(create_batches(games, self.config.batch_size))
-            for batch in tqdm(batches, desc="Training batches"):
+            for batch_idx, batch in enumerate(tqdm(batches, desc="Training batches")):
+                self.logger.info(f"\nProcessing batch {batch_idx + 1}/{len(batches)}")
                 loss, p_loss, v_loss = self.train_on_batch(batch)
                 total_loss += loss
                 policy_loss += p_loss
@@ -149,41 +163,32 @@ class Trainer:
         self.logger.info("\n=== Training Completed ===")
         self.logger.info(f"Total training time: {total_time/3600:.1f} hours")
 
-    def get_game_outcome(self, state: str) -> float:
-        """Convert game state to value with adjusted rewards
-
-        Returns:
-            float: 1.0 for win, -1.0 for loss, -0.5 for draw/timeout
-        """
-        if "Checkmate" in state:
-            return 1.0 if "White wins" in state else -1.0
-        # Draws and timeouts are slightly negative to encourage finding wins
-        return -0.5
-
     def train_on_batch(self, batch):
         """Train on a single batch of data with adjusted loss calculation"""
         states, policies, values = batch
 
         # Debug output for input tensors
-        self.logger.debug(f"States shape: {states.shape}, dtype: {states.dtype}")
-        self.logger.debug(f"Policies shape: {policies.shape}, dtype: {policies.dtype}")
-        self.logger.debug(f"Values shape: {values.shape}, dtype: {values.dtype}")
-        self.logger.debug(f"Sample values: {values[:5]}")  # Show first 5 values
-        self.logger.debug(
+        self.logger.info(f"States shape: {states.shape}, dtype: {states.dtype}")
+        self.logger.info(f"Policies shape: {policies.shape}, dtype: {policies.dtype}")
+        self.logger.info(f"Values shape: {values.shape}, dtype: {values.dtype}")
+        self.logger.info(f"Sample values: {values[:5]}")
+        self.logger.info(
             f"Sample policy sums: {[mx.sum(p).item() for p in policies[:5]]}"
-        )  # Should be close to 1
-
-        # Ensure model is in training mode
-        self.model.train()
+        )
 
         @mx.compile
         def loss_fn(model_params, states, policies, values):
             self.model.update(model_params)
             pred_policies, pred_values = self.model(states)
 
+            # Ensure pred_values is a proper MLX array and reshape if needed
+            if isinstance(pred_values, dict):
+                pred_values = mx.array(list(pred_values.values()), dtype=mx.float32)
+            pred_values = mx.reshape(pred_values, values.shape)
+
             # Debug predictions
-            self.logger.debug(f"Pred values: {pred_values[:5]}")
-            self.logger.debug(
+            self.logger.info(f"Pred values: {pred_values[:5]}")
+            self.logger.info(
                 f"Pred policy sums: {[mx.sum(p).item() for p in pred_policies[:5]]}"
             )
 
@@ -200,28 +205,28 @@ class Trainer:
             )
 
             # Debug loss components
-            self.logger.debug(f"Policy loss: {p_loss.item()}")
-            self.logger.debug(f"Value loss: {v_loss.item()}")
-            self.logger.debug(f"L2 reg: {l2_reg.item()}")
+            self.logger.info(f"Policy loss: {p_loss.item()}")
+            self.logger.info(f"Value loss: {v_loss.item()}")
+            self.logger.info(f"L2 reg: {l2_reg.item()}")
 
             total_loss = p_loss + v_loss + l2_reg
             return total_loss, (p_loss, v_loss)
 
         # Compute loss and gradients
-        (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn, has_aux=True)(
+        (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn)(
             self.model.parameters(), states, policies, values
         )
 
         # Debug gradients
         grad_norms = {name: mx.sum(mx.square(g)).item() for name, g in grads.items()}
-        self.logger.debug(f"Gradient norms: {grad_norms}")
+        self.logger.info(f"Gradient norms: {grad_norms}")
 
         # Update model parameters
         self.optimizer.update(self.model, grads)
         mx.eval(self.model.parameters(), self.optimizer.state)
 
         # Final loss values
-        self.logger.debug(
+        self.logger.info(
             f"Final losses - Total: {loss.item()}, Policy: {p_loss.item()}, Value: {v_loss.item()}"
         )
 

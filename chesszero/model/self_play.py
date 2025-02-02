@@ -90,7 +90,6 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
     games = []
 
     for game_idx in range(config.n_games_per_iteration):
-        # print(f"\n=== Game {game_idx + 1}/{config.n_games_per_iteration} ===")
         game = ChessGame()
         total_moves = 0
         states, policies, values = [], [], []
@@ -99,7 +98,8 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
         pbar = tqdm(total=200, desc=f"Game {game_idx + 1}", unit="moves")
 
         while not game.board.is_game_over() and total_moves < 200:
-            state = game.board.state
+            # Convert state to MLX array immediately
+            state = mx.array(game.board.state, dtype=mx.float32)
             move = mcts.get_move(game.board)
 
             if not move:
@@ -108,35 +108,49 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
 
             if not mcts.root_node:
                 continue
+
+            # Policy is already MLX array from get_policy_distribution
             policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
             states.append(state)
             policies.append(policy)
 
             game.make_move(move[0], move[1])
-            # print("\nPosition after move:")
-            # print(game.board)
-
             total_moves += 1
             pbar.update(1)
 
         pbar.close()
 
-        # Game is over - print outcome
-        result = game.board.get_game_result()
-        values.extend([result] * len(states))
+        # Game is over - convert result and values to MLX arrays with adjusted scoring
+        raw_result = game.board.get_game_result()
+
+        # Adjust scoring to encourage wins:
+        # Win = 1.0
+        # Draw = -0.5  (slightly better than loss but still negative)
+        # Loss = -1.0
+        if raw_result == 0:  # Draw
+            adjusted_result = -0.5
+        else:
+            adjusted_result = raw_result  # Keep wins/losses as +1/-1
+
+        # Convert values to MLX array with adjusted scoring
+        values = mx.array([adjusted_result] * len(states), dtype=mx.float32)
 
         print("\n=== Game Complete ===")
         print("\nFinal position:")
         print(game.board)
-        print(f"Result: {result}")
+        print(f"Raw result: {raw_result}")
+        print(f"Adjusted result: {adjusted_result}")
         print(f"Total moves: {total_moves}")
         print("===================\n")
 
         if len(states) > 0:
+            states = mx.stack(states)
+            policies = mx.stack(policies)
             games.append((states, policies, values))
 
         logger.info(
-            f"Game {game_idx + 1} completed with {total_moves} moves, result: {result}"
+            f"Game {game_idx + 1} completed with {total_moves} moves, "
+            f"result: {raw_result} (adjusted: {adjusted_result})"
             + (" (max moves reached)" if total_moves >= 200 else "")
         )
 
@@ -146,33 +160,48 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
     return games
 
 
-def create_batches(games: List[Tuple], batch_size: int):
-    """Create training batches from game data"""
-    # Flatten all games into (state, policy, value) tuples
-    all_examples = []
-    for states, policies, values in games:
-        all_examples.extend(zip(states, policies, values))
+def create_batches(games, batch_size: int):
+    """Create training batches from games"""
+    # Debug input
+    print(f"Creating batches from {len(games)} games with batch_size {batch_size}")
 
-    # Shuffle examples
-    np.random.shuffle(all_examples)
+    # Collect all positions
+    all_states = []
+    all_policies = []
+    all_values = []
+
+    for states, policies, values in games:
+        all_states.extend(states)
+        all_policies.extend(policies)
+        all_values.extend(values)
+
+    # Debug collected data
+    print(f"Total positions collected: {len(all_states)}")
+
+    if not all_states:
+        print("Warning: No positions to create batches from!")
+        return
+
+    # Convert to arrays
+    states = mx.array(all_states)
+    policies = mx.array(all_policies)
+    values = mx.array(all_values)
 
     # Create batches
-    for i in range(0, len(all_examples), batch_size):
-        batch = all_examples[i : i + batch_size]
-        if len(batch) < batch_size:
-            continue
+    n_samples = len(states)
+    indices = mx.arange(n_samples)
 
-        # Unzip batch
-        states, policies, values = zip(*batch)
+    # Debug batch creation
+    print(f"Creating batches of size {batch_size} from {n_samples} samples")
 
-        # Convert to MLX arrays with explicit type conversion
-        states = mx.array(np.array(states, dtype=np.float32))
-        policies = mx.array(np.array(policies, dtype=np.float32))
-        values = mx.array(np.array(values, dtype=np.float32))[
-            :, None
-        ]  # Add batch dimension
+    for i in range(0, n_samples, batch_size):
+        batch_indices = indices[i : i + batch_size]
+        if len(batch_indices) < batch_size:
+            # Pad the last batch if needed
+            pad_size = batch_size - len(batch_indices)
+            batch_indices = mx.concatenate([batch_indices, batch_indices[:pad_size]])
 
-        yield states, policies, values
+        yield (states[batch_indices], policies[batch_indices], values[batch_indices])
 
 
 def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:

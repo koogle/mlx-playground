@@ -194,7 +194,7 @@ class MCTS:
         return policy, value
 
     def _expand_node(self, node: Node, policy, value):
-        """Expand node with proper cleanup"""
+        """Expand node using board cache"""
         board_hash = node.board.get_hash()
 
         # Check for cycles

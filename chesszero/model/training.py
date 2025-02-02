@@ -197,28 +197,17 @@ class Trainer:
             # Value loss calculation
             v_loss = mx.mean(mx.square(values - pred_values))
 
-            # L2 regularization
-            l2_lambda = 5e-5
-            l2_reg = l2_lambda * sum(
-                mx.sum(mx.square(p)) for p in model_params.values()
-            )
-
             # Debug loss components
             self.logger.info(f"Policy loss: {p_loss.item()}")
             self.logger.info(f"Value loss: {v_loss.item()}")
-            self.logger.info(f"L2 reg: {l2_reg.item()}")
 
-            total_loss = p_loss + v_loss + l2_reg
+            total_loss = p_loss + v_loss  # l2_reg
             return total_loss, (p_loss, v_loss)
 
         # Compute loss and gradients
         (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn)(
             self.model.parameters(), states, policies, values
         )
-
-        # Debug gradients
-        grad_norms = {name: mx.sum(mx.square(g)).item() for name, g in grads.items()}
-        self.logger.info(f"Gradient norms: {grad_norms}")
 
         # Update model parameters
         self.optimizer.update(self.model, grads)

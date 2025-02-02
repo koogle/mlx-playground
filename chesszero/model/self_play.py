@@ -90,6 +90,7 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
     games = []
 
     for game_idx in range(config.n_games_per_iteration):
+        mcts.clear_all_caches()
         game = ChessGame()
         total_moves = 0
         states, policies, values = [], [], []
@@ -210,6 +211,8 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
     random_player = RandomPlayer()
 
     for game_idx in range(config.n_games_per_iteration):
+        mcts.clear_all_caches()
+
         if game_idx % 10 == 0:  # Progress update
             print(f"Generating game {game_idx + 1}/{config.n_games_per_iteration}")
 

@@ -97,6 +97,20 @@ class MCTS:
         self._policy_cache = {}  # Cache for policy evaluations
         self._tree_cache = {}  # Cache for subtrees
 
+    def clear_all_caches(self):
+        """Clear all caches between games"""
+        self.valid_moves_cache.clear()
+        self.position_cache.clear()
+        self.all_moves_cache.clear()
+        self.transposition_table.clear()
+        self._value_cache.clear()
+        self._policy_cache.clear()
+        self._tree_cache.clear()
+        self.root_node = None
+        # Reset counters
+        self.total_nodes_visited = 0
+        self.moves_made = 0
+
     def _init_move_encoding_table(
         self,
     ) -> Dict[Tuple[Tuple[int, int], Tuple[int, int]], int]:

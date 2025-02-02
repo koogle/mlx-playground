@@ -3,6 +3,7 @@ from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
+import time
 
 
 class Node:
@@ -109,6 +110,8 @@ class MCTS:
         self.total_paths = 0
         self.path_lengths = []  # Track all path lengths
         self.current_game_moves = 0  # Track moves in current game
+
+        self._game_over_cache = {}  # Cache for game over checks
 
     def clear_all_caches(self):
         """Clear all caches between games"""
@@ -450,6 +453,9 @@ class MCTS:
         paths_buffer: List[List[Node]],
     ):
         """Run batch of parallel MCTS simulations with balanced exploration/exploitation"""
+        start_time = time.time()
+        MAX_BATCH_TIME = 1.0  # Maximum seconds per batch
+
         nodes_to_expand = []
         board_states = []
         paths = []
@@ -461,19 +467,38 @@ class MCTS:
             print("Root node visits:", root.visit_count)
             visited_expanded = 0
             new_leaves = 0
+            start_time = time.time()
 
         # Selection phase - find nodes to evaluate
         for i in range(batch_size):
+            # Check time limit periodically (every 8 simulations)
+            if i % 8 == 0 and (time.time() - start_time) > MAX_BATCH_TIME:
+                if self.debug:
+                    print(f"Batch time limit reached after {i} simulations")
+                batch_size = i  # Truncate batch
+                break
+
             node = root
             path = [node]
             depth = 0
+            visited = set()  # Track visited positions to detect cycles
 
             # Keep selecting children until we either:
             # 1. Find an unexpanded node
             # 2. Reach a terminal state
             # 3. Hit max depth
+            # 4. Detect a cycle
             while depth < 50:  # Prevent infinite loops
-                if node.board.is_game_over():
+                # Check for cycles
+                board_hash = node.board.get_hash()
+                if board_hash in visited:
+                    if self.debug:
+                        print(f"Cycle detected at depth {depth}")
+                    break
+                visited.add(board_hash)
+
+                # Use cached game over check
+                if self._is_game_over(node):
                     if self.debug:
                         visited_expanded += 1
                     break
@@ -505,13 +530,16 @@ class MCTS:
             paths_buffer[i] = path
 
         if self.debug:
-            print(f"Batch simulation results:")
+            elapsed = time.time() - start_time
+            print(f"Batch simulation results (took {elapsed:.3f}s):")
             print(f"New leaf nodes found: {len(nodes_to_expand)}")
             print(f"Visited expanded nodes: {visited_expanded}")
             print(f"Max depth this batch: {max_depth_this_batch}")
             print(
                 f"Average depth: {sum(self.path_lengths[-batch_size:])/batch_size:.2f}"
             )
+            if elapsed > 1.0:  # Warn about slow batches
+                print(f"WARNING: Slow batch simulation ({elapsed:.3f}s)")
 
         # Expansion and evaluation phase
         if nodes_to_expand:
@@ -625,6 +653,17 @@ class MCTS:
 
         if self.debug:
             print(f"Pruned caches to {target_size} entries")
+
+    def _is_game_over(self, node: Node) -> bool:
+        """Cached game over check"""
+        board_hash = node.board.get_hash()
+
+        if board_hash in self._game_over_cache:
+            return self._game_over_cache[board_hash]
+
+        result = node.board.is_game_over()
+        self._game_over_cache[board_hash] = result
+        return result
 
 
 class BitBoard:

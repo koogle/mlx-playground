@@ -4,6 +4,7 @@ from model.training import Trainer
 import logging
 from pathlib import Path
 from datetime import datetime
+import cProfile
 
 
 def setup_logging(checkpoint_dir: str):
@@ -28,6 +29,9 @@ def main():
     parser.add_argument(
         "--checkpoint-dir", default="checkpoints", help="Directory for checkpoints"
     )
+    parser.add_argument(
+        "--profile", action="store_true", help="Enable cProfile profiling"
+    )
     args = parser.parse_args()
 
     # Setup logging
@@ -39,11 +43,22 @@ def main():
         config, checkpoint_dir=args.checkpoint_dir, resume_epoch=args.resume
     )
 
+    if args.profile:
+        profiler = cProfile.Profile()
+        profiler.enable()
+        logger.info("Profiling enabled")
+
     try:
         # Start training
         trainer.train()
     except KeyboardInterrupt:
         logger.info("\nTraining interrupted.")
+        if args.profile:
+            profiler.disable()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stats_file = Path(args.checkpoint_dir) / f"profile_stats_{timestamp}.stats"
+            profiler.dump_stats(str(stats_file))
+            logger.info(f"Profile stats saved to {stats_file}")
 
 
 if __name__ == "__main__":

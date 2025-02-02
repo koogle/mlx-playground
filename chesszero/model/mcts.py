@@ -449,73 +449,96 @@ class MCTS:
         boards_buffer: np.ndarray,
         paths_buffer: List[List[Node]],
     ):
-        """Run batch of parallel MCTS simulations"""
+        """Run batch of parallel MCTS simulations with balanced exploration/exploitation"""
         nodes_to_expand = []
         board_states = []
         paths = []
-        max_depth_this_batch = 0  # Track max depth in this batch
+        max_depth_this_batch = 0
 
         if self.debug:
             print(f"\nStarting batch simulation with size {batch_size}")
             print("Root node children:", len(root.children))
             print("Root node visits:", root.visit_count)
+            visited_expanded = 0
+            new_leaves = 0
 
-        # Selection phase - find leaf nodes for each simulation
+        # Selection phase - find nodes to evaluate
         for i in range(batch_size):
             node = root
             path = [node]
             depth = 0
 
-            # Select path until we reach leaf node
-            while node.is_expanded and node.children and not node.board.is_game_over():
-                move, child = node.select_child(self.config.c_puct)
-                if not move:
+            # Keep selecting children until we either:
+            # 1. Find an unexpanded node
+            # 2. Reach a terminal state
+            # 3. Hit max depth
+            while depth < 50:  # Prevent infinite loops
+                if node.board.is_game_over():
+                    if self.debug:
+                        visited_expanded += 1
                     break
+
+                if not node.is_expanded:
+                    # Found a new leaf - add it for expansion
+                    if node not in nodes_to_expand:
+                        nodes_to_expand.append(node)
+                        board_states.append(node.board.state)
+                        paths.append(path)
+                        if self.debug:
+                            new_leaves += 1
+                    break
+
+                # Node is expanded - select child based on UCB
+                move, child = node.select_child(self.config.c_puct)
+                if not move or not child:
+                    break
+
                 node = child
                 path.append(node)
                 depth += 1
 
-            # Update max depth tracking
+            # Update statistics
             max_depth_this_batch = max(max_depth_this_batch, depth)
             self.max_path_length = max(self.max_path_length, depth)
-
-            # Found a leaf node
-            if not node.is_expanded and not node.board.is_game_over():
-                if node not in nodes_to_expand:  # Prevent duplicates
-                    nodes_to_expand.append(node)
-                    board_states.append(node.board.state)
-                    paths.append(path)
             if self.debug:
                 self.path_lengths.append(depth)
             paths_buffer[i] = path
 
         if self.debug:
-            print(f"Found {len(nodes_to_expand)} unique leaf nodes to expand")
+            print(f"Batch simulation results:")
+            print(f"New leaf nodes found: {len(nodes_to_expand)}")
+            print(f"Visited expanded nodes: {visited_expanded}")
             print(f"Max depth this batch: {max_depth_this_batch}")
-            print(f"Overall max depth: {self.max_path_length}")
+            print(
+                f"Average depth: {sum(self.path_lengths[-batch_size:])/batch_size:.2f}"
+            )
 
         # Expansion and evaluation phase
         if nodes_to_expand:
-            # Batch evaluate all leaf nodes
+            # Batch evaluate new leaf nodes
             board_batch = mx.array(np.stack(board_states), dtype=mx.float32)
             policies, values = self.model(board_batch)
 
-            # Expand all nodes with their evaluations
+            # Expand new nodes
             for node, policy, value, path in zip(
                 nodes_to_expand, policies, values, paths
             ):
                 self._expand_node(node, policy, value.item())
-                # Backup the value through the path
                 self.backup(path, value.item())
 
-        # Backup terminal nodes
+        # Always backup values for all paths
         for path in paths_buffer[:batch_size]:
             if not path:
                 continue
             leaf_node = path[-1]
+
             if leaf_node.board.is_game_over():
+                # Terminal state - use game result
                 value = leaf_node.board.get_game_result()
                 self.backup(path, value)
+            elif leaf_node.is_expanded:
+                # Expanded node - use current value estimate
+                self.backup(path, leaf_node.value())
 
     def should_stop(self, root: Node) -> bool:
         """More conservative early stopping"""

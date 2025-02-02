@@ -163,7 +163,7 @@ class ChessNet(nn.Module):
         self.update(tree_map_with_path(init_fn, self.parameters()))
 
     def __call__(self, x: mx.array) -> Tuple[mx.array, mx.array]:
-        """Forward pass"""
+        """Forward pass with explicit evaluation of intermediate tensors"""
         # Input comes as [batch_size, channels, height, width]
         x = mx.transpose(x, (0, 2, 3, 1))  # to [batch_size, height, width, channels]
 
@@ -171,27 +171,34 @@ class ChessNet(nn.Module):
         x = self.conv_input(x)  # Now expects 19 input channels
         x = self.bn_input(x)
         x = self.relu(x)
+        mx.eval(x)  # Evaluate after input block
 
         # Residual tower
         x = self.residual_tower(x)
+        mx.eval(x)  # Evaluate after residual tower
 
         # Policy head
         policy = self.policy_conv(x)
-        policy = self.policy_bn(policy)  # Always use running stats
+        policy = self.policy_bn(policy)
         policy = self.relu(policy)
         policy = mx.reshape(policy, (-1, 32 * 8 * 8))
         policy = self.policy_fc(policy)
         policy = mx.softmax(policy, axis=-1)
+        mx.eval(policy)  # Evaluate policy output
 
         # Value head
         value = self.value_conv(x)
-        value = self.value_bn(value)  # Always use running stats
+        value = self.value_bn(value)
         value = self.relu(value)
         value = mx.reshape(value, (-1, 32 * 8 * 8))
         value = self.value_fc1(value)
         value = self.relu(value)
         value = self.value_fc2(value)
         value = mx.tanh(value)
+        mx.eval(value)  # Evaluate value output
+
+        # Clean up intermediate tensor x
+        del x
 
         return policy, value
 

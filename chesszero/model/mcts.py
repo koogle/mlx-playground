@@ -166,17 +166,32 @@ class MCTS:
         return self._move_encoding_table[(from_pos, to_pos)]
 
     def _evaluate_position(self, board_state: np.ndarray):
-        """Cache model evaluations"""
+        """Cache model evaluations with proper cleanup"""
         state_hash = hash(board_state.tobytes())
         if state_hash in self._value_cache:
             return self._policy_cache[state_hash], self._value_cache[state_hash]
 
+        # Convert to MLX array
         board_state = mx.array(board_state, dtype=mx.float32)[None, ...]
+
+        # Get model predictions
         policies, values = self.model(board_state)
 
-        self._policy_cache[state_hash] = policies[0]
-        self._value_cache[state_hash] = values[0].item()
-        return policies[0], values[0].item()
+        # Evaluate and convert to numpy/python types for caching
+        mx.eval(policies, values)
+        policy = policies[0]
+        value = values[0].item()
+
+        # Cache the results
+        self._policy_cache[state_hash] = policy
+        self._value_cache[state_hash] = value
+
+        # Clean up intermediate tensors
+        del board_state
+        del policies
+        del values
+
+        return policy, value
 
     def _expand_node(self, node: Node, policy, value):
         """Expand node with proper cleanup of temporary boards"""
@@ -415,7 +430,7 @@ class MCTS:
         boards_buffer: np.ndarray,
         paths_buffer: List[List[Node]],
     ):
-        """Run batch of parallel MCTS simulations with balanced exploration/exploitation"""
+        """Run batch of parallel MCTS simulations with memory cleanup"""
         start_time = time.time()
         MAX_BATCH_TIME = 1.0  # Maximum seconds per batch
 
@@ -491,12 +506,20 @@ class MCTS:
             board_batch = mx.array(np.stack(board_states), dtype=mx.float32)
             policies, values = self.model(board_batch)
 
+            # Evaluate tensors
+            mx.eval(policies, values)
+
             # Expand new nodes
             for node, policy, value, path in zip(
                 nodes_to_expand, policies, values, paths
             ):
                 self._expand_node(node, policy, value.item())
                 self.backup(path, value.item())
+
+            # Clean up tensors
+            del board_batch
+            del policies
+            del values
 
         # Always backup values for all paths
         for path in paths_buffer[:batch_size]:

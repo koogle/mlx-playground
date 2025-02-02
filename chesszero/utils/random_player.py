@@ -1,12 +1,12 @@
 import random
-from chess_engine.board import Board, Color
+from chess_engine.bitboard import BitBoard
 from chess_engine.game import ChessGame
 
 
 class RandomPlayer:
     """A player that makes random legal moves using the chess engine's API"""
 
-    def select_move(self, board: Board):
+    def select_move(self, board: BitBoard):
         """
         Select a random legal move using the game's move validation
 

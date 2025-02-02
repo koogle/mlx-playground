@@ -1,8 +1,7 @@
-from typing import Tuple, List, Optional, Set
+from typing import Tuple, List, Optional
+from chess_engine.bitboard import BitBoard
 
-# from chess_engine.bitboard import BitBoard
-
-from bitboard import BitBoard
+# from bitboard import BitBoard
 
 
 class ChessGame:

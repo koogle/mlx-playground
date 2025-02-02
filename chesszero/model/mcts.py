@@ -204,20 +204,23 @@ class MCTS:
 
     def get_move(self, board: BitBoard):
         """Reuse calculations for transpositions"""
-        # Clean caches periodically
-        if len(self.valid_moves_cache) > self.cache_max_size:
-            self._prune_caches()
+        # Don't switch to eval mode during training
+        if not self.training:
+            self.model.eval()
 
-        key = self._get_transposition_key(board)
-        if key in self.transposition_table:
-            cached_node = self.transposition_table[key]
-            if cached_node.visit_count > self.config.n_simulations // 2:
-                return max(
-                    cached_node.children.items(), key=lambda x: x[1].visit_count
-                )[0]
-
-        self.model.eval()
         try:
+            # Clean caches periodically
+            if len(self.valid_moves_cache) > self.cache_max_size:
+                self._prune_caches()
+
+            key = self._get_transposition_key(board)
+            if key in self.transposition_table:
+                cached_node = self.transposition_table[key]
+                if cached_node.visit_count > self.config.n_simulations // 2:
+                    return max(
+                        cached_node.children.items(), key=lambda x: x[1].visit_count
+                    )[0]
+
             # Create root and do initial evaluation
             self.root_node = Node(board)  # Store root node as instance variable
             board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
@@ -260,7 +263,9 @@ class MCTS:
             ]
 
         finally:
-            self.model.train()
+            # Restore training mode if we were training
+            if self.training:
+                self.model.train()
 
     def backup(self, search_path: List[Node], value: float):
         """Fully vectorized backup"""

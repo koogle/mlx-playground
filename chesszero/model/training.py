@@ -83,7 +83,8 @@ class Trainer:
 
             self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
-            # Set MCTS to training mode for self-play
+            # Set model and MCTS to training mode
+            self.model.train()  # Explicitly set to train mode
             self.mcts.training = True
             self.mcts.debug = self.config.debug
 
@@ -163,26 +164,45 @@ class Trainer:
         """Train on a single batch of data with adjusted loss calculation"""
         states, policies, values = batch
 
+        # Debug output for input tensors
+        self.logger.debug(f"States shape: {states.shape}, dtype: {states.dtype}")
+        self.logger.debug(f"Policies shape: {policies.shape}, dtype: {policies.dtype}")
+        self.logger.debug(f"Values shape: {values.shape}, dtype: {values.dtype}")
+        self.logger.debug(f"Sample values: {values[:5]}")  # Show first 5 values
+        self.logger.debug(
+            f"Sample policy sums: {[mx.sum(p).item() for p in policies[:5]]}"
+        )  # Should be close to 1
+
+        # Ensure model is in training mode
+        self.model.train()
+
         @mx.compile
         def loss_fn(model_params, states, policies, values):
             self.model.update(model_params)
             pred_policies, pred_values = self.model(states)
 
-            # Policy loss with minimal label smoothing
-            epsilon = 0.03  # Reduced from 0.1 to allow more confidence
-            smooth_policies = (1 - epsilon) * policies + epsilon / policies.shape[1]
-            p_loss = -mx.mean(
-                mx.sum(smooth_policies * mx.log(pred_policies + 1e-8), axis=1)
+            # Debug predictions
+            self.logger.debug(f"Pred values: {pred_values[:5]}")
+            self.logger.debug(
+                f"Pred policy sums: {[mx.sum(p).item() for p in pred_policies[:5]]}"
             )
 
-            # Value loss with L2 regularization
+            # Policy loss calculation
+            p_loss = -mx.mean(mx.sum(policies * mx.log(pred_policies + 1e-8), axis=1))
+
+            # Value loss calculation
             v_loss = mx.mean(mx.square(values - pred_values))
 
-            # Reduced L2 regularization since we have other regularization
-            l2_lambda = 5e-5  # Reduced from 1e-4
+            # L2 regularization
+            l2_lambda = 5e-5
             l2_reg = l2_lambda * sum(
                 mx.sum(mx.square(p)) for p in model_params.values()
             )
+
+            # Debug loss components
+            self.logger.debug(f"Policy loss: {p_loss.item()}")
+            self.logger.debug(f"Value loss: {v_loss.item()}")
+            self.logger.debug(f"L2 reg: {l2_reg.item()}")
 
             total_loss = p_loss + v_loss + l2_reg
             return total_loss, (p_loss, v_loss)
@@ -192,9 +212,18 @@ class Trainer:
             self.model.parameters(), states, policies, values
         )
 
+        # Debug gradients
+        grad_norms = {name: mx.sum(mx.square(g)).item() for name, g in grads.items()}
+        self.logger.debug(f"Gradient norms: {grad_norms}")
+
         # Update model parameters
         self.optimizer.update(self.model, grads)
         mx.eval(self.model.parameters(), self.optimizer.state)
+
+        # Final loss values
+        self.logger.debug(
+            f"Final losses - Total: {loss.item()}, Policy: {p_loss.item()}, Value: {v_loss.item()}"
+        )
 
         return loss.item(), p_loss.item(), v_loss.item()
 

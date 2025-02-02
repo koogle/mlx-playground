@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
+from functools import lru_cache
 
 
 @dataclass
@@ -59,6 +60,9 @@ class BitBoard:
             0: (0, 4),  # White king starting position
             1: (7, 4),  # Black king starting position
         }
+
+        self._pin_cache = {}  # Cache for pin calculations
+        self._attack_cache = {}  # Cache for attack calculations
 
         self.initialize_board()
 
@@ -247,6 +251,13 @@ class BitBoard:
         self._in_check_cache.clear()
         self._valid_moves_count = None
 
+        # Clear caches after successful move
+        self._pin_cache.clear()
+        self._attack_cache.clear()
+        self._moves_cache.clear()
+        self._game_over_cache.clear()
+        self._in_check_cache.clear()
+
         return True
 
     def get_move_count(self) -> int:
@@ -268,8 +279,9 @@ class BitBoard:
         new_board._in_check_cache = {}
         return new_board
 
+    @lru_cache(maxsize=1024)
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
-        """Get all valid moves considering checks and pins"""
+        """Cache valid moves for positions"""
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
 
@@ -452,8 +464,9 @@ class BitBoard:
 
         return pieces
 
+    @lru_cache(maxsize=2048)
     def is_square_attacked(self, pos: Tuple[int, int], by_color: int) -> bool:
-        """Check if a square is attacked by any piece of the given color"""
+        """Cache attack calculations"""
         row, col = pos
 
         # Check pawn attacks
@@ -853,53 +866,31 @@ class BitBoard:
         return in_check
 
     def _is_square_attacked_vectorized(
-        self, board: np.ndarray, square: Tuple[int, int], attacker_color: int
+        self, pos: Tuple[int, int], by_color: int
     ) -> bool:
-        """Vectorized square attack check"""
-        row, col = square
+        """Vectorized attack detection using numpy operations"""
+        row, col = pos
 
-        # Check pawn attacks
-        pawn_channel = 0 if attacker_color == 1 else 6
-        if np.any(self.pawn_attacks[row, col] & (board[pawn_channel] > 0)):
-            return True
+        # Create attack masks for each piece type
+        pawn_mask = self._get_pawn_attack_mask(row, col, by_color)
+        knight_mask = self._get_knight_attack_mask(row, col)
+        bishop_mask = self._get_bishop_attack_mask(row, col)
+        rook_mask = self._get_rook_attack_mask(row, col)
+        queen_mask = bishop_mask | rook_mask
+        king_mask = self._get_king_attack_mask(row, col)
 
-        # Check knight attacks
-        knight_channel = 1 if attacker_color == 0 else 7
-        if np.any(self.knight_attacks[row, col] & (board[knight_channel] > 0)):
-            return True
+        # Get piece positions for attacking color
+        piece_positions = self.state[6 * by_color : 6 * (by_color + 1)]
 
-        # Check sliding pieces (bishop, rook, queen)
-        # Bishop/Queen diagonals
-        bishop_channel = 2 if attacker_color == 0 else 8
-        queen_channel = 4 if attacker_color == 0 else 10
-        for dr, dc in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-            r, c = row + dr, col + dc
-            while 0 <= r < 8 and 0 <= c < 8:
-                if board[bishop_channel, r, c] > 0 or board[queen_channel, r, c] > 0:
-                    return True
-                if np.any(board[:12, r, c] > 0):  # Blocked by any piece
-                    break
-                r += dr
-                c += dc
-
-        # Check rook/Queen straight lines
-        rook_channel = 3 if attacker_color == 0 else 9
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            r, c = row + dr, col + dc
-            while 0 <= r < 8 and 0 <= c < 8:
-                if board[rook_channel, r, c] > 0 or board[queen_channel, r, c] > 0:
-                    return True
-                if np.any(board[:12, r, c] > 0):  # Blocked by any piece
-                    break
-                r += dr
-                c += dc
-
-        # Check king attacks
-        king_channel = 5 if attacker_color == 0 else 11
-        if np.any(self.king_attacks[row, col] & (board[king_channel] > 0)):
-            return True
-
-        return False
+        # Check attacks using vectorized operations
+        return (
+            np.any(pawn_mask & piece_positions[0])
+            or np.any(knight_mask & piece_positions[1])
+            or np.any(bishop_mask & piece_positions[2])
+            or np.any(rook_mask & piece_positions[3])
+            or np.any(queen_mask & piece_positions[4])
+            or np.any(king_mask & piece_positions[5])
+        )
 
     def get_game_result(self) -> float:
         """Get the game result from current player's perspective
@@ -985,6 +976,18 @@ class BitBoard:
         return valid_moves
 
     def _get_pin_info(self, pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        """Cache pin information"""
+        board_hash = self.get_hash()
+        cache_key = (board_hash, pos)
+
+        if cache_key in self._pin_cache:
+            return self._pin_cache[cache_key]
+
+        result = self._calculate_pin_info(pos)
+        self._pin_cache[cache_key] = result
+        return result
+
+    def _calculate_pin_info(self, pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
         """Get pin direction if piece is pinned, returns (dr, dc) or None"""
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)

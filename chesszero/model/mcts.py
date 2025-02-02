@@ -77,6 +77,7 @@ class MCTS:
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
         self.root_node = None  # Initialize root_node
+        self.transposition_table = {}  # Store equivalent positions
 
         # Pre-compute move encoding table and buffers
         self._move_encoding_table = self._init_move_encoding_table()
@@ -90,6 +91,10 @@ class MCTS:
         # Pre-allocate buffers
         self.boards_buffer = np.zeros((128, 19, 8, 8), dtype=np.float32)
         self.moves_buffer = np.zeros((218, 2), dtype=np.int8)
+
+        self._value_cache = {}  # Cache for evaluated positions
+        self._policy_cache = {}  # Cache for policy evaluations
+        self._tree_cache = {}  # Cache for subtrees
 
     def _init_move_encoding_table(
         self,
@@ -124,8 +129,29 @@ class MCTS:
         """Fast move encoding using lookup table"""
         return self._move_encoding_table[(from_pos, to_pos)]
 
+    def _evaluate_position(self, board_state: np.ndarray):
+        """Cache model evaluations"""
+        state_hash = hash(board_state.tobytes())
+        if state_hash in self._value_cache:
+            return self._policy_cache[state_hash], self._value_cache[state_hash]
+
+        board_state = mx.array(board_state, dtype=mx.float32)[None, ...]
+        policies, values = self.model(board_state)
+
+        self._policy_cache[state_hash] = policies[0]
+        self._value_cache[state_hash] = values[0].item()
+        return policies[0], values[0].item()
+
     def _expand_node(self, node: Node, policy, value):
-        """Optimized node expansion"""
+        """Cache common subtrees"""
+        board_hash = node.board.get_hash()
+        if board_hash in self._tree_cache:
+            node.children = self._tree_cache[board_hash]
+            node.is_expanded = True
+            node.value_sum = value
+            node.visit_count = 1
+            return
+
         board = node.board
         policy_np = np.array(policy)
 
@@ -167,11 +193,23 @@ class MCTS:
         node.value_sum = float(value)
         node.visit_count = 1
 
+        # Cache the subtree
+        if len(node.children) > 0:
+            self._tree_cache[board_hash] = node.children
+
+    def _get_transposition_key(self, board: BitBoard) -> str:
+        """Get unique key for equivalent positions"""
+        return board.get_hash()
+
     def get_move(self, board: BitBoard):
-        """Keep MLX only for model inference"""
-        if self.debug:
-            print("\nCurrent position:")
-            print(board)
+        """Reuse calculations for transpositions"""
+        key = self._get_transposition_key(board)
+        if key in self.transposition_table:
+            cached_node = self.transposition_table[key]
+            if cached_node.visit_count > self.config.n_simulations // 2:
+                return max(
+                    cached_node.children.items(), key=lambda x: x[1].visit_count
+                )[0]
 
         self.model.eval()
         try:
@@ -283,27 +321,35 @@ class MCTS:
         boards_buffer: np.ndarray,
         paths_buffer: List[List[Node]],
     ):
-        """Optimized batch simulation"""
-        # Pre-allocate arrays for better performance
+        """Optimized batch simulation with dynamic batch sizing"""
+        # Adjust batch size based on tree depth
+        avg_path_length = self._estimate_path_length(root)
+        adjusted_batch_size = min(
+            batch_size, max(1, self.max_batch_size // avg_path_length)
+        )
+
         nodes_to_expand = []
-        board_states = []  # Store states directly instead of copying boards
+        board_states = []
 
-        # Selection phase - batch process
-        for i in range(batch_size):
+        # Selection phase with early cutoff
+        for i in range(adjusted_batch_size):
             node = root
-            path = []
-            path.append(node)
+            path = [node]
+            depth = 0
 
-            # Tree traversal
             while node.is_expanded and node.children:
                 move, child = node.select_child(self.config.c_puct)
                 if not move:
                     break
                 node = child
                 path.append(node)
+                depth += 1
+
+                # Early cutoff for very deep paths
+                if depth > 50:  # Avoid extremely deep searches
+                    break
 
             if not node.board.is_game_over():
-                # Store state directly instead of copying
                 board_states.append(node.board.state)
                 nodes_to_expand.append(node)
             paths_buffer[i] = path
@@ -319,7 +365,7 @@ class MCTS:
                 self._expand_node(node, policy, value.item())
 
         # Backup phase - use native Python types for speed
-        for path in paths_buffer[:batch_size]:
+        for path in paths_buffer[:adjusted_batch_size]:
             if not path:  # Skip empty paths
                 continue
             value = (
@@ -330,36 +376,81 @@ class MCTS:
             self.backup(path, value)
 
     def should_stop(self, root: Node) -> bool:
-        """
-        Check if we can stop further simulations early.
-        If the best child visit count is significantly ahead of the second best,
-        we can return True to stop simulations.
-        """
+        """Determine if we can stop simulations early based on multiple criteria"""
         if not root.children:
             return False
 
-        # Gather visit counts from all children of the root
-        visit_counts = [child.visit_count for child in root.children.values()]
+        # Get visit counts and values
+        moves_data = [
+            (move, child.visit_count, child.value())
+            for move, child in root.children.items()
+        ]
 
-        if len(visit_counts) <= 1:
-            return False  # not enough moves to compare
+        if len(moves_data) <= 1:
+            return False
 
-        sorted_counts = sorted(visit_counts, reverse=True)
-        best = sorted_counts[0]
-        second_best = sorted_counts[1]
+        # Sort by visit count
+        moves_data.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        best_move, best_visits, best_value = moves_data[0]
+        second_best = moves_data[1]
 
-        # Define minimal visits required and ratio factor for early stopping
-        minimal_visits = 20
-        threshold_ratio = 2.0  # adjust as needed; e.g., 2.0 means best must be at least twice the second best
+        # Early stopping criteria:
 
-        if best >= minimal_visits and best > second_best * threshold_ratio:
-            if self.debug:
-                print(
-                    f"Early stop triggered: best visit count = {best}, second best = {second_best}"
-                )
+        # 1. Minimum visit threshold
+        if best_visits < 20:
+            return False
+
+        # 2. Clear statistical dominance
+        visit_ratio = best_visits / (second_best[1] + 1e-8)
+        if visit_ratio > 3.0:  # Best move has 3x more visits
             return True
 
+        # 3. Value convergence
+        if best_visits > 50:
+            value_diff = abs(best_value - second_best[2])
+            if value_diff > 0.8:  # Clear value advantage
+                return True
+
+        # 4. Move quality threshold
+        total_visits = sum(x[1] for x in moves_data)
+        visit_percentage = best_visits / total_visits
+        if visit_percentage > 0.8 and best_visits > 30:  # One move has 80% of visits
+            return True
+
+        # 5. Time efficiency for obvious moves
+        if len(moves_data) > 2:
+            rest_visits = sum(x[1] for x in moves_data[2:])
+            if best_visits > rest_visits * 4:  # Best move dominates all others combined
+                return True
+
         return False
+
+    def _estimate_path_length(self, node: Node, sample_size: int = 5) -> int:
+        """Estimate average path length in the tree"""
+        if not node.children:
+            return 1
+
+        total_length = 0
+        for _ in range(sample_size):
+            current = node
+            length = 1
+            while current.children and length < 50:
+                move, child = current.select_child(self.config.c_puct)
+                if not move or not child:
+                    break
+                current = child
+                length += 1
+            total_length += length
+
+        return max(1, total_length // sample_size)
+
+    def _prune_caches(self, max_size=10000):
+        """Prevent unbounded cache growth"""
+        if len(self._value_cache) > max_size:
+            # Keep only most recent entries
+            self._value_cache = dict(list(self._value_cache.items())[-max_size:])
+            self._policy_cache = dict(list(self._policy_cache.items())[-max_size:])
+            self._tree_cache = dict(list(self._tree_cache.items())[-max_size:])
 
 
 class BitBoard:

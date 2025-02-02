@@ -1,10 +1,8 @@
-import math
 import numpy as np
 from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
-import random
 
 
 class Node:
@@ -25,50 +23,60 @@ class Node:
         return self.value_sum / self.visit_count  # already a Python float
 
     def select_child(self, c_puct):
-        """Optimized child selection"""
+        """Optimized child selection with exploration"""
         if not self.children:
             return None, None
 
-        # Use list comprehension instead of numpy for small arrays
-        visit_counts = [child.visit_count for child in self.children.values()]
-        total_visits = sum(visit_counts)
-        sqrt_total = math.sqrt(total_visits)
+        moves = list(self.children.keys())
+        children = list(self.children.values())
 
-        # Calculate UCB scores directly
-        best_score = float("-inf")
-        best_move = None
-        best_child = None
+        # If no visits yet, sample based on prior probability
+        if all(child.visit_count == 0 for child in children):
+            priors = np.array([child.prior for child in children])
 
-        for move, child in self.children.items():
-            if child.visit_count == 0:
-                q_value = 0
-            else:
-                q_value = (
-                    -child.value()
-                )  # Negative because we want to maximize opponent's loss
+            # Add less Dirichlet noise at root
+            if self.parent is None:
+                alpha = 0.15  # Reduced from 0.3
+                noise = np.random.dirichlet([alpha] * len(priors))
+                priors = (
+                    0.9 * priors + 0.1 * noise
+                )  # More weight on priors (was 0.75/0.25)
 
-            # UCB formula
-            exploration = c_puct * child.prior * sqrt_total / (1 + child.visit_count)
-            ucb_score = q_value + exploration
+            # Sample from prior distribution with higher temperature for first move
+            priors = priors / np.sum(priors)
+            selected_idx = np.argmax(priors)  # More greedy selection
+            return moves[selected_idx], children[selected_idx]
 
-            if child.parent is None:  # Root node
-                ucb_score = (
-                    0.75 * ucb_score + 0.25 * random.random()
-                )  # Simplified noise
+        # Calculate UCB scores with lower temperature
+        temperature = 0.5  # Reduced from 1.0 for less exploration
+        visit_counts = np.array([child.visit_count for child in children])
+        total_visits = np.sum(visit_counts)
+        sqrt_total = np.sqrt(total_visits)
 
-            if ucb_score > best_score:
-                best_score = ucb_score
-                best_move = move
-                best_child = child
+        q_values = np.array(
+            [-child.value() if child.visit_count > 0 else 0.0 for child in children]
+        )
 
-        return best_move, best_child
+        priors = np.array([child.prior for child in children])
+
+        # UCB formula with reduced noise
+        exploration = c_puct * priors * sqrt_total / (1 + visit_counts)
+        ucb_scores = q_values + temperature * exploration
+
+        # Reduced random noise
+        ucb_scores += np.random.normal(
+            0, 0.001, size=len(ucb_scores)
+        )  # Reduced from 0.01
+
+        selected_idx = np.argmax(ucb_scores)
+        return moves[selected_idx], children[selected_idx]
 
 
 class MCTS:
     def __init__(self, model, config: ModelConfig):
         self.model = model
         self.config = config
-        self.debug = False
+        self.debug = config.debug
         self.cache_max_size = 50000  # Adjust this based on memory constraints
         self.valid_moves_cache = {}
         self.position_cache = {}
@@ -96,6 +104,12 @@ class MCTS:
         self._policy_cache = {}  # Cache for policy evaluations
         self._tree_cache = {}  # Cache for subtrees
 
+        # Add debugging stats
+        self.max_path_length = 0
+        self.total_paths = 0
+        self.path_lengths = []  # Track all path lengths
+        self.current_game_moves = 0  # Track moves in current game
+
     def clear_all_caches(self):
         """Clear all caches between games"""
         self.valid_moves_cache.clear()
@@ -109,6 +123,15 @@ class MCTS:
         # Reset counters
         self.total_nodes_visited = 0
         self.moves_made = 0
+
+        # Reset path statistics for new game
+        self.max_path_length = 0
+        self.path_lengths = []
+        self.total_paths = 0
+        self.current_game_moves = 0
+
+        if self.debug:
+            print("\nClearing all caches and resetting stats")
 
     def _init_move_encoding_table(
         self,
@@ -158,6 +181,9 @@ class MCTS:
 
     def _expand_node(self, node: Node, policy, value):
         """Cache common subtrees and prevent cycles"""
+        if self.debug:
+            initial_children = len(node.children) if node.children else 0
+
         board_hash = node.board.get_hash()
 
         # Check if this position has occurred in the current search path
@@ -227,12 +253,41 @@ class MCTS:
         if len(node.children) > 0:
             self._tree_cache[board_hash] = node.children
 
+        if self.debug and node.children:
+            print(f"\nNode expansion stats:")
+            print(f"Initial children: {initial_children}")
+            print(f"Final children: {len(node.children)}")
+            print(f"Policy shape: {policy.shape}")
+            if len(node.children) > 0:
+                print(
+                    f"Average prior: {sum(c.prior for c in node.children.values())/len(node.children):.3f}"
+                )
+
     def _get_transposition_key(self, board: BitBoard) -> str:
         """Get unique key for equivalent positions"""
         return board.get_hash()
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
         """Get best move using MCTS with optional temperature sampling"""
+        self.current_game_moves += 1
+
+        if (
+            self.current_game_moves % 10 == 0 and self.debug
+        ):  # Print stats every 10 moves
+            avg_path = (
+                sum(self.path_lengths) / len(self.path_lengths)
+                if self.path_lengths
+                else 0
+            )
+            print(f"\nMCTS Stats at move {self.current_game_moves}:")
+            print(f"Max path length: {self.max_path_length}")
+            print(f"Average path length: {avg_path:.2f}")
+            print(f"Total paths explored: {self.total_paths}")
+            print(
+                f"Cache sizes - Valid moves: {len(self.valid_moves_cache)}, Position: {len(self.position_cache)}"
+            )
+            print(f"Tree cache size: {len(self._tree_cache)}")
+
         # Don't switch to eval mode during training
         if not self.training:
             self.model.eval()
@@ -394,23 +449,25 @@ class MCTS:
         boards_buffer: np.ndarray,
         paths_buffer: List[List[Node]],
     ):
-        """Optimized batch simulation with dynamic batch sizing"""
-        # Adjust batch size based on tree depth
-        avg_path_length = self._estimate_path_length(root)
-        adjusted_batch_size = min(
-            batch_size, max(1, self.max_batch_size // avg_path_length)
-        )
-
+        """Run batch of parallel MCTS simulations"""
         nodes_to_expand = []
         board_states = []
+        paths = []
+        max_depth_this_batch = 0  # Track max depth in this batch
 
-        # Selection phase with early cutoff
-        for i in range(adjusted_batch_size):
+        if self.debug:
+            print(f"\nStarting batch simulation with size {batch_size}")
+            print("Root node children:", len(root.children))
+            print("Root node visits:", root.visit_count)
+
+        # Selection phase - find leaf nodes for each simulation
+        for i in range(batch_size):
             node = root
             path = [node]
             depth = 0
 
-            while node.is_expanded and node.children:
+            # Select path until we reach leaf node
+            while node.is_expanded and node.children and not node.board.is_game_over():
                 move, child = node.select_child(self.config.c_puct)
                 if not move:
                     break
@@ -418,42 +475,53 @@ class MCTS:
                 path.append(node)
                 depth += 1
 
-                # Early cutoff for very deep paths
-                if depth > 50:  # Avoid extremely deep searches
-                    break
+            # Update max depth tracking
+            max_depth_this_batch = max(max_depth_this_batch, depth)
+            self.max_path_length = max(self.max_path_length, depth)
 
-            if not node.board.is_game_over():
-                board_states.append(node.board.state)
-                nodes_to_expand.append(node)
+            # Found a leaf node
+            if not node.is_expanded and not node.board.is_game_over():
+                if node not in nodes_to_expand:  # Prevent duplicates
+                    nodes_to_expand.append(node)
+                    board_states.append(node.board.state)
+                    paths.append(path)
+            if self.debug:
+                self.path_lengths.append(depth)
             paths_buffer[i] = path
 
-        # Batch evaluate positions if any
+        if self.debug:
+            print(f"Found {len(nodes_to_expand)} unique leaf nodes to expand")
+            print(f"Max depth this batch: {max_depth_this_batch}")
+            print(f"Overall max depth: {self.max_path_length}")
+
+        # Expansion and evaluation phase
         if nodes_to_expand:
-            # Convert boards for model inference - do it once
+            # Batch evaluate all leaf nodes
             board_batch = mx.array(np.stack(board_states), dtype=mx.float32)
             policies, values = self.model(board_batch)
 
-            # Expand nodes in batch
-            for node, policy, value in zip(nodes_to_expand, policies, values):
+            # Expand all nodes with their evaluations
+            for node, policy, value, path in zip(
+                nodes_to_expand, policies, values, paths
+            ):
                 self._expand_node(node, policy, value.item())
+                # Backup the value through the path
+                self.backup(path, value.item())
 
-        # Backup phase - use native Python types for speed
-        for path in paths_buffer[:adjusted_batch_size]:
-            if not path:  # Skip empty paths
+        # Backup terminal nodes
+        for path in paths_buffer[:batch_size]:
+            if not path:
                 continue
-            value = (
-                path[-1].board.get_game_result()
-                if path[-1].board.is_game_over()
-                else path[-1].value()
-            )
-            self.backup(path, value)
+            leaf_node = path[-1]
+            if leaf_node.board.is_game_over():
+                value = leaf_node.board.get_game_result()
+                self.backup(path, value)
 
     def should_stop(self, root: Node) -> bool:
-        """Determine if we can stop simulations early based on multiple criteria"""
+        """More conservative early stopping"""
         if not root.children:
             return False
 
-        # Get visit counts and values
         moves_data = [
             (move, child.visit_count, child.value())
             for move, child in root.children.items()
@@ -462,39 +530,36 @@ class MCTS:
         if len(moves_data) <= 1:
             return False
 
-        # Sort by visit count
-        moves_data.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        moves_data.sort(key=lambda x: x[1], reverse=True)
         best_move, best_visits, best_value = moves_data[0]
         second_best = moves_data[1]
 
-        # Early stopping criteria:
+        if self.debug:
+            print("\nEarly stopping check:")
+            print(f"Total root visits: {root.visit_count}")
+            print(
+                f"Best move {best_move}: visits={best_visits}, value={best_value:.3f}"
+            )
+            print(
+                f"Second best {second_best[0]}: visits={second_best[1]}, value={second_best[2]:.3f}"
+            )
 
-        # 1. Minimum visit threshold
-        if best_visits < 20:
+        # Need minimum visits before considering stopping
+        if root.visit_count < 100 or best_visits < 50:
+            if self.debug:
+                print("Not enough visits - continue searching")
             return False
 
-        # 2. Clear statistical dominance
+        # Only stop if we have clear dominance in both visits and value
         visit_ratio = best_visits / (second_best[1] + 1e-8)
-        if visit_ratio > 3.0:  # Best move has 3x more visits
+        value_diff = abs(best_value - second_best[2])
+
+        if visit_ratio > 5.0 and value_diff > 0.3:
+            if self.debug:
+                print(
+                    f"Clear dominance - visits ratio: {visit_ratio:.1f}, value diff: {value_diff:.2f}"
+                )
             return True
-
-        # 3. Value convergence
-        if best_visits > 50:
-            value_diff = abs(best_value - second_best[2])
-            if value_diff > 0.8:  # Clear value advantage
-                return True
-
-        # 4. Move quality threshold
-        total_visits = sum(x[1] for x in moves_data)
-        visit_percentage = best_visits / total_visits
-        if visit_percentage > 0.8 and best_visits > 30:  # One move has 80% of visits
-            return True
-
-        # 5. Time efficiency for obvious moves
-        if len(moves_data) > 2:
-            rest_visits = sum(x[1] for x in moves_data[2:])
-            if best_visits > rest_visits * 4:  # Best move dominates all others combined
-                return True
 
         return False
 

@@ -1015,7 +1015,7 @@ class BitBoard:
     def _filter_pinned_moves(
         self,
         pos: Tuple[int, int],
-        moves: Set[Tuple[int, int]],
+        moves: Set[Tuple[int, int] | Tuple[int, int, int]],
         direction: Tuple[int, int],
     ) -> Set[Tuple[int, int]]:
         """Filter moves for a pinned piece.
@@ -1027,7 +1027,10 @@ class BitBoard:
 
         valid = set()
         for move in moves:
-            mr, mc = move
+            if len(move) == 2:
+                mr, mc = move
+            else:
+                mr, mc, _ = move
 
             # Move must be along the same line as the pin
             if dr != 0:  # Vertical pin

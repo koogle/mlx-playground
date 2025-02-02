@@ -168,12 +168,21 @@ class ChessGame:
         return str(self.board)
 
     def _move_to_algebraic(
-        self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], piece: Tuple[int, int]
+        self,
+        from_pos: Tuple[int, int],
+        to_pos: Tuple[int, int] | Tuple[int, int, int],
+        piece: Tuple[int, int],
     ) -> str:
         """Convert a move to algebraic notation"""
         from_row, from_col = from_pos
-        to_row, to_col = to_pos
         piece_type, color = piece
+
+        # Handle promotion moves
+        promotion_piece = None
+        if isinstance(to_pos, tuple) and len(to_pos) == 3:
+            to_row, to_col, promotion_piece = to_pos
+        else:
+            to_row, to_col = to_pos
 
         # Special case for castling
         if piece_type == 5 and abs(to_col - from_col) == 2:  # 5 is king
@@ -189,11 +198,19 @@ class ChessGame:
         # Get piece symbol (empty for pawns)
         piece_symbol = self._get_piece_symbol(piece_type)
 
-        # For pawn captures, include the file of origin
+        # For pawn moves
         if piece_type == 0:  # Pawn
+            move = ""
             if is_capture:
-                return f"{chr(from_col + 97)}x{to_square}"
-            return to_square
+                move = f"{chr(from_col + 97)}x{to_square}"
+            else:
+                move = to_square
+
+            # Add promotion piece if applicable
+            if promotion_piece is not None:
+                promotion_symbols = {1: "N", 2: "B", 3: "R", 4: "Q"}
+                move += f"={promotion_symbols[promotion_piece]}"
+            return move
 
         # For other pieces
         capture_symbol = "x" if is_capture else ""

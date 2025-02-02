@@ -1,6 +1,6 @@
 import numpy as np
 from chess_engine.game import ChessGame
-from chesszero.chess_engine.bitboard import BitBoard
+from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
 from utils.random_player import RandomPlayer
 from model.mcts import MCTS

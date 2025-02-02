@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Tuple, Set, Optional
+from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
 
 
@@ -104,7 +104,9 @@ class BitBoard:
 
         return pieces
 
-    def get_piece_at(self, row: int, col: int) -> Tuple[int, int]:
+    def get_piece_at(
+        self, row: int, col: int, promotion_piece: int = None
+    ) -> Tuple[int, int]:
         """Returns (color, piece_type) at given position, where:
         color: 0 for white, 1 for black
         piece_type: 0-5 for pawn through king
@@ -126,8 +128,13 @@ class BitBoard:
         """Returns 0 for white, 1 for black"""
         return 0 if self.state[12, 0, 0] else 1
 
-    def make_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> bool:
-        """Make a move on the board. Returns True if successful."""
+    def make_move(
+        self,
+        from_pos: Tuple[int, int],
+        to_pos: Union[Tuple[int, int], Tuple[int, int, int]],
+    ) -> bool:
+        """Make a move on the board. Returns True if successful.
+        For pawn promotion, to_pos should be (row, col, promotion_piece_type)"""
         # First validate current board state
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
@@ -140,12 +147,19 @@ class BitBoard:
             return False
 
         from_row, from_col = from_pos
-        to_row, to_col = to_pos
-
-        # Get piece details first
         color, piece_type = self.get_piece_at(from_row, from_col)
+
         if color == -1 or color != self.get_current_turn():
             return False
+
+        # Handle pawn promotion
+        is_promotion = False
+        promotion_piece = None
+        if isinstance(to_pos, tuple) and len(to_pos) == 3:
+            to_row, to_col, promotion_piece = to_pos
+            is_promotion = True
+        else:
+            to_row, to_col = to_pos
 
         # Check destination square
         target_color, target_piece = self.get_piece_at(to_row, to_col)
@@ -163,7 +177,16 @@ class BitBoard:
         self.state[:12, to_row, to_col] = 0
 
         # Move piece
-        self.state[piece_type if color == 0 else piece_type + 6, to_row, to_col] = 1
+        if is_promotion and piece_type == 0:  # Pawn promotion
+            # Place promoted piece
+            self.state[
+                promotion_piece if color == 0 else promotion_piece + 6, to_row, to_col
+            ] = 1
+        else:
+            # Move piece to target square
+            self.state[piece_type if color == 0 else piece_type + 6, to_row, to_col] = 1
+
+        # Clear source square
         self.state[piece_type if color == 0 else piece_type + 6, from_row, from_col] = 0
 
         # Validate board state after move
@@ -276,6 +299,11 @@ class BitBoard:
             else:
                 moves = self._get_step_moves(row, col, pattern.directions, color)
 
+        # Filter out moves that would capture the enemy king
+        enemy_king_pos = self.king_positions[1 - color]
+        if enemy_king_pos in moves:
+            moves.remove(enemy_king_pos)
+
         # Check if piece is pinned
         pin_direction = self._get_pin_info(pos)
         if pin_direction:
@@ -288,26 +316,35 @@ class BitBoard:
         return moves
 
     def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
-        """Get all valid pawn moves including captures"""
+        """Get all valid pawn moves including captures and promotions"""
         moves = set()
         direction = (
             1 if color == 0 else -1
         )  # White moves up (+1), Black moves down (-1)
         start_row = 1 if color == 0 else 6
+        promotion_row = 7 if color == 0 else 0
 
         # Forward moves
         new_row = row + direction
         if 0 <= new_row < 8:
             target_color = self.get_piece_at(new_row, col)[0]
             if target_color == -1:  # Empty square
-                moves.add((new_row, col))
-                # Double move from start
-                if row == start_row:
-                    two_forward = row + 2 * direction
-                    if 0 <= two_forward < 8:
-                        two_forward_color = self.get_piece_at(two_forward, col)[0]
-                        if two_forward_color == -1:
-                            moves.add((two_forward, col))
+                # Add promotion moves if pawn reaches last rank
+                if new_row == promotion_row:
+                    # Add all possible promotion moves (to Queen, Rook, Bishop, Knight)
+                    for promotion_piece in range(
+                        1, 5
+                    ):  # 1=Knight, 2=Bishop, 3=Rook, 4=Queen
+                        moves.add((new_row, col, promotion_piece))
+                else:
+                    moves.add((new_row, col))
+                    # Double move from start
+                    if row == start_row:
+                        two_forward = row + 2 * direction
+                        if 0 <= two_forward < 8:
+                            two_forward_color = self.get_piece_at(two_forward, col)[0]
+                            if two_forward_color == -1:
+                                moves.add((two_forward, col))
 
         # Diagonal captures
         for col_delta in [-1, 1]:
@@ -317,7 +354,12 @@ class BitBoard:
                 if 0 <= capture_row < 8:
                     target_color, _ = self.get_piece_at(capture_row, capture_col)
                     if target_color == (1 - color):  # Enemy piece
-                        moves.add((capture_row, capture_col))
+                        # Add promotion captures if pawn reaches last rank
+                        if capture_row == promotion_row:
+                            for promotion_piece in range(1, 5):
+                                moves.add((capture_row, capture_col, promotion_piece))
+                        else:
+                            moves.add((capture_row, capture_col))
 
         return moves
 
@@ -326,6 +368,8 @@ class BitBoard:
     ) -> Set[Tuple[int, int]]:
         """Get moves for non-sliding pieces (knight, king)"""
         moves = set()
+        _, piece_type = self.get_piece_at(row, col)
+
         for dr, dc in directions:
             new_row, new_col = row + dr, col + dc
             if 0 <= new_row < 8 and 0 <= new_col < 8:
@@ -333,7 +377,28 @@ class BitBoard:
                 if target_color == -1 or target_color == (
                     1 - color
                 ):  # Empty or enemy square
-                    moves.add((new_row, new_col))
+                    # For king moves, check if target square is under attack
+                    if piece_type == 5:  # King
+                        # Create a copy of the board and simulate the move
+                        test_board = self.copy()
+                        test_board.state[5 if color == 0 else 11, row, col] = (
+                            0  # Remove king from current pos
+                        )
+                        test_board.state[5 if color == 0 else 11, new_row, new_col] = (
+                            1  # Place king at new pos
+                        )
+                        test_board.king_positions[color] = (
+                            new_row,
+                            new_col,
+                        )  # Update king position
+
+                        # Only add move if target square is not under attack
+                        if not test_board.is_square_attacked(
+                            (new_row, new_col), 1 - color
+                        ):
+                            moves.add((new_row, new_col))
+                    else:
+                        moves.add((new_row, new_col))
 
         return moves
 

@@ -94,7 +94,7 @@ class MCTS:
     def _init_move_encoding_table(
         self,
     ) -> Dict[Tuple[Tuple[int, int], Tuple[int, int]], int]:
-        """Pre-compute move index for every possible (from_pos, to_pos) combination"""
+        """Pre-compute move index for every possible (from_pos, to_pos) combination, including pawn promotions"""
         table = {}
         for from_row in range(8):
             for from_col in range(8):
@@ -106,6 +106,18 @@ class MCTS:
                         to_idx = to_row * 8 + to_col
                         move_idx = from_idx * 64 + to_idx
                         table[(from_pos, to_pos)] = move_idx
+
+                        # Add promotion moves
+                        if (from_row == 6 and to_row == 7) or (  # White pawn promoting
+                            from_row == 1 and to_row == 0
+                        ):  # Black pawn promoting
+                            for promotion_piece in range(
+                                1, 5
+                            ):  # Knight, Bishop, Rook, Queen
+                                table[(from_pos, (to_row, to_col, promotion_piece))] = (
+                                    move_idx
+                                )
+
         return table
 
     def encode_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> int:

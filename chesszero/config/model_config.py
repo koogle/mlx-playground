@@ -18,7 +18,7 @@ class ModelConfig:
     policy_output_dim: int = 4672  # All possible moves: 8x8x73
 
     # MCTS
-    n_simulations: int = 1600  # Reduced number of simulations for faster training
+    n_simulations: int = 800  # Reduced number of simulations for faster training
     c_puct: float = 1.0  # Exploration constant
     dirichlet_alpha: float = 0.3  # Dirichlet noise parameter
     dirichlet_epsilon: float = 0.25  # Weight of Dirichlet noise

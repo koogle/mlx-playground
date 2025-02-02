@@ -284,6 +284,7 @@ class MCTS:
             self._expand_node(self.root_node, policies[0], values[0].item())
 
             if not self.root_node.children:
+                print("no children")
                 return None
 
             # Pre-allocate buffers once
@@ -315,10 +316,12 @@ class MCTS:
 
             # Select move based on temperature
             move = self._select_move_with_temperature(self.root_node, temperature)
-            self._cleanup_tree(self.root_node)
+            print("move", move)
             return move
 
         finally:
+            print("finally")
+            self._cleanup_tree(self.root_node)
             # Restore training mode if we were training
             if self.training:
                 self.model.train()

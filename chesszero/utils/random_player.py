@@ -1,6 +1,5 @@
 import random
 from chess_engine.bitboard import BitBoard
-from chess_engine.game import ChessGame
 
 
 class RandomPlayer:
@@ -14,38 +13,23 @@ class RandomPlayer:
             board: Current board state
 
         Returns:
-            str: Move in algebraic notation, or None if no moves available
+            tuple: (from_pos, to_pos) coordinates of the move, or None if no moves available
         """
-        # Create a temporary game to use its move generation
-        game = ChessGame()
-        game.board = board
-        game.current_turn = board.get_current_turn()
+        # Get all pieces of current color
+        current_color = board.get_current_turn()
+        pieces = board.get_all_pieces(current_color)
 
-        # Get all valid moves in algebraic notation
-        valid_moves = game.get_all_valid_moves()
+        # Collect all valid moves using list comprehension for better efficiency
+        valid_moves = [
+            (pos, move) for pos, _ in pieces for move in board.get_valid_moves(pos)
+        ]
 
         if not valid_moves:
             print("\nNo valid moves found!")
             print("Current board state:")
             print(board)
-            print(
-                f"Current turn: {'White' if board.get_current_turn() == 0 else 'Black'}"
-            )
+            print(f"Current turn: {'White' if current_color == 0 else 'Black'}")
             return None
 
-        # Keep trying moves until we find one that parses correctly
-        while valid_moves:
-            # Select random move in algebraic notation
-            move_str = random.choice(valid_moves)
-            from_pos, to_pos = game.parse_move(move_str)
-
-            if from_pos and to_pos:  # If move parsed successfully
-                return (from_pos, to_pos)
-
-            # Remove failed move and try another
-            valid_moves.remove(move_str)
-            print(f"Failed to parse move: {move_str}")
-
-        print("Failed to parse any moves!")
-        print("Available moves were:", valid_moves)
-        return None
+        # Select random move from valid moves
+        return random.choice(valid_moves)

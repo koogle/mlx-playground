@@ -1,9 +1,9 @@
 import numpy as np
 from chess_engine.game import ChessGame
+from chesszero.chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
 from utils.random_player import RandomPlayer
 from model.mcts import MCTS
-from utils.board_utils import encode_board
 from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
@@ -308,3 +308,9 @@ def create_policy_from_visits(root_node, policy_output_dim: int):
 
     # Convert to MLX array at the end
     return mx.array(policy)
+
+
+def encode_board(board: BitBoard) -> mx.array:
+    """Convert BitBoard state to network input format"""
+    # Convert uint8 to float32 when creating MLX array
+    return mx.array(board.state, dtype=mx.float32)

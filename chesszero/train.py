@@ -1,7 +1,6 @@
 import argparse
 from config.model_config import ModelConfig
 from model.training import Trainer
-import time
 import logging
 from pathlib import Path
 from datetime import datetime

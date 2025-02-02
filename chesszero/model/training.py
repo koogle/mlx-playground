@@ -149,35 +149,52 @@ class Trainer:
         self.logger.info(f"Total training time: {total_time/3600:.1f} hours")
 
     def get_game_outcome(self, state: str) -> float:
-        """Convert game state to value"""
+        """Convert game state to value with adjusted rewards
+
+        Returns:
+            float: 1.0 for win, -1.0 for loss, -0.5 for draw/timeout
+        """
         if "Checkmate" in state:
             return 1.0 if "White wins" in state else -1.0
-        return 0.0  # Draw
+        # Draws and timeouts are slightly negative to encourage finding wins
+        return -0.5
 
     def train_on_batch(self, batch):
-        """Train on a single batch of data"""
+        """Train on a single batch of data with adjusted loss calculation"""
         states, policies, values = batch
 
         @mx.compile
-        def loss_fn(params, states, policies, values):
-            self.model.update(params)
+        def loss_fn(model_params, states, policies, values):
+            self.model.update(model_params)
             pred_policies, pred_values = self.model(states)
-            p_loss = -mx.mean(policies * mx.log(pred_policies + 1e-8))
-            v_loss = mx.mean((values - pred_values) ** 2)
-            return p_loss + v_loss, p_loss, v_loss
+
+            # Policy loss with minimal label smoothing
+            epsilon = 0.03  # Reduced from 0.1 to allow more confidence
+            smooth_policies = (1 - epsilon) * policies + epsilon / policies.shape[1]
+            p_loss = -mx.mean(
+                mx.sum(smooth_policies * mx.log(pred_policies + 1e-8), axis=1)
+            )
+
+            # Value loss with L2 regularization
+            v_loss = mx.mean(mx.square(values - pred_values))
+
+            # Reduced L2 regularization since we have other regularization
+            l2_lambda = 5e-5  # Reduced from 1e-4
+            l2_reg = l2_lambda * sum(
+                mx.sum(mx.square(p)) for p in model_params.values()
+            )
+
+            total_loss = p_loss + v_loss + l2_reg
+            return total_loss, (p_loss, v_loss)
 
         # Compute loss and gradients
-        (loss, p_loss, v_loss), grads = mx.value_and_grad(loss_fn, has_aux=True)(
+        (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn, has_aux=True)(
             self.model.parameters(), states, policies, values
         )
 
-        # Update model using gradients
+        # Update model parameters
         self.optimizer.update(self.model, grads)
-
-        # Evaluate to get actual loss value
-        mx.eval(loss)
-        mx.eval(p_loss)
-        mx.eval(v_loss)
+        mx.eval(self.model.parameters(), self.optimizer.state)
 
         return loss.item(), p_loss.item(), v_loss.item()
 
@@ -210,8 +227,10 @@ class Trainer:
     def play_evaluation_game(
         self, opponent, mcts_player_color, show_board: bool = False
     ) -> Tuple[int, int]:
-        """Play a single evaluation game"""
+        """Play a single evaluation game with adjusted scoring"""
         game = ChessGame()
+        moves_without_progress = 0
+        max_moves_without_progress = 50  # Fifty move rule
 
         while True:
             state = game.get_game_state()
@@ -221,9 +240,13 @@ class Trainer:
                     if (winner == "White" and mcts_player_color == 0) or (
                         winner == "Black" and mcts_player_color == 1
                     ):
-                        return 1, 1
-                    return 0, 1
-                return 0.5, 1  # Draw
+                        return 1, 1  # Win
+                    return 0, 1  # Loss
+                return 0.25, 1  # Draw is worth more than a loss but less than a win
+
+            # Check for move limit or repetition
+            if moves_without_progress >= max_moves_without_progress:
+                return 0.25, 1  # Draw due to no progress
 
             if game.get_current_turn() == mcts_player_color:
                 move = self.mcts.get_move(game.board)
@@ -231,7 +254,13 @@ class Trainer:
                 move = opponent.select_move(game.board)
 
             if not move:
-                return 0.5, 1  # Draw - no valid moves
+                return 0.25, 1  # Draw - no valid moves
+
+            # Track moves without progress
+            if game.board.is_capture_or_pawn_move(move[0], move[1]):
+                moves_without_progress = 0
+            else:
+                moves_without_progress += 1
 
             game.make_move(move[0], move[1])
 

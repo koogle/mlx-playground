@@ -4,7 +4,6 @@ from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
-from functools import lru_cache
 import random
 
 
@@ -158,8 +157,24 @@ class MCTS:
         return policies[0], values[0].item()
 
     def _expand_node(self, node: Node, policy, value):
-        """Cache common subtrees"""
+        """Cache common subtrees and prevent cycles"""
         board_hash = node.board.get_hash()
+
+        # Check if this position has occurred in the current search path
+        current = node
+        path_positions = {board_hash}
+        while current.parent:
+            parent_hash = current.parent.board.get_hash()
+            if parent_hash in path_positions:
+                # Position repeats - treat as a draw
+                node.is_expanded = True
+                node.value_sum = 0.0  # Draw value
+                node.visit_count = 1
+                return
+            path_positions.add(parent_hash)
+            current = current.parent
+
+        # Rest of existing expansion code...
         if board_hash in self._tree_cache:
             node.children = self._tree_cache[board_hash]
             node.is_expanded = True
@@ -491,7 +506,6 @@ class MCTS:
 
 
 class BitBoard:
-    @lru_cache(maxsize=1024)
     def is_game_over(self) -> bool:
         """Cached game over check"""
         current_turn = self.get_current_turn()
@@ -501,7 +515,6 @@ class BitBoard:
             or self.is_draw()
         )
 
-    @lru_cache(maxsize=1024)
     def is_in_check(self, color: int) -> bool:
         """Cached check detection"""
         king_pos = self.get_king_position(color)

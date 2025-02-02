@@ -279,7 +279,6 @@ class BitBoard:
         new_board._in_check_cache = {}
         return new_board
 
-    @lru_cache(maxsize=1024)
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
         """Cache valid moves for positions"""
         row, col = pos
@@ -464,7 +463,6 @@ class BitBoard:
 
         return pieces
 
-    @lru_cache(maxsize=2048)
     def is_square_attacked(self, pos: Tuple[int, int], by_color: int) -> bool:
         """Cache attack calculations"""
         row, col = pos

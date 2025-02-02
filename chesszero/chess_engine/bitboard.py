@@ -249,9 +249,6 @@ class BitBoard:
         """Get all valid moves considering checks and pins"""
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
-        print(
-            f"Getting moves for piece at ({row},{col}): color={color}, type={piece_type}"
-        )
 
         if color == -1 or color != self.get_current_turn():
             return set()
@@ -279,18 +276,14 @@ class BitBoard:
             else:
                 moves = self._get_step_moves(row, col, pattern.directions, color)
 
-        print(f"Initial moves for piece at ({row},{col}): {moves}")
-
         # Check if piece is pinned
         pin_direction = self._get_pin_info(pos)
         if pin_direction:
             moves = self._filter_pinned_moves(pos, moves, pin_direction)
-            print(f"After pin filtering: {moves}")
 
         # Filter moves that would leave king in check
         if self.is_in_check(color):
             moves = self._get_check_resolving_moves(pos, moves)
-            print(f"After check filtering: {moves}")
 
         return moves
 
@@ -397,7 +390,6 @@ class BitBoard:
     def is_square_attacked(self, pos: Tuple[int, int], by_color: int) -> bool:
         """Check if a square is attacked by any piece of the given color"""
         row, col = pos
-        print(f"\nChecking if square ({row},{col}) is attacked by color {by_color}")
 
         # Check pawn attacks
         pawn_channel = 0 if by_color == 0 else 6
@@ -409,14 +401,12 @@ class BitBoard:
             attack_col = col + col_delta
             if 0 <= attack_row < 8 and 0 <= attack_col < 8:
                 if self.state[pawn_channel, attack_row, attack_col]:
-                    print(f"Square is attacked by pawn at ({attack_row},{attack_col})")
                     return True
 
         # Check other piece attacks
         for piece_type in range(1, 6):  # Skip pawns, already checked
             channel = piece_type if by_color == 0 else piece_type + 6
             pattern = PIECE_PATTERNS[piece_type]
-            print(f"Checking piece type {piece_type} (channel {channel})")
 
             if pattern.sliding:
                 # For sliding pieces, check along each direction until we hit something
@@ -425,25 +415,14 @@ class BitBoard:
                         row - row_delta,
                         col - col_delta,
                     )  # Look backwards
-                    print(
-                        f"Checking sliding direction ({row_delta},{col_delta}) from ({current_row},{current_col})"
-                    )
                     while 0 <= current_row < 8 and 0 <= current_col < 8:
                         if self.state[channel, current_row, current_col]:
-                            print(
-                                f"Found attacking piece at ({current_row},{current_col})"
-                            )
                             return True
                         target_color, _ = self.get_piece_at(current_row, current_col)
                         if target_color != -1:  # Hit any piece
-                            print(
-                                f"Hit blocking piece at ({current_row},{current_col})"
-                            )
                             break
                         current_row -= row_delta
                         current_col -= col_delta
-
-        print(f"No attackers found for square ({row},{col})")
         return False
 
     def is_in_check(self, color: int) -> bool:
@@ -518,21 +497,16 @@ class BitBoard:
 
     def is_checkmate(self, color: int) -> bool:
         """Check if the given color is checkmated"""
-        print(f"\nChecking checkmate for color {color}")
-
         # First verify we're in check
         if not self.is_in_check(color):
-            print("Not in check, so not checkmate")
             return False
 
         # Try all pieces' moves
         for pos, piece_type in self.get_all_pieces(color):
             moves = self.get_valid_moves(pos)
             if moves:
-                print(f"Piece at {pos} (type {piece_type}) has moves: {moves}")
                 return False
 
-        print("No legal moves found - Checkmate!")
         return True
 
     def is_stalemate(self, color: int) -> bool:

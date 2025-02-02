@@ -93,20 +93,21 @@ class TestBoard(unittest.TestCase):
         # Setup: White king at e1, White queen at e2, Black rook at e8
         # This creates a vertical pin
         self.board.state[5, 0, 4] = 1  # White king at e1
-        self.board.state[4, 1, 4] = 1  # White queen at e2 (changed from bishop)
+        self.board.state[4, 1, 4] = 1  # White queen at e2
         self.board.state[9, 7, 4] = 1  # Black rook at e8
         self.board.state[12] = 1  # White to move
 
         # Get valid moves for the pinned queen
         valid_moves = self.board.get_valid_moves((1, 4))
 
-        # The queen can move along the pin line (vertically)
+        # The queen can move along the pin line (vertically), including capturing the rook
         expected_moves = {
             (2, 4),  # e3
             (3, 4),  # e4
             (4, 4),  # e5
             (5, 4),  # e6
             (6, 4),  # e7
+            (7, 4),  # e8 - capturing the rook is legal and removes the pin
         }  # Only moves along the e-file
         assert (
             valid_moves == expected_moves

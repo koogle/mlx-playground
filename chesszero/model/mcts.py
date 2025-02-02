@@ -231,8 +231,8 @@ class MCTS:
         """Get unique key for equivalent positions"""
         return board.get_hash()
 
-    def get_move(self, board: BitBoard):
-        """Reuse calculations for transpositions"""
+    def get_move(self, board: BitBoard, temperature: float = 0.0):
+        """Get best move using MCTS with optional temperature sampling"""
         # Don't switch to eval mode during training
         if not self.training:
             self.model.eval()
@@ -246,12 +246,10 @@ class MCTS:
             if key in self.transposition_table:
                 cached_node = self.transposition_table[key]
                 if cached_node.visit_count > self.config.n_simulations // 2:
-                    return max(
-                        cached_node.children.items(), key=lambda x: x[1].visit_count
-                    )[0]
+                    return self._select_move_with_temperature(cached_node, temperature)
 
             # Create root and do initial evaluation
-            self.root_node = Node(board)  # Store root node as instance variable
+            self.root_node = Node(board)
             board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
             policies, values = self.model(board_state)
             self._expand_node(self.root_node, policies[0], values[0].item())
@@ -286,15 +284,51 @@ class MCTS:
                         )
                     break
 
-            # Return most visited move
-            return max(self.root_node.children.items(), key=lambda x: x[1].visit_count)[
-                0
-            ]
+            # Select move based on temperature
+            return self._select_move_with_temperature(self.root_node, temperature)
 
         finally:
             # Restore training mode if we were training
             if self.training:
                 self.model.train()
+
+    def _select_move_with_temperature(
+        self, node: Node, temperature: float
+    ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        """Select move based on visit count distribution with temperature"""
+        # Handle edge case of single move
+        if len(node.children) == 1:
+            return next(iter(node.children.keys()))
+
+        # Get visit counts and moves
+        visits = np.array(
+            [child.visit_count for child in node.children.values()], dtype=np.float64
+        )
+        moves = list(node.children.keys())
+
+        # Handle zero temperature - select most visited move
+        if (
+            temperature == 0 or temperature < 1e-8
+        ):  # Allow for floating point imprecision
+            return moves[np.argmax(visits)]
+
+        # Apply temperature and normalize
+        # Use float64 for better numerical stability during power operation
+        visits = visits ** (1 / temperature)
+        total_visits = np.sum(visits)
+
+        if total_visits == 0:
+            # Fallback to uniform distribution if no visits
+            probs = np.ones_like(visits) / len(visits)
+        else:
+            probs = visits / total_visits
+
+        # Ensure probabilities sum to 1 and are valid
+        probs = np.clip(probs, 0, 1)
+        probs = probs / np.sum(probs)
+
+        # Sample move based on visit count distribution
+        return moves[np.random.choice(len(moves), p=probs)]
 
     def backup(self, search_path: List[Node], value: float):
         """Fully vectorized backup"""

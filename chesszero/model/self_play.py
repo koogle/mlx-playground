@@ -30,7 +30,7 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
 
         # Get move with temperature
         temperature = 0.5 if move_count > 30 else 1.0
-        move = get_move_with_temperature(mcts, game.board, temperature)
+        move = mcts.get_move(game.board, temperature=temperature)
         if move is None:
             print("No valid moves found!")
             break
@@ -295,25 +295,6 @@ def get_policy_distribution(root_node, policy_output_dim: int):
 
     # Convert to MLX array at the end
     return mx.array(policy)
-
-
-def get_move_with_temperature(mcts: MCTS, board, temperature: float):
-    """Select move based on visit count distribution with temperature"""
-    mcts.get_move(board)  # Run MCTS simulations
-
-    visits = np.array([child.visit_count for child in mcts.root_node.children.values()])
-    moves = list(mcts.root_node.children.keys())
-
-    if temperature == 0:
-        # Select most visited move
-        return moves[np.argmax(visits)]
-
-    # Apply temperature
-    visits = visits ** (1 / temperature)
-    probs = visits / np.sum(visits)
-
-    # Sample move based on visit count distribution
-    return moves[np.random.choice(len(moves), p=probs)]
 
 
 def create_policy_from_visits(root_node, policy_output_dim: int):

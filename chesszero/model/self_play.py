@@ -114,7 +114,7 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
 
             game.make_move(move[0], move[1])
             # print("\nPosition after move:")
-            print(game.board)
+            # print(game.board)
 
             total_moves += 1
             pbar.update(1)

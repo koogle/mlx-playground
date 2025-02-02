@@ -90,17 +90,15 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
     games = []
 
     for game_idx in range(config.n_games_per_iteration):
-        print(f"\n=== Game {game_idx + 1}/{config.n_games_per_iteration} ===")
+        # print(f"\n=== Game {game_idx + 1}/{config.n_games_per_iteration} ===")
         game = ChessGame()
         total_moves = 0
         states, policies, values = [], [], []
 
-        print("\nInitial position:")
-        print(game.board)
+        # Create progress bar for moves
+        pbar = tqdm(total=200, desc=f"Game {game_idx + 1}", unit="moves")
 
         while not game.board.is_game_over() and total_moves < 200:
-            print(f"\nMove {total_moves + 1}")
-
             state = game.board.state
             move = mcts.get_move(game.board)
 
@@ -110,21 +108,18 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
 
             if not mcts.root_node:
                 continue
-
-            # Print the move being made
-            from_square = f"{chr(move[0][1] + 97)}{move[0][0] + 1}"
-            to_square = f"{chr(move[1][1] + 97)}{move[1][0] + 1}"
-            print(f"AI plays: {from_square}{to_square}")
-
             policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
             states.append(state)
             policies.append(policy)
 
             game.make_move(move[0], move[1])
-            print("\nPosition after move:")
-            print(game.board)
+            # print("\nPosition after move:")
+            # print(game.board)
 
             total_moves += 1
+            pbar.update(1)
+
+        pbar.close()
 
         # Game is over - print outcome
         result = game.board.get_game_result()

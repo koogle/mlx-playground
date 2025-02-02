@@ -69,7 +69,7 @@ class MCTS:
     def __init__(self, model, config: ModelConfig):
         self.model = model
         self.config = config
-        self.debug = True
+        self.debug = False
         self.valid_moves_cache = {}
         self.position_cache = {}
         self.all_moves_cache = {}

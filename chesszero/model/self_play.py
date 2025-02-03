@@ -9,47 +9,73 @@ from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
 import logging
-from memory_profiler import profile
+import multiprocessing as mp
+
+
+def mcts_worker(model, config, board, result_queue):
+    """Run MCTS in isolated process with full memory containment"""
+    mcts = MCTS(model, config)
+    move = mcts.get_move(board, temperature=1.0)
+    policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
+
+    # Return simple types
+    result_queue.put((move, policy))
 
 
 def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
-    """Generate self-play games
-    Returns:
-        List of tuples (game_history, game_result) where each game generates two training instances:
-        one from white's perspective and one from black's perspective
-    """
+    """Process-isolated self-play implementation"""
     logger = logging.getLogger(__name__)
-    logger.info(f"\nGenerating {config.n_games_per_iteration} self-play games")
     games = []
 
-    for game_idx in range(config.n_games_per_iteration):
+    # Serialize model parameters
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue()
 
+    for game_idx in range(config.n_games_per_iteration):
         game = ChessGame()
         game_history = []
-
-        # Create progress bar for each game with max 200 moves
         pbar = tqdm(total=200, desc=f"Game {game_idx+1}", leave=False)
-        move_count = 0
 
-        while not game.board.is_game_over() and move_count < 200:
-            mcts = MCTS(model, config)
-            # Convert state to MLX array immediately
-            state = mx.array(game.board.state, dtype=mx.float32)
-            move = mcts.get_move(game.board.copy(), temperature=1.0)
-            if not move:
-                print("No move found in game")
+        for _ in range(200):
+            if game.board.is_game_over():
                 break
 
-            # Use existing get_policy_distribution function
-            policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
+            # Start isolated process
+            p = ctx.Process(
+                target=mcts_worker,
+                args=(
+                    model,
+                    config,
+                    game.board,
+                    result_queue,
+                ),
+            )
+            p.start()
+
+            # Wait with timeout
+            p.join(timeout=10)
+
+            # Handle timeouts
+            if p.exitcode is None:
+                p.terminate()
+                p.join()
+                logger.error("MCTS process timeout")
+                break
+
+            # Get results
+            try:
+                move, policy = result_queue.get_nowait()
+            except Exception:
+                break
+
+            if not move:
+                break
+
+            # Record and make move
+            state = mx.array(game.board.state, dtype=mx.float32)
             game_history.append((state, policy, None))
             game.make_move(move[0], move[1])
-
-            move_count += 1
             pbar.update(1)
-            if mcts.root_node:
-                mcts._cleanup_tree(mcts.root_node)
-            del mcts
 
         pbar.close()
 

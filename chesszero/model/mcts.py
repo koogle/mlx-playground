@@ -93,44 +93,12 @@ class MCTS:
         self._move_encoding_table = self._init_move_encoding_table()
         self.max_batch_size = 128
 
-        # Pre-allocate buffers
-        self.moves_buffer = np.zeros((218, 2), dtype=np.int8)
-
         self._value_cache = {}  # Cache for evaluated positions
         self._policy_cache = {}  # Cache for policy evaluations
         self._tree_cache = {}  # Cache for subtrees
 
         if self.debug:
             self.path_lengths = []  # Track all path lengths
-
-    def clear_all_caches(self):
-        """Clear all caches between games and force garbage collection"""
-        self.valid_moves_cache.clear()
-        self.position_cache.clear()
-        self.all_moves_cache.clear()
-        self.transposition_table.clear()
-        self._value_cache.clear()
-        self._policy_cache.clear()
-        self._tree_cache.clear()
-        self.root_node = None
-
-        # Reset counters
-        self.total_nodes_visited = 0
-        self.moves_made = 0
-
-        # Reset path statistics for new game
-        if self.debug:
-            self.path_lengths = []
-
-        # Properly clean up the tree
-        if self.root_node:
-            self._cleanup_tree(self.root_node)
-            self.root_node = None
-
-        # Add explicit garbage collection
-        import gc
-
-        gc.collect()
 
     def _init_move_encoding_table(
         self,
@@ -400,20 +368,6 @@ class MCTS:
         self.all_moves_cache[board_hash] = moves
         return moves
 
-    def _get_moves_fast(
-        self, board: BitBoard, moves_buffer: np.ndarray
-    ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
-        """Fast move generation using pre-allocated buffer"""
-        moves = {}
-        pieces = board.get_all_pieces(board.get_current_turn())
-
-        for pos, piece_type in pieces:
-            valid_moves = board.get_valid_moves(pos)
-            if valid_moves:
-                moves[pos] = valid_moves
-
-        return moves
-
     def _batch_simulate(
         self,
         root: Node,
@@ -593,18 +547,3 @@ class MCTS:
 
     def _is_game_over(self, node: Node) -> bool:
         return node.board.is_game_over()
-
-    def _cleanup_tree(self, node: Node):
-        """Recursively cleanup the MCTS tree"""
-        if not node:
-            return
-
-        # Recursively cleanup children
-        for child in node.children.values():
-            self._cleanup_tree(child)
-
-        # Clear node references
-        node.children.clear()
-        node.parent = None
-        node.board = None  # Remove board reference
-        self._tree_cache.clear()

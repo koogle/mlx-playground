@@ -142,8 +142,9 @@ class Trainer:
 
             if minutes_since_last_eval >= self.config.eval_interval_minutes:
                 self.logger.info("\n=== Running Evaluation ===")
-                win_rate = self.evaluate()
+                win_rate, wins, losses, draws = self.evaluate()
                 self.logger.info(f"Win rate vs random: {win_rate:.2%}")
+                self.logger.info(f"Wins: {wins}, Losses: {losses}, Draws: {draws}")
 
                 # Save checkpoint after evaluation
                 self.logger.info("Saving checkpoint...")
@@ -212,7 +213,7 @@ class Trainer:
             return loss.item(), p_loss.item(), v_loss.item()
 
         except Exception as e:
-            self.logger.error(f"\nError in training step:")
+            self.logger.error("\nError in training step:")
             self.logger.error(f"Exception type: {type(e).__name__}")
             self.logger.error(f"Exception message: {str(e)}")
             self.logger.error(f"Traceback: {traceback.format_exc()}")
@@ -232,7 +233,7 @@ class Trainer:
             "system_percent": psutil.virtual_memory().percent,
         }
 
-    def evaluate(self, n_games: int = 100) -> float:
+    def evaluate(self, n_games: int = 100) -> Tuple[float, int, int, int]:
         """Evaluate current model against random player"""
         self.logger.info("\nEvaluating against random player...")
 
@@ -241,7 +242,9 @@ class Trainer:
         self.mcts.debug = self.config.debug  # Ensure debug flag is passed through
 
         random_player = RandomPlayer()
-        total_wins = 0
+        wins = 0
+        losses = 0
+        draws = 0
         total_games = 0
 
         # Play as both white and black
@@ -250,17 +253,23 @@ class Trainer:
                 # Show board for first evaluation game of each color if enabled
                 show_board = self.config.display_eval_game and game_idx == 0
 
-                wins, games = self.play_evaluation_game(
+                result = self.play_evaluation_game(
                     random_player, color, show_board=show_board
                 )
-                total_wins += wins
-                total_games += games
+                if result == 1:
+                    wins += 1
+                elif result == 0:
+                    losses += 1
+                else:
+                    draws += 1
+                total_games += 1
 
-        return total_wins / total_games
+        win_rate = wins / total_games
+        return win_rate, wins, losses, draws
 
     def play_evaluation_game(
         self, opponent, mcts_player_color, show_board: bool = False
-    ) -> Tuple[int, int]:
+    ) -> float:
         """Play a single evaluation game with adjusted scoring"""
         game = ChessGame()
         moves_without_progress = 0
@@ -274,13 +283,13 @@ class Trainer:
                     if (winner == "White" and mcts_player_color == 0) or (
                         winner == "Black" and mcts_player_color == 1
                     ):
-                        return 1, 1  # Win
-                    return 0, 1  # Loss
-                return 0.25, 1  # Draw is worth more than a loss but less than a win
+                        return 1  # Win
+                    return 0  # Loss
+                return 0.5  # Draw
 
             # Check for move limit or repetition
             if moves_without_progress >= max_moves_without_progress:
-                return 0.25, 1  # Draw due to no progress
+                return 0.5  # Draw due to no progress
 
             if game.get_current_turn() == mcts_player_color:
                 move = self.mcts.get_move(game.board)
@@ -288,7 +297,7 @@ class Trainer:
                 move = opponent.select_move(game.board)
 
             if not move:
-                return 0.25, 1  # Draw - no valid moves
+                return 0.5  # Draw - no valid moves
 
             # Track moves without progress
             if game.board.is_capture_or_pawn_move(move[0], move[1]):

@@ -55,5 +55,5 @@ class ModelConfig:
     debug: bool = True
 
     # Logging
-    eval_interval_minutes: int = 15  # Run evaluation every 15 minutes
+    eval_interval_minutes: int = 30  # Run evaluation every 30 minutes
     display_eval_game: bool = True  # Show board positions during evaluation

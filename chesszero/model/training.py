@@ -91,16 +91,8 @@ class Trainer:
             self.mcts.debug = self.config.debug
 
             # Generate self-play games with memory tracking
-            game_start_time = time.time()
-            initial_memory = self._get_memory_usage()
-            self.logger.info(f"Memory before self-play: {initial_memory}")
 
             games = generate_games(self.model, self.config)
-
-            game_time = time.time() - game_start_time
-            post_games_memory = self._get_memory_usage()
-            self.logger.info(f"Memory after self-play: {post_games_memory}")
-            self.logger.info(f"Self-play completed in {game_time:.1f}s")
 
             # Create batches with memory tracking
             batches = list(create_batches(games, self.config.batch_size))
@@ -118,21 +110,12 @@ class Trainer:
 
             for batch_idx, batch in enumerate(tqdm(batches, desc="Training batches")):
                 try:
-                    # Periodic memory logging
-                    if batch_idx % 10 == 0:
-                        self.logger.info(
-                            f"Memory state before batch {batch_idx}: {self._get_memory_usage()}"
-                        )
 
                     loss, p_loss, v_loss = self.train_on_batch(batch)
                     total_loss += loss
                     policy_loss += p_loss
                     value_loss += v_loss
                     n_batches += 1
-
-                    # Periodic cleanup
-                    if batch_idx % 10 == 0:
-                        gc.collect()
 
                 except Exception as e:
                     self.logger.error(f"\nError in batch {batch_idx}:")

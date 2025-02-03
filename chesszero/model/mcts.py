@@ -74,30 +74,31 @@ class Node:
 
 
 class MCTS:
+    # Class-level caches
+    _position_cache = {}
+    _all_moves_cache = {}
+    _value_cache = {}  # Cache for evaluated positions
+    _policy_cache = {}  # Cache for policy evaluations
+    _tree_cache = {}  # Cache for subtrees
+    _board_state_cache = {}  # Cache for board states
+    _move_list_cache = {}  # Cache for move lists
+    _transposition_table = {}  # Store equivalent positions
+    _move_encoding_table = None  # Will be initialized in __init__
+
     def __init__(self, model, config: ModelConfig):
         self.model = model
         self.config = config
         self.debug = config.debug
         self.cache_max_size = 100000  # Adjust this based on memory constraints
-        self.position_cache = {}
-        self.all_moves_cache = {}
         self.training = True
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
         self.root_node = None  # Initialize root_node
-        self.transposition_table = {}  # Store equivalent positions
-
-        # Pre-compute move encoding table and buffers
-        self._move_encoding_table = self._init_move_encoding_table()
         self.max_batch_size = 2000
 
-        self._value_cache = {}  # Cache for evaluated positions
-        self._policy_cache = {}  # Cache for policy evaluations
-        self._tree_cache = {}  # Cache for subtrees
-
-        # Add new caches
-        self._board_state_cache = {}  # Cache for board states
-        self._move_list_cache = {}  # Cache for move lists
+        # Initialize move encoding table if not already done
+        if MCTS._move_encoding_table is None:
+            MCTS._move_encoding_table = self._init_move_encoding_table()
 
         if self.debug:
             self.path_lengths = []  # Track all path lengths
@@ -133,43 +134,15 @@ class MCTS:
 
     def encode_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> int:
         """Fast move encoding using lookup table"""
-        return self._move_encoding_table[(from_pos, to_pos)]
-
-    def _evaluate_position(self, board_state: np.ndarray):
-        """Cache model evaluations with proper cleanup"""
-        state_hash = hash(board_state.tobytes())
-        if state_hash in self._value_cache:
-            return self._policy_cache[state_hash], self._value_cache[state_hash]
-
-        # Convert to MLX array
-        board_state = mx.array(board_state, dtype=mx.float32)[None, ...]
-
-        # Get model predictions
-        policies, values = self.model(board_state)
-
-        # Evaluate and convert to numpy/python types for caching
-        mx.eval(policies, values)
-        policy = policies[0]
-        value = values[0].item()
-
-        # Cache the results
-        self._policy_cache[state_hash] = policy
-        self._value_cache[state_hash] = value
-
-        # Clean up intermediate tensors
-        del board_state
-        del policies
-        del values
-
-        return policy, value
+        return MCTS._move_encoding_table[(from_pos, to_pos)]
 
     def _expand_node(self, node: Node, policy, value):
         """Expand node with better caching"""
         board_hash = node.board.get_hash()
 
         # Check transposition table first
-        if board_hash in self.transposition_table:
-            cached_node = self.transposition_table[board_hash]
+        if board_hash in MCTS._transposition_table:
+            cached_node = MCTS._transposition_table[board_hash]
             if cached_node.visit_count > node.visit_count:
                 node.children = cached_node.children
                 node.is_expanded = True
@@ -191,8 +164,8 @@ class MCTS:
             current = current.parent
 
         # Use cached subtree if available
-        if board_hash in self._tree_cache:
-            node.children = self._tree_cache[board_hash]
+        if board_hash in MCTS._tree_cache:
+            node.children = MCTS._tree_cache[board_hash]
             node.is_expanded = True
             node.value_sum = value
             node.visit_count = 1
@@ -210,7 +183,7 @@ class MCTS:
 
         for from_pos, valid_moves in all_valid_moves.items():
             for to_pos in valid_moves:
-                move_idx = self._move_encoding_table[(from_pos, to_pos)]
+                move_idx = MCTS._move_encoding_table[(from_pos, to_pos)]
                 prior = max(float(policy_np[move_idx]), 1e-8)
                 total_prior += prior
 
@@ -232,16 +205,11 @@ class MCTS:
         node.visit_count = 1
 
         if len(node.children) > 0:
-            pass
-            # self._tree_cache[board_hash] = node.children
+            MCTS._tree_cache[board_hash] = node.children
 
         # Cache the expanded node
-        if node.visit_count > 10:  # Only cache well-explored nodes
-            self.transposition_table[board_hash] = node
-
-    def _get_transposition_key(self, board: BitBoard) -> str:
-        """Get unique key for equivalent positions"""
-        return board.get_hash()
+        # if node.visit_count > 10:  # Only cache well-explored nodes
+        #    MCTS._transposition_table[board_hash] = node
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
         # Don't switch to eval mode during training
@@ -250,12 +218,12 @@ class MCTS:
 
         try:
             # Clean caches periodically
-            if len(self.all_moves_cache) > self.cache_max_size:
+            if len(MCTS._all_moves_cache) > self.cache_max_size:
                 self._prune_caches()
 
-            key = self._get_transposition_key(board)
-            if key in self.transposition_table:
-                cached_node = self.transposition_table[key]
+            key = board.get_hash()
+            if key in MCTS._transposition_table:
+                cached_node = MCTS._transposition_table[key]
                 if cached_node.visit_count > self.config.n_simulations // 2:
                     return self._select_move_with_temperature(cached_node, temperature)
 
@@ -356,8 +324,8 @@ class MCTS:
     ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
         """Get all valid moves for current player with caching"""
         board_hash = board.get_hash()
-        if board_hash in self.all_moves_cache:
-            return self.all_moves_cache[board_hash]
+        if board_hash in MCTS._all_moves_cache:
+            return MCTS._all_moves_cache[board_hash]
 
         moves = {}
         pieces = board.get_all_pieces(board.get_current_turn())
@@ -366,7 +334,7 @@ class MCTS:
             if valid_moves:
                 moves[pos] = valid_moves
 
-        self.all_moves_cache[board_hash] = moves
+        MCTS._all_moves_cache[board_hash] = moves
         return moves
 
     def _batch_simulate(
@@ -500,10 +468,10 @@ class MCTS:
 
         # Sort caches by access time and keep most recent
         for cache in [
-            self._board_state_cache,
-            self._move_list_cache,
-            self._value_cache,
-            self._policy_cache,
+            MCTS._board_state_cache,
+            MCTS._move_list_cache,
+            MCTS._value_cache,
+            MCTS._policy_cache,
         ]:
             if len(cache) > target_size:
                 sorted_items = sorted(
@@ -513,11 +481,11 @@ class MCTS:
                 cache.update(dict(sorted_items[-target_size:]))
 
         # Clear older transpositions
-        if len(self.transposition_table) > target_size:
+        if len(MCTS._transposition_table) > target_size:
             sorted_nodes = sorted(
-                self.transposition_table.items(), key=lambda x: x[1].visit_count
+                MCTS._transposition_table.items(), key=lambda x: x[1].visit_count
             )
-            self.transposition_table = dict(sorted_nodes[-target_size:])
+            MCTS._transposition_table = dict(sorted_nodes[-target_size:])
 
         if self.debug:
             print(f"Pruned caches to {target_size} entries")
@@ -525,18 +493,18 @@ class MCTS:
     def _get_board_state(self, board: BitBoard) -> np.ndarray:
         """Get cached board state array"""
         board_hash = board.get_hash()
-        if board_hash not in self._board_state_cache:
-            self._board_state_cache[board_hash] = board.state.copy()
-        return self._board_state_cache[board_hash]
+        if board_hash not in MCTS._board_state_cache:
+            MCTS._board_state_cache[board_hash] = board.state.copy()
+        return MCTS._board_state_cache[board_hash]
 
     def _get_move_list(
         self, board: BitBoard
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """Get cached list of all possible moves"""
         board_hash = board.get_hash()
-        if board_hash not in self._move_list_cache:
+        if board_hash not in MCTS._move_list_cache:
             moves = []
             for from_pos, valid_moves in self._get_all_valid_moves(board).items():
                 moves.extend((from_pos, to_pos) for to_pos in valid_moves)
-            self._move_list_cache[board_hash] = moves
-        return self._move_list_cache[board_hash]
+            MCTS._move_list_cache[board_hash] = moves
+        return MCTS._move_list_cache[board_hash]

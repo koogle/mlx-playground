@@ -1,3 +1,4 @@
+from functools import lru_cache
 import numpy as np
 from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
@@ -800,7 +801,7 @@ class BitBoard:
     def get_hash(self) -> int:
         """Fast board hashing using numpy"""
         # Use numpy's built-in hashing for arrays
-        return hash(self.state.tobytes())
+        return hash_board_state(self.state)
 
     def _init_knight_attacks(self):
         """Pre-compute knight attack patterns for each square"""
@@ -1093,3 +1094,9 @@ class BitBoard:
                         if 0 <= new_row < 8 and 0 <= new_col < 8:
                             king_pattern.add((new_row, new_col))
                     BitBoard._attack_pattern_cache[("king", pos)] = king_pattern
+
+
+@lru_cache(maxsize=100000)
+def hash_board_state(board_state: np.ndarray) -> int:
+    """Hash the board state using numpy"""
+    return hash(board_state.tobytes())

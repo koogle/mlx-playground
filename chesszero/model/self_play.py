@@ -11,7 +11,7 @@ from tqdm import tqdm
 import logging
 
 
-def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
+def generate_games(mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
     """Generate self-play games
     Returns:
         List of tuples (game_history, game_result) where each game generates two training instances:
@@ -22,7 +22,7 @@ def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tu
     games = []
 
     for game_idx in range(config.n_games_per_iteration):
-        mcts = MCTS(model, config)
+        # mcts = MCTS(model, config)
         game = ChessGame()
         game_history = []
 

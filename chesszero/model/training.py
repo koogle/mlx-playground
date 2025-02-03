@@ -5,8 +5,8 @@ from chess_engine.game import ChessGame
 from model.network import ChessNet
 from model.mcts import MCTS
 from model.self_play import (
-    generate_games,
     create_batches,
+    generate_games_parallel,
 )
 from utils.random_player import RandomPlayer
 from config.model_config import ModelConfig
@@ -77,8 +77,8 @@ class Trainer:
 
         self.mcts = MCTS(self.model, config)
 
-    def train(self, n_epochs: Optional[int] = None):
-        """Main training loop with memory optimizations"""
+    def train(self, n_epochs: Optional[int] = None, n_workers: int = 5):
+        """Main training loop with parallel game generation"""
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()
 
@@ -86,14 +86,11 @@ class Trainer:
             for epoch in range(self.start_epoch, n_epochs):
                 epoch_start_time = time.time()
                 self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
-
-                # Set model to training mode
+                self.logger.info(f"Generating games using {n_workers} workers...")
                 self.model.train()
-                self.mcts.debug = self.config.debug
 
-                # Generate self-play games with memory tracking
-
-                games = generate_games(self.model, self.config)
+                # Generate self-play games in parallel
+                games = generate_games_parallel(self.model, self.config, n_workers)
 
                 # Create batches with memory tracking
                 batches = list(create_batches(games, self.config.batch_size))

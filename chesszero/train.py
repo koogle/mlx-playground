@@ -32,6 +32,12 @@ def main():
     parser.add_argument(
         "--profile", action="store_true", help="Enable cProfile profiling"
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Number of parallel workers for game generation",
+    )
     args = parser.parse_args()
 
     # Setup logging
@@ -49,8 +55,8 @@ def main():
         logger.info("Profiling enabled")
 
     try:
-        # Start training
-        trainer.train()
+        # Start training with specified number of workers
+        trainer.train(n_workers=args.workers)
     except KeyboardInterrupt:
         logger.info("\nTraining interrupted.")
         if args.profile:

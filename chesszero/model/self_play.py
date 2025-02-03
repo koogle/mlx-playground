@@ -10,103 +10,32 @@ import mlx.core as mx
 from tqdm import tqdm
 import logging
 import multiprocessing as mp
+from queue import Empty
 
 
-def mcts_worker(model, config, input_queue, result_queue):
-    """Long-running worker that processes multiple board states"""
-    mcts = MCTS(model, config)
-
-    while True:
-        try:
-            # Get next board state from main process
-            board = input_queue.get()
-            if board is None:  # Shutdown signal
-                break
-
-            # Get move for current position
-            move = mcts.get_move(board, temperature=1.0)
-            if not move:
-                result_queue.put(None)  # Signal no valid moves
-                continue
-
-            policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
-            result_queue.put((move, policy))
-
-        except Exception as e:
-            print(f"Worker error: {e}")
-            result_queue.put(None)
-            break
-
-
-def generate_games(model: ChessNet, config: ModelConfig) -> List[Tuple]:
-    """Process-isolated self-play implementation with worker recycling"""
+def play_single_game(
+    model: ChessNet, config: ModelConfig, game_id: int, result_queue: mp.Queue
+):
+    """Worker process that plays a single complete game"""
     logger = logging.getLogger(__name__)
-    games = []
-
-    MOVES_PER_WORKER = 200  # Number of moves before recycling worker
-
-    for game_idx in range(config.n_games_per_iteration):
+    try:
         game = ChessGame()
         game_history = []
-        pbar = tqdm(total=200, desc=f"Game {game_idx+1}", leave=False)
-        move_count = 0
+        mcts = MCTS(model, config)
 
-        # Create process context and queues
-        ctx = mp.get_context("spawn")
-        input_queue = ctx.Queue()
-        result_queue = ctx.Queue()
+        pbar = tqdm(total=200, desc=f"Game {game_id}", leave=False)
 
-        # Start worker process
-        worker = ctx.Process(
-            target=mcts_worker, args=(model, config, input_queue, result_queue)
-        )
-        worker.start()
+        while not game.board.is_game_over() and len(game_history) < 200:
+            # Get move and policy for current position
+            move = mcts.get_move(game.board, temperature=1.0)
+            if not move:
+                break
 
-        try:
-            while not game.board.is_game_over() and len(game_history) < 200:
-                # Check if we need to recycle worker
-                if move_count >= MOVES_PER_WORKER:
-                    input_queue.put(None)  # Signal shutdown
-                    worker.join(timeout=5)
-                    if worker.exitcode is None:
-                        worker.terminate()
-                    worker.join()
-
-                    worker = ctx.Process(
-                        target=mcts_worker,
-                        args=(model, config, input_queue, result_queue),
-                    )
-                    worker.start()
-                    move_count = 0
-
-                # Send current board to worker
-                input_queue.put(game.board)
-
-                # Wait for result with timeout
-                try:
-                    result = result_queue.get(timeout=3)
-                    if result is None:
-                        logger.error("Worker returned no move")
-                        break
-
-                    move, policy = result
-                    state = mx.array(game.board.state, dtype=mx.float32)
-                    game_history.append((state, policy, None))
-                    game.make_move(move[0], move[1])
-                    move_count += 1
-                    pbar.update(1)
-
-                except Exception as e:
-                    logger.error(f"Error getting move: {e}")
-                    break
-
-        finally:
-            # Clean up worker
-            input_queue.put(None)  # Signal shutdown
-            worker.join(timeout=3)
-            if worker.exitcode is None:
-                worker.terminate()
-            worker.join()
+            policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
+            state = mx.array(game.board.state, dtype=mx.float32)
+            game_history.append((state, policy, None))
+            game.make_move(move[0], move[1])
+            pbar.update(1)
 
         pbar.close()
 
@@ -114,18 +43,86 @@ def generate_games(model: ChessNet, config: ModelConfig) -> List[Tuple]:
         white_result = game.board.get_game_result(perspective_color=0)
         black_result = game.board.get_game_result(perspective_color=1)
 
-        # Convert draws (0.0) to -0.5 to discourage drawing
+        # Convert draws to -0.5 to discourage drawing
         white_result = -0.5 if white_result == 0.0 else white_result
         black_result = -0.5 if black_result == 0.0 else black_result
 
-        games.append((game_history, white_result))
-        games.append((game_history, black_result))
+        # Send results back through queue
+        result_queue.put(
+            {
+                "game_id": game_id,
+                "history": game_history,
+                "white_result": white_result,
+                "black_result": black_result,
+                "n_moves": len(game_history),
+                "final_board": str(game.board),
+            }
+        )
 
-        logger.info(f"Game {game_idx + 1} completed with {len(game_history)} moves")
-        logger.info(f"White result: {white_result}, Black result: {black_result}")
-        logger.info(f"Final board:\n{game.board}")
+    except Exception as e:
+        logger.error(f"Error in game {game_id}: {str(e)}")
+        result_queue.put(None)
 
-    return games
+
+def generate_games(
+    model: ChessNet, config: ModelConfig, max_workers: int = 5
+) -> List[Tuple]:
+    """Generate games using a pool of workers"""
+    logger = logging.getLogger(__name__)
+    games_data = []
+    total_games_needed = config.n_games_per_iteration
+    games_completed = 0
+    game_id = 0
+
+    # Create process context and result queue
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue()
+
+    active_workers = []
+
+    try:
+        while games_completed < total_games_needed:
+            # Launch new workers up to max_workers
+            while len(active_workers) < max_workers and game_id < total_games_needed:
+                p = ctx.Process(
+                    target=play_single_game, args=(model, config, game_id, result_queue)
+                )
+                p.start()
+                active_workers.append((p, game_id))
+                game_id += 1
+
+            # Collect results from completed workers
+            try:
+                result = result_queue.get(timeout=1)
+                if result is not None:
+                    games_completed += 1
+
+                    # Store both white and black perspectives
+                    games_data.append((result["history"], result["white_result"]))
+                    games_data.append((result["history"], result["black_result"]))
+
+                    logger.info(
+                        f"Game {result['game_id']} completed with {result['n_moves']} moves"
+                    )
+                    logger.info(
+                        f"White result: {result['white_result']}, Black result: {result['black_result']}"
+                    )
+                    logger.info(f"Final board:\n{result['final_board']}")
+
+            except Empty:
+                logger.debug("No results available in queue yet")
+
+            # Clean up completed workers
+            active_workers = [(p, gid) for p, gid in active_workers if p.is_alive()]
+
+    finally:
+        # Clean up any remaining workers
+        for p, _ in active_workers:
+            if p.is_alive():
+                p.terminate()
+                p.join()
+
+    return games_data
 
 
 def create_batches(games, batch_size: int):
@@ -188,7 +185,6 @@ def get_policy_distribution(root_node, policy_output_dim: int):
     policy = np.zeros(policy_output_dim, dtype=np.float32)
 
     for move, child in root_node.children.items():
-        # Calculate move index directly since we don't have mcts instance
         from_pos, to_pos = move
         from_idx = from_pos[0] * 8 + from_pos[1]
         to_idx = to_pos[0] * 8 + to_pos[1]

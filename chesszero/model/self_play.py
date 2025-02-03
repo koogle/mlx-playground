@@ -21,20 +21,22 @@ def play_single_game(
     try:
         game = ChessGame()
         game_history = []
-        mcts = MCTS(model, config)
 
         pbar = tqdm(total=200, desc=f"Game {game_id}", leave=False)
 
         while not game.board.is_game_over() and len(game_history) < 200:
+            mcts = MCTS(model, config)
             # Get move and policy for current position
             move = mcts.get_move(game.board, temperature=1.0)
             if not move:
+                # No valid moves
                 break
 
             policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
             state = mx.array(game.board.state, dtype=mx.float32)
             game_history.append((state, policy, None))
             game.make_move(move[0], move[1])
+
             pbar.update(1)
 
         pbar.close()

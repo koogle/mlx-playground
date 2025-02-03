@@ -40,8 +40,13 @@ def play_self_play_game(mcts: MCTS, config) -> Tuple[List, List, List]:
         encoded_state = encode_board(game.board)
         policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
 
+        # mcts.clear_move_cache()
+
         states.append(encoded_state)
         policies.append(policy)
+
+        # del encoded_state
+        # del policy
 
         # Print the move being made
         from_square = f"{chr(move[0][1] + 97)}{move[0][0] + 1}"
@@ -108,7 +113,7 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
             state = mx.array(game.board.state, dtype=mx.float32)
             move = mcts.get_move(game.board, temperature=1.0)
             if not move:
-                print("No move found")
+                print("No move found in game")
                 break
 
             # Use existing get_policy_distribution function
@@ -117,12 +122,9 @@ def generate_games(mcts: MCTS, config: ModelConfig) -> List[Tuple]:
             game.make_move(move[0], move[1])
 
             move_count += 1
-            print("move_count", move_count)
             pbar.update(1)
 
         pbar.close()
-
-        raise ValueError(game.board.is_game_over())
 
         # Get game result from both perspectives
         white_result = game.board.get_game_result(perspective_color=0)
@@ -269,7 +271,6 @@ def generate_random_opponent_games(mcts: MCTS, config) -> List[Tuple]:
     return games_data
 
 
-@lru_cache(maxsize=1000)
 def get_policy_distribution(root_node, policy_output_dim: int):
     """Convert MCTS visit counts to policy distribution"""
     # Use numpy array for indexing, convert to MLX at the end
@@ -291,8 +292,6 @@ def get_policy_distribution(root_node, policy_output_dim: int):
     return mx.array(policy)
 
 
-@lru_cache(maxsize=1000)
 def encode_board(board: BitBoard) -> mx.array:
     """Convert BitBoard state to network input format"""
-    # Convert uint8 to float32 when creating MLX array
     return mx.array(board.state, dtype=mx.float32)

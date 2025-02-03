@@ -78,7 +78,7 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = config.debug
-        self.cache_max_size = 5000  # Adjust this based on memory constraints
+        self.cache_max_size = 10000  # Adjust this based on memory constraints
         self.valid_moves_cache = {}
         self.position_cache = {}
         self.all_moves_cache = {}
@@ -91,14 +91,8 @@ class MCTS:
         # Pre-compute move encoding table and buffers
         self._move_encoding_table = self._init_move_encoding_table()
         self.max_batch_size = 128
-        self.policy_buffer = np.zeros((self.max_batch_size, 4096))
-        self.value_buffer = np.zeros(self.max_batch_size)
-        self.visit_counts_buffer = np.zeros(128)
-        self.values_buffer = np.zeros(128)
-        self.priors_buffer = np.zeros(128)
 
         # Pre-allocate buffers
-        self.boards_buffer = np.zeros((128, 19, 8, 8), dtype=np.float32)
         self.moves_buffer = np.zeros((218, 2), dtype=np.int8)
 
         self._value_cache = {}  # Cache for evaluated positions
@@ -281,9 +275,6 @@ class MCTS:
                 return None
 
             # Pre-allocate buffers once
-            boards_buffer = np.zeros(
-                (self.max_batch_size, *board.state.shape), dtype=np.float32
-            )
             paths_buffer = [[] for _ in range(self.max_batch_size)]
 
             # Batch process simulations with early stopping check
@@ -295,7 +286,6 @@ class MCTS:
                 self._batch_simulate(
                     self.root_node,
                     batch_size,
-                    boards_buffer[:batch_size],
                     paths_buffer[:batch_size],
                 )
 
@@ -309,12 +299,9 @@ class MCTS:
 
             # Select move based on temperature
             move = self._select_move_with_temperature(self.root_node, temperature)
-            print("move", move)
             return move
 
         finally:
-            print("finally")
-            self._cleanup_tree(self.root_node)
             # Restore training mode if we were training
             if self.training:
                 self.model.train()
@@ -418,7 +405,6 @@ class MCTS:
         self,
         root: Node,
         batch_size: int,
-        boards_buffer: np.ndarray,
         paths_buffer: List[List[Node]],
     ):
         """Run batch of parallel MCTS simulations with memory cleanup"""

@@ -82,83 +82,99 @@ class Trainer:
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()
 
-        for epoch in range(self.start_epoch, n_epochs):
-            epoch_start_time = time.time()
-            self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
+        try:
+            for epoch in range(self.start_epoch, n_epochs):
+                epoch_start_time = time.time()
+                self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
-            # Set model to training mode
-            self.model.train()
-            self.mcts.debug = self.config.debug
+                # Set model to training mode
+                self.model.train()
+                self.mcts.debug = self.config.debug
 
-            # Generate self-play games with memory tracking
+                # Generate self-play games with memory tracking
 
-            games = generate_games(self.model, self.config)
+                games = generate_games(self.model, self.config)
 
-            # Create batches with memory tracking
-            batches = list(create_batches(games, self.config.batch_size))
+                # Create batches with memory tracking
+                batches = list(create_batches(games, self.config.batch_size))
 
-            # Clear games data after creating batches
-            del games
-            gc.collect()
+                # Clear games data after creating batches
+                del games
+                gc.collect()
 
-            # Train on game data with periodic cleanup
-            self.logger.info("Training on game data...")
-            total_loss = 0
-            n_batches = 0
-            policy_loss = 0
-            value_loss = 0
+                # Train on game data with periodic cleanup
+                self.logger.info("Training on game data...")
+                total_loss = 0
+                n_batches = 0
+                policy_loss = 0
+                value_loss = 0
 
-            for batch_idx, batch in enumerate(tqdm(batches, desc="Training batches")):
-                try:
+                for batch_idx, batch in enumerate(
+                    tqdm(batches, desc="Training batches")
+                ):
+                    try:
 
-                    loss, p_loss, v_loss = self.train_on_batch(batch)
-                    total_loss += loss
-                    policy_loss += p_loss
-                    value_loss += v_loss
-                    n_batches += 1
+                        loss, p_loss, v_loss = self.train_on_batch(batch)
+                        total_loss += loss
+                        policy_loss += p_loss
+                        value_loss += v_loss
+                        n_batches += 1
 
-                except Exception as e:
-                    self.logger.error(f"\nError in batch {batch_idx}:")
-                    self.logger.error(str(e))
-                    self.logger.error(traceback.format_exc())
-                    continue
+                    except Exception as e:
+                        self.logger.error(f"\nError in batch {batch_idx}:")
+                        self.logger.error(str(e))
+                        self.logger.error(traceback.format_exc())
+                        continue
 
-            # Calculate averages and log results
-            avg_loss = total_loss / n_batches if n_batches > 0 else 0
-            avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
-            avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
+                # Calculate averages and log results
+                avg_loss = total_loss / n_batches if n_batches > 0 else 0
+                avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
+                avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
 
-            epoch_time = time.time() - epoch_start_time
+                epoch_time = time.time() - epoch_start_time
 
-            # Log detailed training statistics
-            self.logger.info(f"Epoch completed in {epoch_time:.1f}s")
-            self.logger.info(f"Average total loss: {avg_loss:.4f}")
-            self.logger.info(f"Average policy loss: {avg_policy_loss:.4f}")
-            self.logger.info(f"Average value loss: {avg_value_loss:.4f}")
+                # Log detailed training statistics
+                self.logger.info(f"Epoch completed in {epoch_time:.1f}s")
+                self.logger.info(f"Average total loss: {avg_loss:.4f}")
+                self.logger.info(f"Average policy loss: {avg_policy_loss:.4f}")
+                self.logger.info(f"Average value loss: {avg_value_loss:.4f}")
 
-            # Check if it's time for evaluation
-            current_time = time.time()
-            minutes_since_last_eval = (current_time - self.last_eval_time) / 60
+                # Check if it's time for evaluation
+                current_time = time.time()
+                minutes_since_last_eval = (current_time - self.last_eval_time) / 60
 
-            if minutes_since_last_eval >= self.config.eval_interval_minutes:
-                self.logger.info("\n=== Running Evaluation ===")
-                win_rate, wins, losses, draws = self.evaluate()
-                self.logger.info(f"Win rate vs random: {win_rate:.2%}")
-                self.logger.info(f"Wins: {wins}, Losses: {losses}, Draws: {draws}")
+                if minutes_since_last_eval >= self.config.eval_interval_minutes:
+                    self.logger.info("\n=== Running Evaluation ===")
+                    win_rate, wins, losses, draws = self.evaluate()
+                    self.logger.info(f"Win rate vs random: {win_rate:.2%}")
+                    self.logger.info(f"Wins: {wins}, Losses: {losses}, Draws: {draws}")
 
-                # Save checkpoint after evaluation
-                self.logger.info("Saving checkpoint...")
-                self.model.save_checkpoint(
-                    self.checkpoint_dir, epoch + 1, optimizer_state=self.optimizer.state
-                )
-                self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
+                    # Save checkpoint after evaluation
+                    self.logger.info("Saving checkpoint...")
+                    self.model.save_checkpoint(
+                        self.checkpoint_dir,
+                        epoch + 1,
+                        optimizer_state=self.optimizer.state,
+                    )
+                    self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
 
-                # Update last eval time
-                self.last_eval_time = current_time
+                    # Update last eval time
+                    self.last_eval_time = current_time
 
-        total_time = time.time() - start_time
-        self.logger.info("\n=== Training Completed ===")
-        self.logger.info(f"Total training time: {total_time/3600:.1f} hours")
+            total_time = time.time() - start_time
+            self.logger.info("\n=== Training Completed ===")
+            self.logger.info(f"Total training time: {total_time/3600:.1f} hours")
+
+        except KeyboardInterrupt:
+            self.logger.info("\nTraining interrupted. Saving final checkpoint...")
+            self.model.save_checkpoint(
+                self.checkpoint_dir,
+                epoch + 1,
+                optimizer_state=self.optimizer.state,
+                interrupted=True,
+            )
+            self.logger.info(f"Final checkpoint saved at epoch {epoch + 1}")
+            raise
 
     def train_on_batch(self, batch):
         """Train on a single batch of data with memory optimizations"""

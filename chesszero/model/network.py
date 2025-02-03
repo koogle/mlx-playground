@@ -229,13 +229,18 @@ class ChessNet(nn.Module):
 
         return total_loss
 
-    def save_checkpoint(self, checkpoint_dir: str, epoch: int, optimizer_state=None):
+    def save_checkpoint(
+        self, checkpoint_dir: str, epoch: int, optimizer_state=None, interrupted=False
+    ):
         """Save model checkpoint and training state"""
         checkpoint_dir = Path(checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         # Save model parameters
-        model_path = checkpoint_dir / f"model_epoch_{epoch}.safetensors"
+        if interrupted:
+            model_path = checkpoint_dir / f"model_interrupted_epoch_{epoch}.safetensors"
+        else:
+            model_path = checkpoint_dir / f"model_epoch_{epoch}.safetensors"
 
         # Save model weights
         self.save_weights(str(model_path))

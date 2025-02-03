@@ -3,7 +3,6 @@ from chess_engine.game import ChessGame
 from chess_engine.bitboard import BitBoard
 from model.network import ChessNet
 from config.model_config import ModelConfig
-
 from model.mcts import MCTS
 from typing import List, Tuple
 import mlx.core as mx
@@ -11,6 +10,7 @@ from tqdm import tqdm
 import logging
 import multiprocessing as mp
 from queue import Empty
+import traceback
 
 
 def play_single_game(
@@ -63,6 +63,7 @@ def play_single_game(
 
     except Exception as e:
         logger.error(f"Error in game {game_id}: {str(e)}")
+        logger.error(traceback.format_exc())
         result_queue.put(None)
 
 

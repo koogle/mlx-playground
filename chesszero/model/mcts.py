@@ -1,10 +1,9 @@
+from functools import lru_cache
 import numpy as np
 from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
-import time
-import weakref
 
 
 class Node:
@@ -14,7 +13,7 @@ class Node:
         self.visit_count = 0
         self.value_sum = 0.0
         self.board = board
-        self.parent = weakref.proxy(parent) if parent else None
+        self.parent = parent
         self.prior = prior
         self.children = {}
         self.is_expanded = False
@@ -228,7 +227,6 @@ class MCTS:
         return board.get_hash()
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-
         # Don't switch to eval mode during training
         if not self.training:
             self.model.eval()
@@ -336,20 +334,7 @@ class MCTS:
             node.value_sum += v
         del values_along_path
 
-    def _get_valid_moves(
-        self, board: BitBoard, pos: Tuple[int, int]
-    ) -> Set[Tuple[int, int]]:
-        """Get valid moves with caching"""
-        board_hash = board.get_hash()
-        cache_key = (board_hash, pos)
-
-        if cache_key in self.valid_moves_cache:
-            return self.valid_moves_cache[cache_key]
-
-        valid_moves = board.get_valid_moves(pos)
-        self.valid_moves_cache[cache_key] = valid_moves
-        return valid_moves
-
+    @lru_cache(maxsize=10000)
     def _get_all_valid_moves(
         self, board: BitBoard
     ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
@@ -375,8 +360,6 @@ class MCTS:
         paths_buffer: List[List[Node]],
     ):
         """Run batch of parallel MCTS simulations with memory cleanup"""
-        start_time = time.time()
-        MAX_BATCH_TIME = 1.0  # Maximum seconds per batch
 
         nodes_to_expand = []
         board_states = []
@@ -385,11 +368,6 @@ class MCTS:
         # Selection phase - find nodes to evaluate
         for i in range(batch_size):
             # Check time limit periodically (every 8 simulations)
-            if i % 8 == 0 and (time.time() - start_time) > MAX_BATCH_TIME:
-                if self.debug:
-                    print(f"Batch time limit reached after {i} simulations")
-                batch_size = i  # Truncate batch
-                break
 
             node = root
             path = [node]
@@ -411,7 +389,7 @@ class MCTS:
                 visited.add(board_hash)
 
                 # Use cached game over check
-                if self._is_game_over(node):
+                if node.board.is_game_over():
                     break
 
                 if not node.is_expanded:
@@ -435,11 +413,6 @@ class MCTS:
             if self.debug:
                 self.path_lengths.append(depth)
             paths_buffer[i] = path
-
-        if self.debug:
-            elapsed = time.time() - start_time
-            if elapsed > 1.0:  # Warn about slow batches
-                print(f"WARNING: Slow batch simulation ({elapsed:.3f}s)")
 
         # Expansion and evaluation phase
         if nodes_to_expand:
@@ -505,25 +478,6 @@ class MCTS:
 
         return False
 
-    def _estimate_path_length(self, node: Node, sample_size: int = 5) -> int:
-        """Estimate average path length in the tree"""
-        if not node.children:
-            return 1
-
-        total_length = 0
-        for _ in range(sample_size):
-            current = node
-            length = 1
-            while current.children and length < 50:
-                move, child = current.select_child(self.config.c_puct)
-                if not move or not child:
-                    break
-                current = child
-                length += 1
-            total_length += length
-
-        return max(1, total_length // sample_size)
-
     def _prune_caches(self):
         """More aggressive cache pruning"""
         # Keep only 75% of max size to prevent frequent pruning
@@ -544,6 +498,3 @@ class MCTS:
 
         if self.debug:
             print(f"Pruned caches to {target_size} entries")
-
-    def _is_game_over(self, node: Node) -> bool:
-        return node.board.is_game_over()

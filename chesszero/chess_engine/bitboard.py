@@ -1,7 +1,6 @@
 import numpy as np
 from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
-import weakref
 
 
 @dataclass
@@ -43,7 +42,6 @@ class BitBoard:
 
     _game_over_cache = {}
     _pin_cache = {}
-    _instances = weakref.WeakSet()
 
     def __init__(self):
         # Use contiguous memory layout
@@ -63,7 +61,6 @@ class BitBoard:
         self._attack_cache = {}  # Cache for attack calculations
 
         self.initialize_board()
-        BitBoard._instances.add(self)
 
     def initialize_board(self):
         """Set up the initial chess position"""
@@ -665,7 +662,7 @@ class BitBoard:
     def is_game_over(self) -> bool:
         """Check if the game is over (checkmate or draw)"""
         current_turn = self.get_current_turn()
-        cache_key = hash(self.state.tobytes())
+        cache_key = self.get_hash()
 
         if cache_key in BitBoard._game_over_cache:
             return BitBoard._game_over_cache[cache_key]
@@ -1052,26 +1049,3 @@ class BitBoard:
             if col < 7:
                 attacks |= 1 << ((row - 1) * 8 + (col + 1))  # Down-right
         return attacks
-
-    def force_cleanup(self):
-        """Break all internal references"""
-        self._zobrist_hash = None
-        self._pawn_attacks = None
-        self._king_moves = None
-        # Clear all piece maps
-        for color in [0, 1]:
-            for piece_type in range(6):
-                self.pieces[color][piece_type] = None
-        # Clear move history
-        self.move_history.clear()
-
-    @classmethod
-    def force_cleanup(cls):
-        """Force cleanup of all board instances"""
-        # Clear the instance tracker
-        cls._instances.clear()
-
-        # Rest remains the same
-        import gc
-
-        gc.collect()

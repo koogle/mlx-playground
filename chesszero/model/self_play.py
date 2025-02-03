@@ -38,7 +38,7 @@ def mcts_worker(model, config, input_queue, result_queue):
             break
 
 
-def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
+def generate_games(model: ChessNet, config: ModelConfig) -> List[Tuple]:
     """Process-isolated self-play implementation with worker recycling"""
     logger = logging.getLogger(__name__)
     games = []
@@ -66,7 +66,6 @@ def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tu
             while not game.board.is_game_over() and len(game_history) < 200:
                 # Check if we need to recycle worker
                 if move_count >= MOVES_PER_WORKER:
-                    logger.info("Recycling MCTS worker process")
                     input_queue.put(None)  # Signal shutdown
                     worker.join(timeout=5)
                     if worker.exitcode is None:

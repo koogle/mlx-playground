@@ -38,7 +38,7 @@ class ModelConfig:
     weight_decay: float = 1e-4
 
     # Self-play
-    n_games_per_iteration: int = 10  # Fewer games per iteration for more frequent evals
+    n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
     # n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
     temperature: float = 1.0  # Initial temperature for move selection
     temp_decay_steps: int = 10  # Number of moves before temperature decay

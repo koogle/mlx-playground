@@ -6,7 +6,7 @@ from model.network import ChessNet
 from model.mcts import MCTS
 from model.self_play import (
     create_batches,
-    generate_games_parallel,
+    generate_games,
 )
 from utils.random_player import RandomPlayer
 from config.model_config import ModelConfig
@@ -90,7 +90,7 @@ class Trainer:
                 self.model.train()
 
                 # Generate self-play games in parallel
-                games = generate_games_parallel(self.model, self.config, n_workers)
+                games = generate_games(self.model, self.config, n_workers)
 
                 # Create batches with memory tracking
                 batches = list(create_batches(games, self.config.batch_size))

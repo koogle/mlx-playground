@@ -9,6 +9,7 @@ from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
 import logging
+from memory_profiler import profile
 
 
 def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:

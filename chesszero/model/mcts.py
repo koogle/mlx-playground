@@ -4,6 +4,7 @@ import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
 import time
+import weakref
 
 
 class Node:
@@ -13,7 +14,7 @@ class Node:
         self.visit_count = 0
         self.value_sum = 0.0
         self.board = board
-        self.parent = parent
+        self.parent = weakref.proxy(parent) if parent else None
         self.prior = prior
         self.children = {}
         self.is_expanded = False
@@ -121,6 +122,16 @@ class MCTS:
         if self.debug:
             self.path_lengths = []
 
+        # Properly clean up the tree
+        if self.root_node:
+            self._cleanup_tree(self.root_node)
+            self.root_node = None
+
+        # Add explicit garbage collection
+        import gc
+
+        gc.collect()
+
     def _init_move_encoding_table(
         self,
     ) -> Dict[Tuple[Tuple[int, int], Tuple[int, int]], int]:
@@ -225,6 +236,7 @@ class MCTS:
 
                 child_board = board.copy()
                 child_board.make_move(from_pos, to_pos)
+
                 children[(from_pos, to_pos)] = Node(
                     board=child_board, parent=node, prior=prior
                 )
@@ -240,7 +252,8 @@ class MCTS:
         node.visit_count = 1
 
         if len(node.children) > 0:
-            self._tree_cache[board_hash] = node.children
+            pass
+            # self._tree_cache[board_hash] = node.children
 
     def _get_transposition_key(self, board: BitBoard) -> str:
         """Get unique key for equivalent positions"""
@@ -590,10 +603,8 @@ class MCTS:
         for child in node.children.values():
             self._cleanup_tree(child)
 
-        if node.board is not None:
-            node.board.state = None
-            node.board = None
-
         # Clear node references
         node.children.clear()
         node.parent = None
+        node.board = None  # Remove board reference
+        self._tree_cache.clear()

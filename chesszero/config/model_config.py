@@ -31,7 +31,7 @@ class ModelConfig:
     momentum: float = 0.9
     weight_decay: float = 1e-4
     """
-    batch_size: int = 256  # 2048
+    batch_size: int = 128  # 2048
     n_epochs: int = 500
     learning_rate: float = 0.2
     momentum: float = 0.9

@@ -52,8 +52,6 @@ Model Configuration:
 ### Known Limitations
 - Memory leaks in core MCTS implementation
 - Process isolation adds overhead
-- Immature evaluation function
-- Limited opening book
 
 ### Training Pipeline
 1. Self-play game generation
@@ -194,7 +192,6 @@ yolo/
 Contributions are welcome! Key areas for improvement:
 - MCTS memory management
 - Evaluation function
-- Opening book implementation
 - Performance optimizations
 - Documentation improvements
 - Bug fixes

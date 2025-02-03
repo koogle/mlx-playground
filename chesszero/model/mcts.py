@@ -225,7 +225,6 @@ class MCTS:
 
                 child_board = board.copy()
                 child_board.make_move(from_pos, to_pos)
-
                 children[(from_pos, to_pos)] = Node(
                     board=child_board, parent=node, prior=prior
                 )
@@ -354,6 +353,7 @@ class MCTS:
         for node, v in zip(search_path, values_along_path):
             node.visit_count += 1
             node.value_sum += v
+        del values_along_path
 
     def _get_valid_moves(
         self, board: BitBoard, pos: Tuple[int, int]
@@ -490,11 +490,6 @@ class MCTS:
                 self._expand_node(node, policy, value.item())
                 self.backup(path, value.item())
 
-            # Clean up tensors
-            del board_batch
-            del policies
-            del values
-
         # Always backup values for all paths
         for path in paths_buffer[:batch_size]:
             if not path:
@@ -523,7 +518,7 @@ class MCTS:
             return False
 
         moves_data.sort(key=lambda x: x[1], reverse=True)
-        best_move, best_visits, best_value = moves_data[0]
+        _, best_visits, best_value = moves_data[0]
         second_best = moves_data[1]
 
         # Need minimum visits before considering stopping
@@ -595,7 +590,10 @@ class MCTS:
         for child in node.children.values():
             self._cleanup_tree(child)
 
+        if node.board is not None:
+            node.board.state = None
+            node.board = None
+
         # Clear node references
         node.children.clear()
         node.parent = None
-        node.board = None  # Remove board reference

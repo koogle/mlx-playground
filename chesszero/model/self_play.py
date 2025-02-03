@@ -11,7 +11,7 @@ from tqdm import tqdm
 import logging
 
 
-def generate_games(mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
+def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
     """Generate self-play games
     Returns:
         List of tuples (game_history, game_result) where each game generates two training instances:
@@ -22,7 +22,7 @@ def generate_games(mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tup
     games = []
 
     for game_idx in range(config.n_games_per_iteration):
-        # mcts = MCTS(model, config)
+
         game = ChessGame()
         game_history = []
 
@@ -31,9 +31,10 @@ def generate_games(mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tup
         move_count = 0
 
         while not game.board.is_game_over() and move_count < 200:
+            mcts = MCTS(model, config)
             # Convert state to MLX array immediately
             state = mx.array(game.board.state, dtype=mx.float32)
-            move = mcts.get_move(game.board, temperature=1.0)
+            move = mcts.get_move(game.board.copy(), temperature=1.0)
             if not move:
                 print("No move found in game")
                 break
@@ -45,6 +46,9 @@ def generate_games(mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tup
 
             move_count += 1
             pbar.update(1)
+            if mcts.root_node:
+                mcts._cleanup_tree(mcts.root_node)
+            del mcts
 
         pbar.close()
 

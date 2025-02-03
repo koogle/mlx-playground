@@ -79,7 +79,6 @@ class MCTS:
         self.config = config
         self.debug = config.debug
         self.cache_max_size = 10000  # Adjust this based on memory constraints
-        self.valid_moves_cache = {}
         self.position_cache = {}
         self.all_moves_cache = {}
         self.training = True
@@ -95,6 +94,10 @@ class MCTS:
         self._value_cache = {}  # Cache for evaluated positions
         self._policy_cache = {}  # Cache for policy evaluations
         self._tree_cache = {}  # Cache for subtrees
+
+        # Add new caches
+        self._board_state_cache = {}  # Cache for board states
+        self._move_list_cache = {}  # Cache for move lists
 
         if self.debug:
             self.path_lengths = []  # Track all path lengths
@@ -161,8 +164,18 @@ class MCTS:
         return policy, value
 
     def _expand_node(self, node: Node, policy, value):
-        """Expand node using board cache"""
+        """Expand node with better caching"""
         board_hash = node.board.get_hash()
+
+        # Check transposition table first
+        if board_hash in self.transposition_table:
+            cached_node = self.transposition_table[board_hash]
+            if cached_node.visit_count > node.visit_count:
+                node.children = cached_node.children
+                node.is_expanded = True
+                node.value_sum = cached_node.value_sum
+                node.visit_count = cached_node.visit_count
+                return
 
         # Check for cycles
         current = node
@@ -222,6 +235,10 @@ class MCTS:
             pass
             # self._tree_cache[board_hash] = node.children
 
+        # Cache the expanded node
+        if node.visit_count > 10:  # Only cache well-explored nodes
+            self.transposition_table[board_hash] = node
+
     def _get_transposition_key(self, board: BitBoard) -> str:
         """Get unique key for equivalent positions"""
         return board.get_hash()
@@ -233,7 +250,7 @@ class MCTS:
 
         try:
             # Clean caches periodically
-            if len(self.valid_moves_cache) > self.cache_max_size:
+            if len(self.all_moves_cache) > self.cache_max_size:
                 self._prune_caches()
 
             key = self._get_transposition_key(board)
@@ -480,21 +497,47 @@ class MCTS:
 
     def _prune_caches(self):
         """More aggressive cache pruning"""
-        # Keep only 75% of max size to prevent frequent pruning
         target_size = int(self.cache_max_size * 0.75)
 
-        # Prune all caches
-        self.valid_moves_cache = dict(
-            list(self.valid_moves_cache.items())[-target_size:]
-        )
-        self.position_cache = dict(list(self.position_cache.items())[-target_size:])
-        self.all_moves_cache = dict(list(self.all_moves_cache.items())[-target_size:])
-        self._value_cache = dict(list(self._value_cache.items())[-target_size:])
-        self._policy_cache = dict(list(self._policy_cache.items())[-target_size:])
-        self._tree_cache = dict(list(self._tree_cache.items())[-target_size:])
+        # Sort caches by access time and keep most recent
+        for cache in [
+            self._board_state_cache,
+            self._move_list_cache,
+            self._value_cache,
+            self._policy_cache,
+        ]:
+            if len(cache) > target_size:
+                sorted_items = sorted(
+                    cache.items(), key=lambda x: x[1].get("last_access", 0)
+                )
+                cache.clear()
+                cache.update(dict(sorted_items[-target_size:]))
 
-        # Clear transposition table completely since it's less critical
-        self.transposition_table.clear()
+        # Clear older transpositions
+        if len(self.transposition_table) > target_size:
+            sorted_nodes = sorted(
+                self.transposition_table.items(), key=lambda x: x[1].visit_count
+            )
+            self.transposition_table = dict(sorted_nodes[-target_size:])
 
         if self.debug:
             print(f"Pruned caches to {target_size} entries")
+
+    def _get_board_state(self, board: BitBoard) -> np.ndarray:
+        """Get cached board state array"""
+        board_hash = board.get_hash()
+        if board_hash not in self._board_state_cache:
+            self._board_state_cache[board_hash] = board.state.copy()
+        return self._board_state_cache[board_hash]
+
+    def _get_move_list(
+        self, board: BitBoard
+    ) -> List[Tuple[Tuple[int, int], Tuple[int, int]]]:
+        """Get cached list of all possible moves"""
+        board_hash = board.get_hash()
+        if board_hash not in self._move_list_cache:
+            moves = []
+            for from_pos, valid_moves in self._get_all_valid_moves(board).items():
+                moves.extend((from_pos, to_pos) for to_pos in valid_moves)
+            self._move_list_cache[board_hash] = moves
+        return self._move_list_cache[board_hash]

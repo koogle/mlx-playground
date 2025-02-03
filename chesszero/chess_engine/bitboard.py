@@ -42,6 +42,9 @@ class BitBoard:
 
     _game_over_cache = {}
     _pin_cache = {}
+    _attack_pattern_cache = {}  # New cache for attack patterns
+    _ray_cache = {}  # New cache for ray calculations
+    _valid_moves_cache = {}  # New cache for valid moves
 
     def __init__(self):
         # Use contiguous memory layout
@@ -57,10 +60,10 @@ class BitBoard:
             1: (7, 4),  # Black king starting position
         }
 
-        self._pin_cache = {}  # Cache for pin calculations
-        self._attack_cache = {}  # Cache for attack calculations
-
         self.initialize_board()
+
+        # Pre-compute attack patterns for all squares
+        self._init_attack_patterns()
 
     def initialize_board(self):
         """Set up the initial chess position"""
@@ -242,6 +245,11 @@ class BitBoard:
         # Update turn
         self.state[12] = 1 - self.state[12]
 
+        # Clear caches that depend on board state
+        # self._valid_moves_cache.clear()
+        # BitBoard._pin_cache.clear()
+        # BitBoard._game_over_cache.clear()
+
         return True
 
     def get_move_count(self) -> int:
@@ -264,6 +272,13 @@ class BitBoard:
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
+        """Get valid moves with caching"""
+        board_hash = self.get_hash()
+        cache_key = (board_hash, pos)
+
+        if cache_key in BitBoard._valid_moves_cache:
+            return BitBoard._valid_moves_cache[cache_key].copy()
+
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
 
@@ -307,7 +322,8 @@ class BitBoard:
         if self.is_in_check(color):
             moves = self._get_check_resolving_moves(pos, moves)
 
-        return moves
+        BitBoard._valid_moves_cache[cache_key] = moves
+        return moves.copy()
 
     def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
         """Get all valid pawn moves including captures and promotions"""
@@ -904,25 +920,31 @@ class BitBoard:
     def _get_ray_between(
         self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]
     ) -> Set[Tuple[int, int]]:
-        """Get all squares between two positions (exclusive) along a straight line"""
+        """Get all squares between two positions with caching"""
+        cache_key = (from_pos, to_pos)
+        if cache_key in BitBoard._ray_cache:
+            return BitBoard._ray_cache[cache_key]
+
+        result = set()
         from_row, from_col = from_pos
         to_row, to_col = to_pos
 
         # Check if positions are aligned
         if from_row == to_row:
             step = 1 if to_col > from_col else -1
-            return {(from_row, col) for col in range(from_col + step, to_col, step)}
+            result = {(from_row, col) for col in range(from_col + step, to_col, step)}
         elif from_col == to_col:
             step = 1 if to_row > from_row else -1
-            return {(row, from_col) for row in range(from_row + step, to_row, step)}
+            result = {(row, from_col) for row in range(from_row + step, to_row, step)}
         elif abs(to_row - from_row) == abs(to_col - from_col):
             row_step = 1 if to_row > from_row else -1
             col_step = 1 if to_col > from_col else -1
-            return {
+            result = {
                 (from_row + i * row_step, from_col + i * col_step)
                 for i in range(1, abs(to_row - from_row))
             }
-        return set()  # Not aligned
+        BitBoard._ray_cache[cache_key] = result
+        return result
 
     def _is_pinned(self, pos: Tuple[int, int]) -> bool:
         """Check if a piece is pinned to the king"""
@@ -1049,3 +1071,25 @@ class BitBoard:
             if col < 7:
                 attacks |= 1 << ((row - 1) * 8 + (col + 1))  # Down-right
         return attacks
+
+    def _init_attack_patterns(self):
+        """Pre-compute attack patterns for all squares"""
+        if not BitBoard._attack_pattern_cache:
+            for row in range(8):
+                for col in range(8):
+                    pos = (row, col)
+                    # Cache knight patterns
+                    knight_pattern = set()
+                    for dr, dc in PIECE_PATTERNS[1].directions:
+                        new_row, new_col = row + dr, col + dc
+                        if 0 <= new_row < 8 and 0 <= new_col < 8:
+                            knight_pattern.add((new_row, new_col))
+                    BitBoard._attack_pattern_cache[("knight", pos)] = knight_pattern
+
+                    # Cache king patterns
+                    king_pattern = set()
+                    for dr, dc in PIECE_PATTERNS[5].directions:
+                        new_row, new_col = row + dr, col + dc
+                        if 0 <= new_row < 8 and 0 <= new_col < 8:
+                            king_pattern.add((new_row, new_col))
+                    BitBoard._attack_pattern_cache[("king", pos)] = king_pattern

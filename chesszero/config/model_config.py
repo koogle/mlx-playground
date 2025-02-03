@@ -44,13 +44,6 @@ class ModelConfig:
     temp_decay_steps: int = 10  # Number of moves before temperature decay
     temp_final: float = 0.1  # Final temperature after decay
 
-    # Evaluation
-    eval_games: int = 40  # Reduced number of evaluation games
-    winning_threshold: float = 0.55  # Win rate needed to update network
-
-    # History
-    n_history_moves: int = 8  # Number of previous board states to include
-
     # Debug options
     debug: bool = True
 

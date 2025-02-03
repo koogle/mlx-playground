@@ -801,7 +801,7 @@ class BitBoard:
     def get_hash(self) -> int:
         """Fast board hashing using numpy"""
         # Use numpy's built-in hashing for arrays
-        return hash_board_state(self.state)
+        return hash_board_state(self.state.tobytes())
 
     def _init_knight_attacks(self):
         """Pre-compute knight attack patterns for each square"""
@@ -1097,6 +1097,6 @@ class BitBoard:
 
 
 @lru_cache(maxsize=100000)
-def hash_board_state(board_state: np.ndarray) -> int:
+def hash_board_state(board_state_bytes: bytes) -> int:
     """Hash the board state using numpy"""
-    return hash(board_state.tobytes())
+    return hash(board_state_bytes)

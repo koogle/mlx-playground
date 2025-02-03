@@ -88,7 +88,7 @@ class Trainer:
 
             # Generate self-play games
             game_start_time = time.time()
-            games = generate_games(self.mcts, self.config)
+            games = generate_games(self.mcts, self.model, self.config)
             game_time = time.time() - game_start_time
             self.logger.info(f"Self-play completed in {game_time:.1f}s")
 

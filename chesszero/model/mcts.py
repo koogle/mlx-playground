@@ -105,11 +105,8 @@ class MCTS:
         self._policy_cache = {}  # Cache for policy evaluations
         self._tree_cache = {}  # Cache for subtrees
 
-        # Add debugging stats
-        self.max_path_length = 0
-        self.total_paths = 0
-        self.path_lengths = []  # Track all path lengths
-        self.current_game_moves = 0  # Track moves in current game
+        if self.debug:
+            self.path_lengths = []  # Track all path lengths
 
     def clear_all_caches(self):
         """Clear all caches between games and force garbage collection"""
@@ -127,10 +124,8 @@ class MCTS:
         self.moves_made = 0
 
         # Reset path statistics for new game
-        self.max_path_length = 0
-        self.path_lengths = []
-        self.total_paths = 0
-        self.current_game_moves = 0
+        if self.debug:
+            self.path_lengths = []
 
     def _init_move_encoding_table(
         self,
@@ -259,8 +254,6 @@ class MCTS:
         return board.get_hash()
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-        """Get best move using MCTS with optional temperature sampling"""
-        self.current_game_moves += 1
 
         # Don't switch to eval mode during training
         if not self.training:
@@ -435,7 +428,6 @@ class MCTS:
         nodes_to_expand = []
         board_states = []
         paths = []
-        max_depth_this_batch = 0
 
         # Selection phase - find nodes to evaluate
         for i in range(batch_size):
@@ -487,8 +479,6 @@ class MCTS:
                 depth += 1
 
             # Update statistics
-            max_depth_this_batch = max(max_depth_this_batch, depth)
-            self.max_path_length = max(self.max_path_length, depth)
             if self.debug:
                 self.path_lengths.append(depth)
             paths_buffer[i] = path

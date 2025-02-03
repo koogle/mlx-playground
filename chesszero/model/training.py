@@ -119,7 +119,6 @@ class Trainer:
             n_batches = 0
             policy_loss = 0
             value_loss = 0
-            raise ValueError("test")
 
             for batch_idx, batch in enumerate(tqdm(batches, desc="Training batches")):
                 self.logger.info(f"\nProcessing batch {batch_idx + 1}/{len(batches)}")

@@ -266,7 +266,6 @@ class MCTS:
             self._expand_node(self.root_node, policies[0], values[0].item())
 
             if not self.root_node.children:
-                print("no children")
                 return None
 
             # Pre-allocate buffers once
@@ -479,7 +478,7 @@ class MCTS:
         second_best = moves_data[1]
 
         # Need minimum visits before considering stopping
-        if root.visit_count < 100 or best_visits < 50:
+        if root.visit_count < 70 or best_visits < 35:
             return False
 
         # Only stop if we have clear dominance in both visits and value

@@ -78,7 +78,7 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = config.debug
-        self.cache_max_size = 10000  # Adjust this based on memory constraints
+        self.cache_max_size = 100000  # Adjust this based on memory constraints
         self.position_cache = {}
         self.all_moves_cache = {}
         self.training = True
@@ -89,7 +89,7 @@ class MCTS:
 
         # Pre-compute move encoding table and buffers
         self._move_encoding_table = self._init_move_encoding_table()
-        self.max_batch_size = 128
+        self.max_batch_size = 2000
 
         self._value_cache = {}  # Cache for evaluated positions
         self._policy_cache = {}  # Cache for policy evaluations

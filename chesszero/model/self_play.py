@@ -43,7 +43,7 @@ def generate_games(model: ChessNet, config: ModelConfig) -> List[Tuple]:
     logger = logging.getLogger(__name__)
     games = []
 
-    MOVES_PER_WORKER = 40  # Number of moves before recycling worker
+    MOVES_PER_WORKER = 100  # Number of moves before recycling worker
 
     for game_idx in range(config.n_games_per_iteration):
         game = ChessGame()

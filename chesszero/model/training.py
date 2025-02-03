@@ -14,6 +14,10 @@ from pathlib import Path
 import time
 import logging
 from tqdm import tqdm
+import gc
+import psutil
+import os
+import traceback
 
 
 class Trainer:
@@ -74,7 +78,7 @@ class Trainer:
         self.mcts = MCTS(self.model, config)
 
     def train(self, n_epochs: Optional[int] = None):
-        """Main training loop"""
+        """Main training loop with memory optimizations"""
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()
 
@@ -86,34 +90,26 @@ class Trainer:
             self.model.train()
             self.mcts.debug = self.config.debug
 
-            # Generate self-play games
+            # Generate self-play games with memory tracking
             game_start_time = time.time()
+            initial_memory = self._get_memory_usage()
+            self.logger.info(f"Memory before self-play: {initial_memory}")
+
             games = generate_games(self.model, self.config)
+
             game_time = time.time() - game_start_time
+            post_games_memory = self._get_memory_usage()
+            self.logger.info(f"Memory after self-play: {post_games_memory}")
             self.logger.info(f"Self-play completed in {game_time:.1f}s")
 
-            # Log game statistics and verify game data
-            total_positions = sum(len(game_history) for game_history, _ in games)
-            avg_moves = total_positions / len(games) if games else 0
-            self.logger.info(f"Average moves per game: {avg_moves:.1f}")
-            self.logger.info(f"Total training positions: {total_positions}")
-
-            # Debug game data structure
-            self.logger.info("Game data structure:")
-            for i, (game_history, result) in enumerate(games):
-                self.logger.info(f"Game {i+1}:")
-                self.logger.info(f"  Moves: {len(game_history)}")
-                self.logger.info(f"  Result: {result}")
-
-            # Create and verify batches
+            # Create batches with memory tracking
             batches = list(create_batches(games, self.config.batch_size))
-            self.logger.info(f"Created {len(batches)} batches")
 
-            if not batches:
-                self.logger.warning("No batches created for training!")
-                continue
+            # Clear games data after creating batches
+            del games
+            gc.collect()
 
-            # Train on game data
+            # Train on game data with periodic cleanup
             self.logger.info("Training on game data...")
             total_loss = 0
             n_batches = 0
@@ -121,16 +117,34 @@ class Trainer:
             value_loss = 0
 
             for batch_idx, batch in enumerate(tqdm(batches, desc="Training batches")):
-                self.logger.info(f"\nProcessing batch {batch_idx + 1}/{len(batches)}")
-                loss, p_loss, v_loss = self.train_on_batch(batch)
-                total_loss += loss
-                policy_loss += p_loss
-                value_loss += v_loss
-                n_batches += 1
+                try:
+                    # Periodic memory logging
+                    if batch_idx % 10 == 0:
+                        self.logger.info(
+                            f"Memory state before batch {batch_idx}: {self._get_memory_usage()}"
+                        )
 
+                    loss, p_loss, v_loss = self.train_on_batch(batch)
+                    total_loss += loss
+                    policy_loss += p_loss
+                    value_loss += v_loss
+                    n_batches += 1
+
+                    # Periodic cleanup
+                    if batch_idx % 10 == 0:
+                        gc.collect()
+
+                except Exception as e:
+                    self.logger.error(f"\nError in batch {batch_idx}:")
+                    self.logger.error(str(e))
+                    self.logger.error(traceback.format_exc())
+                    continue
+
+            # Calculate averages and log results
             avg_loss = total_loss / n_batches if n_batches > 0 else 0
             avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
             avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
+
             epoch_time = time.time() - epoch_start_time
 
             # Log detailed training statistics
@@ -163,62 +177,77 @@ class Trainer:
         self.logger.info(f"Total training time: {total_time/3600:.1f} hours")
 
     def train_on_batch(self, batch):
-        """Train on a single batch of data with adjusted loss calculation"""
+        """Train on a single batch of data with memory optimizations"""
         states, policies, values = batch  # Unpack the batch correctly
 
-        # Debug output for input tensors
-        self.logger.info(f"States shape: {states.shape}, dtype: {states.dtype}")
-        self.logger.info(f"Policies shape: {policies.shape}, dtype: {policies.dtype}")
-        self.logger.info(f"Values shape: {values.shape}, dtype: {values.dtype}")
-        self.logger.info(f"Sample values: {values[:5]}")
-        self.logger.info(
-            f"Sample policy sums: {[mx.sum(p).item() for p in policies[:5]]}"
-        )
+        try:
+            # Track memory usage
+            mem_before = self._get_memory_usage()
+            self.logger.debug(f"Memory before training step: {mem_before}")
 
-        @mx.compile
-        def loss_fn(model_params, states, policies, values):
-            self.model.update(model_params)
-            pred_policies, pred_values = self.model(states)
+            @mx.compile  # Compile for better performance
+            def loss_fn(model_params, states, policies, values):
+                self.model.update(model_params)
+                pred_policies, pred_values = self.model(states)
 
-            # Ensure pred_values is a proper MLX array and reshape if needed
-            if isinstance(pred_values, dict):
-                pred_values = mx.array(list(pred_values.values()), dtype=mx.float32)
-            pred_values = mx.reshape(pred_values, values.shape)
+                # Ensure pred_values is a proper MLX array and reshape if needed
+                if isinstance(pred_values, dict):
+                    pred_values = mx.array(list(pred_values.values()), dtype=mx.float32)
+                pred_values = mx.reshape(pred_values, values.shape)
 
-            # Debug predictions
-            self.logger.info(f"Pred values: {pred_values[:5]}")
-            self.logger.info(
-                f"Pred policy sums: {[mx.sum(p).item() for p in pred_policies[:5]]}"
+                # Policy loss calculation (with numerical stability)
+                p_loss = -mx.mean(
+                    mx.sum(policies * mx.log(pred_policies + 1e-8), axis=1)
+                )
+
+                # Value loss calculation
+                v_loss = mx.mean(mx.square(values - pred_values))
+
+                total_loss = p_loss + v_loss
+                return total_loss, (p_loss, v_loss)
+
+            # Compute loss and gradients in one step
+            (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn)(
+                self.model.parameters(), states, policies, values
             )
 
-            # Policy loss calculation
-            p_loss = -mx.mean(mx.sum(policies * mx.log(pred_policies + 1e-8), axis=1))
+            # Update model parameters and immediately evaluate
+            self.optimizer.update(self.model, grads)
+            mx.eval(self.model.parameters(), self.optimizer.state)
 
-            # Value loss calculation
-            v_loss = mx.mean(mx.square(values - pred_values))
+            # Clean up intermediate tensors
+            del grads
+            gc.collect()  # Force garbage collection
 
-            # Debug loss components
-            self.logger.info(f"Policy loss: {p_loss.item()}")
-            self.logger.info(f"Value loss: {v_loss.item()}")
+            mem_after = self._get_memory_usage()
+            self.logger.debug(f"Memory after training step: {mem_after}")
 
-            total_loss = p_loss + v_loss  # l2_reg
-            return total_loss, (p_loss, v_loss)
+            # Memory change logging
+            mem_diff = {k: mem_after[k] - mem_before[k] for k in mem_before}
+            self.logger.debug(f"Memory change during step: {mem_diff}")
 
-        # Compute loss and gradients
-        (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn)(
-            self.model.parameters(), states, policies, values
-        )
+            return loss.item(), p_loss.item(), v_loss.item()
 
-        # Update model parameters
-        self.optimizer.update(self.model, grads)
-        mx.eval(self.model.parameters(), self.optimizer.state)
+        except Exception as e:
+            self.logger.error(f"\nError in training step:")
+            self.logger.error(f"Exception type: {type(e).__name__}")
+            self.logger.error(f"Exception message: {str(e)}")
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            self.logger.error(f"Memory state: {self._get_memory_usage()}")
+            self.logger.error(
+                f"Batch shapes - States: {states.shape}, Policies: {policies.shape}, Values: {values.shape}"
+            )
+            raise
 
-        # Final loss values
-        self.logger.info(
-            f"Final losses - Total: {loss.item()}, Policy: {p_loss.item()}, Value: {v_loss.item()}"
-        )
-
-        return loss.item(), p_loss.item(), v_loss.item()
+    def _get_memory_usage(self):
+        """Get current memory usage information"""
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info()
+        return {
+            "rss": mem_info.rss / (1024 * 1024),  # RSS in MB
+            "vms": mem_info.vms / (1024 * 1024),  # VMS in MB
+            "system_percent": psutil.virtual_memory().percent,
+        }
 
     def evaluate(self, n_games: int = 100) -> float:
         """Evaluate current model against random player"""

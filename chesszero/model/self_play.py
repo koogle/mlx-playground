@@ -12,14 +12,29 @@ import logging
 import multiprocessing as mp
 
 
-def mcts_worker(model, config, board, result_queue):
-    """Run MCTS in isolated process with full memory containment"""
-    mcts = MCTS(model, config)
-    move = mcts.get_move(board, temperature=1.0)
-    policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
+def mcts_worker(model, config, board, n_moves, result_queue):
+    """Run MCTS for multiple moves in sequence"""
+    moves_and_policies = []
 
-    # Return simple types
-    result_queue.put((move, policy))
+    for _ in range(n_moves):
+        if board.is_game_over():
+            break
+
+        mcts = MCTS(model, config)
+        move = mcts.get_move(board, temperature=1.0)
+        if not move:
+            break
+
+        policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
+        moves_and_policies.append((move, policy))
+
+        # Update board for next move
+        board.make_move(move[0], move[1])
+
+        # Clean up MCTS instance
+        del mcts
+
+    result_queue.put(moves_and_policies)
 
 
 def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
@@ -27,33 +42,33 @@ def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tu
     logger = logging.getLogger(__name__)
     games = []
 
-    # Serialize model parameters
+    # Create process context and queue
     ctx = mp.get_context("spawn")
     result_queue = ctx.Queue()
+
+    MOVES_PER_WORKER = 20  # Number of moves each worker handles
 
     for game_idx in range(config.n_games_per_iteration):
         game = ChessGame()
         game_history = []
         pbar = tqdm(total=200, desc=f"Game {game_idx+1}", leave=False)
 
-        for _ in range(200):
-            if game.board.is_game_over():
-                break
-
-            # Start isolated process
+        while not game.board.is_game_over() and len(game_history) < 200:
+            # Start isolated process for batch of moves
             p = ctx.Process(
                 target=mcts_worker,
                 args=(
                     model,
                     config,
                     game.board,
+                    MOVES_PER_WORKER,
                     result_queue,
                 ),
             )
             p.start()
 
             # Wait with timeout
-            p.join(timeout=10)
+            p.join(timeout=MOVES_PER_WORKER * 2)  # Longer timeout for multiple moves
 
             # Handle timeouts
             if p.exitcode is None:
@@ -64,38 +79,37 @@ def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tu
 
             # Get results
             try:
-                move, policy = result_queue.get_nowait()
+                moves_and_policies = result_queue.get_nowait()
             except Exception:
                 break
 
-            if not move:
-                break
+            # Process each move from the worker
+            for move, policy in moves_and_policies:
+                if game.board.is_game_over():
+                    break
 
-            # Record and make move
-            state = mx.array(game.board.state, dtype=mx.float32)
-            game_history.append((state, policy, None))
-            game.make_move(move[0], move[1])
-            pbar.update(1)
+                state = mx.array(game.board.state, dtype=mx.float32)
+                game_history.append((state, policy, None))
+                game.make_move(move[0], move[1])
+                pbar.update(1)
 
         pbar.close()
 
-        # Get game result from both perspectives
+        # Process game results
         white_result = game.board.get_game_result(perspective_color=0)
         black_result = game.board.get_game_result(perspective_color=1)
 
-        # Add game twice - once from each perspective
-        games.append((game_history, white_result))  # White's perspective
-        games.append((game_history, black_result))  # Black's perspective
+        # Convert draws (0.0) to -0.5 to discourage drawing
+        white_result = -0.5 if white_result == 0.0 else white_result
+        black_result = -0.5 if black_result == 0.0 else black_result
+
+        games.append((game_history, white_result))
+        games.append((game_history, black_result))
 
         logger.info(f"Game {game_idx + 1} completed with {len(game_history)} moves")
         logger.info(f"White result: {white_result}, Black result: {black_result}")
         logger.info(f"Final board:\n{game.board}")
 
-    if len(games) == 0:
-        logger.warning("No valid games were generated!")
-    logger.info(
-        f"Generated {len(games)} training instances from {config.n_games_per_iteration} games"
-    )
     return games
 
 

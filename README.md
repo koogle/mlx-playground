@@ -2,6 +2,96 @@
 
 This repository contains machine learning examples implemented using Apple's MLX framework, focusing on efficient implementations for Apple Silicon.
 
+## ChessZero
+
+A chess engine implementation inspired by AlphaZero, using MLX for neural network computations and Monte Carlo Tree Search (MCTS) for move selection.
+
+### Key Features
+- Neural MCTS implementation with extensive caching
+- Process-isolated MCTS for memory safety
+- MLX-based neural network with residual blocks
+- Self-play training pipeline
+- Bitboard-based chess engine
+- Real-time move evaluation
+
+### Architecture
+
+#### Neural Network
+- 19 residual blocks
+- 256 filters per layer
+- Policy head: 4672 possible moves
+- Value head: Position evaluation
+- Input: 19-channel board state
+
+```
+Model Configuration:
+- Residual Blocks: 19
+- Filters: 256
+- Policy Output: 4672 moves
+- Input Shape: (8, 8, 19)
+- Batch Size: 2048
+```
+
+#### MCTS Implementation
+- Process-isolated for memory safety
+- Extensive caching system:
+  - Position cache
+  - Valid moves cache
+  - Policy/value cache
+  - Transposition table
+- Early stopping with clear dominance detection
+- Configurable simulation count (default 1000)
+- Temperature-based exploration
+
+```python
+# Example MCTS early stopping output:
+"Clear dominance - visits ratio: 6.7, value diff: 0.96"
+"Stopping simulations early at simulation 256 of 1000"
+```
+
+### Known Limitations
+- Memory leaks in core MCTS implementation
+- Process isolation adds overhead
+- Immature evaluation function
+- Limited opening book
+
+### Training Pipeline
+1. Self-play game generation
+2. Position and result collection
+3. Batch creation and training
+4. Regular evaluation against random player
+
+### Sample Output
+```
+  a b c d e f g h
+8 · · · · · · · · 8
+7 · · · · · ♘ · · 7
+6 · · · · · · ♛ · 6
+5 · · · ♙ · · · · 5
+4 · ♟ · · · · ♝ ♟ 4
+3 · · · · ♟ · · · 3
+2 · · · ♗ · · ♚ · 2
+1 ♔ · · · · · · · 1
+  a b c d e f g h
+```
+
+### ChessZero Usage
+
+1. Training:
+```bash
+python chesszero/train.py
+```
+
+2. Play against AI:
+```bash
+python chesszero/chess_engine/main.py --mode ai
+```
+
+3. Watch AI self-play:
+```bash
+python chesszero/chess_engine/main.py --mode auto
+```
+
 ## YOLO Object Detection
 
 A streamlined implementation of YOLOv2 (You Only Look Once v2) object detection using MLX, optimized for Apple Silicon.
@@ -45,7 +135,7 @@ The model is trained on PASCAL VOC 2012 with 20 object classes:
 - Indoor Objects: bottle, chair, diningtable, pottedplant, sofa, tvmonitor
 - People: person
 
-### Usage
+### YOLO Usage
 
 1. Setup:
 ```bash
@@ -101,8 +191,10 @@ yolo/
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit pull requests, particularly for:
-- Additional ML model implementations
+Contributions are welcome! Key areas for improvement:
+- MCTS memory management
+- Evaluation function
+- Opening book implementation
 - Performance optimizations
 - Documentation improvements
 - Bug fixes

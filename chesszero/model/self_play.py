@@ -12,86 +12,102 @@ import logging
 import multiprocessing as mp
 
 
-def mcts_worker(model, config, board, n_moves, result_queue):
-    """Run MCTS for multiple moves in sequence"""
-    moves_and_policies = []
+def mcts_worker(model, config, input_queue, result_queue):
+    """Long-running worker that processes multiple board states"""
+    mcts = MCTS(model, config)
 
-    for _ in range(n_moves):
-        if board.is_game_over():
+    while True:
+        try:
+            # Get next board state from main process
+            board = input_queue.get()
+            if board is None:  # Shutdown signal
+                break
+
+            # Get move for current position
+            move = mcts.get_move(board, temperature=1.0)
+            if not move:
+                result_queue.put(None)  # Signal no valid moves
+                continue
+
+            policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
+            result_queue.put((move, policy))
+
+        except Exception as e:
+            print(f"Worker error: {e}")
+            result_queue.put(None)
             break
-
-        mcts = MCTS(model, config)
-        move = mcts.get_move(board, temperature=1.0)
-        if not move:
-            break
-
-        policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
-        moves_and_policies.append((move, policy))
-
-        # Update board for next move
-        board.make_move(move[0], move[1])
-
-        # Clean up MCTS instance
-        del mcts
-
-    result_queue.put(moves_and_policies)
 
 
 def generate_games(_mcts: MCTS, model: ChessNet, config: ModelConfig) -> List[Tuple]:
-    """Process-isolated self-play implementation"""
+    """Process-isolated self-play implementation with worker recycling"""
     logger = logging.getLogger(__name__)
     games = []
 
-    # Create process context and queue
-    ctx = mp.get_context("spawn")
-    result_queue = ctx.Queue()
-
-    MOVES_PER_WORKER = 20  # Number of moves each worker handles
+    MOVES_PER_WORKER = 40  # Number of moves before recycling worker
 
     for game_idx in range(config.n_games_per_iteration):
         game = ChessGame()
         game_history = []
         pbar = tqdm(total=200, desc=f"Game {game_idx+1}", leave=False)
+        move_count = 0
 
-        while not game.board.is_game_over() and len(game_history) < 200:
-            # Start isolated process for batch of moves
-            p = ctx.Process(
-                target=mcts_worker,
-                args=(
-                    model,
-                    config,
-                    game.board,
-                    MOVES_PER_WORKER,
-                    result_queue,
-                ),
-            )
-            p.start()
+        # Create process context and queues
+        ctx = mp.get_context("spawn")
+        input_queue = ctx.Queue()
+        result_queue = ctx.Queue()
 
-            # Wait with timeout
-            p.join(timeout=MOVES_PER_WORKER * 2)  # Longer timeout for multiple moves
+        # Start worker process
+        worker = ctx.Process(
+            target=mcts_worker, args=(model, config, input_queue, result_queue)
+        )
+        worker.start()
 
-            # Handle timeouts
-            if p.exitcode is None:
-                p.terminate()
-                p.join()
-                logger.error("MCTS process timeout")
-                break
+        try:
+            while not game.board.is_game_over() and len(game_history) < 200:
+                # Check if we need to recycle worker
+                if move_count >= MOVES_PER_WORKER:
+                    logger.info("Recycling MCTS worker process")
+                    input_queue.put(None)  # Signal shutdown
+                    worker.join(timeout=5)
+                    if worker.exitcode is None:
+                        worker.terminate()
+                    worker.join()
 
-            # Get results
-            try:
-                moves_and_policies = result_queue.get_nowait()
-            except Exception:
-                break
+                    worker = ctx.Process(
+                        target=mcts_worker,
+                        args=(model, config, input_queue, result_queue),
+                    )
+                    worker.start()
+                    move_count = 0
 
-            # Process each move from the worker
-            for move, policy in moves_and_policies:
-                if game.board.is_game_over():
+                # Send current board to worker
+                input_queue.put(game.board)
+
+                # Wait for result with timeout
+                try:
+                    result = result_queue.get(timeout=3)
+                    if result is None:
+                        logger.error("Worker returned no move")
+                        break
+
+                    move, policy = result
+                    state = mx.array(game.board.state, dtype=mx.float32)
+                    game_history.append((state, policy, None))
+                    game.make_move(move[0], move[1])
+                    move_count += 1
+                    pbar.update(1)
+
+                except Exception as e:
+                    logger.error(f"Error getting move: {e}")
                     break
 
-                state = mx.array(game.board.state, dtype=mx.float32)
-                game_history.append((state, policy, None))
-                game.make_move(move[0], move[1])
-                pbar.update(1)
+        finally:
+            # Clean up worker
+            input_queue.put(None)  # Signal shutdown
+            worker.join(timeout=3)
+            if worker.exitcode is None:
+                worker.terminate()
+            worker.join()
 
         pbar.close()
 

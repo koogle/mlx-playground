@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "dataclasses>=0.8",
+    "memory-profiler>=0.61.0",
     "mlx>=0.21.1",
     "numpy>=2.2.0",
     "opencv-python>=4.10.0.84",

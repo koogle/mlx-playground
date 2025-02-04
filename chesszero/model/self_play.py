@@ -14,7 +14,11 @@ import traceback
 
 
 def play_single_game(
-    model: ChessNet, config: ModelConfig, game_id: int, result_queue: mp.Queue
+    model: ChessNet,
+    config: ModelConfig,
+    game_id: int,
+    result_queue: mp.Queue,
+    max_workers: int,
 ):
     """Worker process that plays a single complete game"""
     logger = logging.getLogger(__name__)
@@ -23,7 +27,7 @@ def play_single_game(
         game_history = []
 
         # Create a position for this game's progress bar that won't overlap with others
-        position = game_id % 5  # Cycle through 5 positions
+        position = game_id % max_workers  # Cycle through max_workers positions
         pbar = tqdm(total=200, desc=f"Game {game_id}", position=position, leave=False)
 
         while not game.board.is_game_over() and len(game_history) < 200:
@@ -90,7 +94,8 @@ def generate_games(
             # Launch new workers up to max_workers
             while len(active_workers) < max_workers and game_id < total_games_needed:
                 p = ctx.Process(
-                    target=play_single_game, args=(model, config, game_id, result_queue)
+                    target=play_single_game,
+                    args=(model, config, game_id, result_queue, max_workers),
                 )
                 p.start()
                 active_workers.append((p, game_id))

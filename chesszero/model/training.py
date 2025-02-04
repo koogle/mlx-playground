@@ -260,9 +260,7 @@ class Trainer:
         win_rate = wins / total_games
         return win_rate, wins, losses, draws
 
-    def play_evaluation_game(
-        self, opponent, mcts_player_color, show_board: bool = False
-    ) -> float:
+    def play_evaluation_game(self, opponent, mcts_player_color) -> float:
         """Play a single evaluation game with adjusted scoring"""
         game = ChessGame()
 
@@ -277,9 +275,6 @@ class Trainer:
                 return 0.5  # Draw - no valid moves
 
             game.make_move(move[0], move[1])
-
-            if show_board:
-                print(game.board)
 
         # Check game outcome using BitBoard methods
         if game.board.is_checkmate(mcts_player_color):

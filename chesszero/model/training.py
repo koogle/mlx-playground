@@ -274,18 +274,7 @@ class Trainer:
         moves_without_progress = 0
         max_moves_without_progress = 50  # Fifty move rule
 
-        while True:
-            state = game.get_game_state()
-            if state != "Normal":
-                if "Checkmate" in state:
-                    winner = "Black" if "White wins" in state else "White"
-                    if (winner == "White" and mcts_player_color == 0) or (
-                        winner == "Black" and mcts_player_color == 1
-                    ):
-                        return 1  # Win
-                    return 0  # Loss
-                return 0.5  # Draw
-
+        while not game.board.is_game_over():
             # Check for move limit or repetition
             if moves_without_progress >= max_moves_without_progress:
                 return 0.5  # Draw due to no progress
@@ -308,3 +297,15 @@ class Trainer:
 
             if show_board:
                 print(game.board)
+
+        # Check game outcome using BitBoard methods
+        if game.board.is_checkmate(mcts_player_color):
+            return 0  # Loss - we're in checkmate
+        elif game.board.is_checkmate(1 - mcts_player_color):
+            return 1  # Win - opponent is in checkmate
+        elif game.board.is_stalemate(mcts_player_color) or game.board.is_stalemate(
+            1 - mcts_player_color
+        ):
+            return 0.5  # Draw - stalemate
+        elif game.board.is_draw():
+            return 0.5  # Draw - insufficient material or other draw condition

@@ -81,7 +81,6 @@ def main():
         #    print("\nLast move:", game.move_history[-1])
 
     print("\nGame Over!")
-    print(game.get_game_state())
     print("\nFinal game history:")
     print_move_history(game)
 

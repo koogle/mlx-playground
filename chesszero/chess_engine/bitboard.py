@@ -617,11 +617,9 @@ class BitBoard:
         self.state[12] = 1  # White to move
 
     def is_draw(self) -> bool:
-        """Check if the position is a draw (stalemate or insufficient material)"""
-        current_turn = self.get_current_turn()
-
-        # Check for stalemate
-        if self.is_stalemate(current_turn):
+        """Check if the position is a draw (insufficient material or 50-move rule)"""
+        # First check 50-move rule
+        if self.get_moves_without_progress() >= 50:
             return True
 
         # Get all pieces

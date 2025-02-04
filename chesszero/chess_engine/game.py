@@ -8,8 +8,6 @@ class ChessGame:
     def __init__(self):
         self.board = BitBoard()
         self.move_history: List[str] = []
-        self.moves_without_progress = 0  # Counter for 50/75 move rule
-        self.DEBUG = False
 
     def _get_piece_symbol(self, piece_type: int) -> str:
         """Get the algebraic notation symbol for a piece."""
@@ -69,22 +67,14 @@ class ChessGame:
         """Make a move in the game"""
         # Track moves without captures or pawn moves for 50/75 move rule
         piece = self.board.get_piece_at(*from_pos)
-        target = self.board.get_piece_at(*to_pos)
-
-        # piece[1] == 0 is pawn
-        if piece[1] == 0 or target[0] != -1:  # -1 means no piece
-            self.moves_without_progress = 0
-        else:
-            self.moves_without_progress += 1
 
         if self.board.make_move(from_pos, to_pos):
-            # Convert move to algebraic notation
+            # Convert move to algebraic notation and add to history
             move_str = self._move_to_algebraic(
                 from_pos,
                 to_pos,
                 (piece[1], piece[0]),  # (piece_type, color)
             )
-
             self.move_history.append(move_str)
             return True
         return False
@@ -274,21 +264,21 @@ class ChessGame:
 
     def is_over(self) -> bool:
         """Check if the game is over (checkmate, stalemate, or draw)"""
-        return (
-            self.board.is_checkmate(self.board.get_current_turn())
-            or self.board.is_stalemate(self.board.get_current_turn())
-            or len(self.move_history) >= 200  # Maximum game length
-            or self.moves_without_progress >= 75  # 75-move rule
-            or self.board.is_draw()  # Other draw conditions
-        )
+        current_turn = self.board.get_current_turn()
 
-    def is_draw(self) -> bool:
-        """Check if the game is a draw"""
-        return (
-            self.board.is_draw()  # Original draw conditions (stalemate, insufficient material)
-            or self.moves_without_progress >= 75  # 75-move rule
-            or len(self.move_history) >= 200  # Maximum game length
-        )
+        # Check for checkmate
+        if self.board.is_checkmate(current_turn):
+            return True
+
+        # Check for stalemate
+        if self.board.is_stalemate(current_turn):
+            return True
+
+        # Check for insufficient material
+        if self.board.is_draw():
+            return True
+
+        return False
 
     def get_current_turn(self) -> int:
         """Get current player's turn (0 for white, 1 for black)"""
@@ -442,18 +432,6 @@ class ChessGame:
             return None
         return (color, piece_type)
 
-    def is_game_over(self) -> bool:
-        """Check if the game is over (checkmate, stalemate, or draw)"""
-        current_turn = self.board.get_current_turn()
-
-        return (
-            self.board.is_checkmate(current_turn)
-            or self.board.is_stalemate(current_turn)
-            or self.board.is_draw()
-            or self.moves_without_progress >= 75
-            or len(self.move_history) >= 200
-        )
-
     def make_move_algebraic(self, move_str: str) -> bool:
         """Make a move using algebraic notation (e.g. 'e2e4', 'Nf3')"""
         from_pos, to_pos = self.parse_move(move_str)
@@ -473,3 +451,32 @@ class ChessGame:
         to_square = files[to_pos[1]] + ranks[to_pos[0]]
 
         return f"{from_square}{to_square}"
+
+    def get_game_result(self, perspective_color: Optional[int] = None) -> float:
+        """Get the game result from the given color's perspective
+        Args:
+            perspective_color: 0 for white, 1 for black. If None, uses current turn
+        Returns:
+            1.0 for win
+            -1.0 for loss
+            0.0 for draw
+        """
+        if perspective_color is None:
+            perspective_color = self.board.get_current_turn()
+
+        opponent_color = 1 - perspective_color
+
+        # Check if perspective player is checkmated
+        if self.board.is_checkmate(perspective_color):
+            return -1.0  # Loss
+
+        # Check if opponent is checkmated
+        elif self.board.is_checkmate(opponent_color):
+            return 1.0  # Win
+
+        # Check for draws (stalemate or insufficient material or 50-move rule)
+        elif self.board.is_stalemate(perspective_color) or self.board.is_draw():
+            return 0.0  # Draw
+
+        # Game not over
+        return 0.0

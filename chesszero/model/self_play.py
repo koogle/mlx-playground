@@ -28,9 +28,9 @@ def play_single_game(
 
         # Create a position for this game's progress bar that won't overlap with others
         position = game_id % max_workers  # Cycle through max_workers positions
-        pbar = tqdm(total=200, desc=f"Game {game_id}", position=position, leave=False)
+        pbar = tqdm(desc=f"Game {game_id}", position=position, leave=False)
 
-        while not game.board.is_game_over() and len(game_history) < 200:
+        while not game.is_over():
             mcts = MCTS(model, config)
             # Get move and policy for current position
             move = mcts.get_move(game.board, temperature=1.0)
@@ -50,10 +50,6 @@ def play_single_game(
         # Process game results
         white_result = game.board.get_game_result(perspective_color=0)
         black_result = game.board.get_game_result(perspective_color=1)
-
-        # Convert draws to -0.5 to discourage drawing
-        # white_result = -0.5 if white_result == 0.0 else white_result
-        # black_result = -0.5 if black_result == 0.0 else black_result
 
         # Send results back through queue
         result_queue.put(

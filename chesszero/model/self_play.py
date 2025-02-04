@@ -52,8 +52,8 @@ def play_single_game(
         black_result = game.board.get_game_result(perspective_color=1)
 
         # Convert draws to -0.5 to discourage drawing
-        white_result = -0.5 if white_result == 0.0 else white_result
-        black_result = -0.5 if black_result == 0.0 else black_result
+        # white_result = -0.5 if white_result == 0.0 else white_result
+        # black_result = -0.5 if black_result == 0.0 else black_result
 
         # Send results back through queue
         result_queue.put(

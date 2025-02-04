@@ -92,7 +92,7 @@ class Trainer:
                 gc.collect()
 
                 # Train on game data with periodic cleanup
-                self.logger.info("Training on game data...")
+                self.logger.info(f"Training on game data in epoch {epoch + 1}...")
                 total_loss = 0
                 n_batches = 0
                 policy_loss = 0

@@ -67,8 +67,6 @@ class Trainer:
                 weight_decay=config.weight_decay,
             )
 
-        self.mcts = MCTS(self.model, config)
-
     def train(self, n_epochs: Optional[int] = None, n_workers: int = 5):
         """Main training loop with parallel game generation"""
         n_epochs = n_epochs or self.config.n_epochs
@@ -274,7 +272,8 @@ class Trainer:
 
         while not game.board.is_game_over():
             if game.get_current_turn() == mcts_player_color:
-                move = self.mcts.get_move(game.board)
+                mcts = MCTS(self.model, self.config)
+                move = mcts.get_move(game.board, temperature=1.0)
             else:
                 move = opponent.select_move(game.board)
 

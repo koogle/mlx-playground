@@ -285,7 +285,7 @@ class Trainer:
             result_queue.put((game_id, None))
 
     def evaluate(
-        self, n_games: int = 10, max_workers: int = 4
+        self, n_games: int = 20, max_workers: int = 10
     ) -> Tuple[float, int, int, int]:
         """Evaluate current model against random player using parallel workers"""
         self.logger.info("\nEvaluating against random player...")

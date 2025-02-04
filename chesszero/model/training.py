@@ -244,11 +244,9 @@ class Trainer:
         for color in [0, 1]:
             for game_idx in range(n_games // 2):
                 # Show board for first evaluation game of each color if enabled
-                show_board = self.config.display_eval_game and game_idx == 0
+                # show_board = self.config.display_eval_game and game_idx == 0
 
-                result = self.play_evaluation_game(
-                    random_player, color, show_board=show_board
-                )
+                result = self.play_evaluation_game(random_player, color)
                 if result == 1:
                     wins += 1
                 elif result == 0:

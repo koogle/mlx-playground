@@ -28,7 +28,13 @@ def play_single_game(
 
         # Create a position for this game's progress bar that won't overlap with others
         position = game_id % max_workers  # Cycle through max_workers positions
-        pbar = tqdm(desc=f"Game {game_id}", position=position, leave=False)
+        pbar = tqdm(
+            desc=f"Game {game_id}",
+            position=position,
+            leave=False,
+            unit="moves",
+            unit_scale=True,
+        )
 
         while not game.is_over():
             mcts = MCTS(model, config)

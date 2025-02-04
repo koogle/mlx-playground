@@ -24,8 +24,8 @@ class ModelConfig:
     dirichlet_epsilon: float = 0.25  # Weight of Dirichlet noise
 
     # Training
-    batch_size: int = 2048
-    n_epochs: int = 500
+    batch_size: int = 1024  # 2048
+    n_epochs: int = 1000
     learning_rate: float = 0.2
     momentum: float = 0.9
     weight_decay: float = 1e-4

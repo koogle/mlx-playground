@@ -66,6 +66,8 @@ class BitBoard:
         # Pre-compute attack patterns for all squares
         self._init_attack_patterns()
 
+        self.position_history = {}  # Track position repetitions
+
     def initialize_board(self):
         """Set up the initial chess position"""
         # White pieces (channels 0-5)
@@ -139,6 +141,12 @@ class BitBoard:
     ) -> bool:
         """Make a move on the board. Returns True if successful.
         For pawn promotion, to_pos should be (row, col, promotion_piece_type)"""
+        # Update position history before making the move
+        current_hash = self.get_hash()
+        self.position_history[current_hash] = (
+            self.position_history.get(current_hash, 0) + 1
+        )
+
         # First validate current board state
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
@@ -270,6 +278,7 @@ class BitBoard:
         new_board.king_positions = {
             color: (row, col) for color, (row, col) in self.king_positions.items()
         }
+        new_board.position_history = self.position_history.copy()
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -617,12 +626,19 @@ class BitBoard:
         self.state[12] = 1  # White to move
 
     def is_draw(self) -> bool:
-        """Check if the position is a draw (insufficient material or 50-move rule)"""
+        """Check if the position is a draw (insufficient material, 50-move rule, or repetition)"""
         # First check 50-move rule
         if self.get_moves_without_progress() >= 50:
             return True
 
-        # Get all pieces
+        # Check for threefold repetition using the position history
+        # The position hash includes piece positions, castling rights, en passant squares, and side to move
+        current_hash = self.get_hash()
+        if current_hash in self.position_history:
+            if self.position_history[current_hash] >= 3:
+                return True
+
+        # Get all pieces for insufficient material check
         white_pieces = self.get_all_pieces(0)
         black_pieces = self.get_all_pieces(1)
 

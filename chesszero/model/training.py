@@ -243,18 +243,12 @@ class Trainer:
         try:
             game = ChessGame()
             move_count = 0
-            position_history = {}
+
             opponent = RandomPlayer()
             opponent_color = 1 - mcts_player_color
 
             while not game.board.is_game_over():
                 # Check for draw by repetition
-                pos_hash = game.board.get_hash()
-                position_history[pos_hash] = position_history.get(pos_hash, 0) + 1
-                if position_history[pos_hash] >= 3:
-                    result_queue.put((game_id, 0.5))  # Draw
-                    return
-
                 if game.get_current_turn() == mcts_player_color:
                     mcts = MCTS(model, config)
                     move = mcts.get_move(game.board, temperature=1.0)

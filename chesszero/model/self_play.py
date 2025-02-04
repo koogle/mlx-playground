@@ -22,7 +22,9 @@ def play_single_game(
         game = ChessGame()
         game_history = []
 
-        pbar = tqdm(total=200, desc=f"Game {game_id}", leave=False, id=game_id)
+        # Create a position for this game's progress bar that won't overlap with others
+        position = game_id % 5  # Cycle through 5 positions
+        pbar = tqdm(total=200, desc=f"Game {game_id}", position=position, leave=False)
 
         while not game.board.is_game_over() and len(game_history) < 200:
             mcts = MCTS(model, config)

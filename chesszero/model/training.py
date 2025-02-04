@@ -18,6 +18,8 @@ import gc
 import psutil
 import os
 import traceback
+import multiprocessing as mp
+from queue import Empty
 
 
 class Trainer:
@@ -230,76 +232,138 @@ class Trainer:
             "system_percent": psutil.virtual_memory().percent,
         }
 
-    def evaluate(self, n_games: int = 10) -> Tuple[float, int, int, int]:
-        """Evaluate current model against random player"""
+    def play_evaluation_game_worker(
+        model: ChessNet,
+        config: ModelConfig,
+        game_id: int,
+        mcts_player_color: int,
+        result_queue: mp.Queue,
+    ):
+        """Worker process that plays a single evaluation game"""
+        try:
+            game = ChessGame()
+            move_count = 0
+            position_history = {}
+            opponent = RandomPlayer()
+            opponent_color = 1 - mcts_player_color
+
+            while not game.board.is_game_over():
+                # Check for draw by repetition
+                pos_hash = game.board.get_hash()
+                position_history[pos_hash] = position_history.get(pos_hash, 0) + 1
+                if position_history[pos_hash] >= 3:
+                    result_queue.put((game_id, 0.5))  # Draw
+                    return
+
+                if game.get_current_turn() == mcts_player_color:
+                    mcts = MCTS(model, config)
+                    move = mcts.get_move(game.board, temperature=1.0)
+                else:
+                    move = opponent.select_move(game.board)
+
+                if not move:
+                    result_queue.put((game_id, 0.5))  # Draw
+                    return
+
+                game.make_move(move[0], move[1])
+                move_count += 1
+
+            # Determine game result
+            if game.board.is_checkmate(mcts_player_color):
+                result = 0  # Loss
+            elif game.board.is_checkmate(opponent_color):
+                result = 1  # Win
+            elif game.board.is_stalemate(mcts_player_color) or game.board.is_stalemate(
+                opponent_color
+            ):
+                result = 0.5  # Draw
+            elif game.board.is_draw():
+                result = 0.5  # Draw
+            else:
+                result = 0.5  # Fallback draw
+
+            result_queue.put((game_id, result))
+
+        except Exception as e:
+            logging.error(f"Error in evaluation game {game_id}: {str(e)}")
+            logging.error(traceback.format_exc())
+            result_queue.put((game_id, None))
+
+    def evaluate(
+        self, n_games: int = 10, max_workers: int = 4
+    ) -> Tuple[float, int, int, int]:
+        """Evaluate current model against random player using parallel workers"""
         self.logger.info("\nEvaluating against random player...")
 
-        random_player = RandomPlayer()
         wins = 0
         losses = 0
         draws = 0
         total_games = 0
 
-        # Play as both white and black
-        for color in [0, 1]:
-            for _ in range(n_games // 2):
-                # Show board for first evaluation game of each color if enabled
-                # show_board = self.config.display_eval_game and game_idx == 0
+        # Create process context and result queue
+        ctx = mp.get_context("spawn")
+        result_queue = ctx.Queue()
+        active_workers = []
+        game_id = 0
+        games_completed = 0
 
-                result = self.play_evaluation_game(random_player, color)
-                if result == 1:
-                    wins += 1
-                elif result == 0:
-                    losses += 1
-                else:
-                    draws += 1
-                total_games += 1
+        try:
+            # Play as both white and black
+            for color in [0, 1]:
+                games_per_color = n_games // 2
+                while games_completed < total_games + games_per_color:
+                    # Launch new workers up to max_workers
+                    while (
+                        len(active_workers) < max_workers and game_id < games_per_color
+                    ):
+                        p = ctx.Process(
+                            target=self.play_evaluation_game_worker,
+                            args=(
+                                self.model,
+                                self.config,
+                                game_id,
+                                color,
+                                result_queue,
+                            ),
+                        )
+                        p.start()
+                        active_workers.append((p, game_id))
+                        game_id += 1
 
-        win_rate = wins / total_games
+                    # Collect results
+                    try:
+                        game_id, result = result_queue.get(timeout=1)
+                        if result is not None:
+                            games_completed += 1
+                            if result == 1:
+                                wins += 1
+                            elif result == 0:
+                                losses += 1
+                            else:
+                                draws += 1
+                            self.logger.info(
+                                f"Evaluation game {game_id} completed with result: {result}"
+                            )
+
+                    except Empty:
+                        pass
+
+                    # Clean up completed workers
+                    active_workers = [
+                        (p, gid) for p, gid in active_workers if p.is_alive()
+                    ]
+
+                # Reset game_id for next color
+                game_id = 0
+                total_games = games_completed
+
+        finally:
+            # Clean up any remaining workers
+            for p, _ in active_workers:
+                if p.is_alive():
+                    p.terminate()
+                    p.join()
+
+        total_games = wins + losses + draws
+        win_rate = wins / total_games if total_games > 0 else 0
         return win_rate, wins, losses, draws
-
-    def play_evaluation_game(self, opponent, mcts_player_color) -> float:
-        """Play a single evaluation game with adjusted scoring"""
-        game = ChessGame()
-        move_count = 0
-        position_history = {}  # Track repeated positions
-        opponent_color = 1 - mcts_player_color
-
-        # Maximum moves before forced draw (100 moves = 50 full moves)
-        print("Playing eval game")
-
-        while not game.board.is_game_over():
-            # Check for draw by repetition
-            pos_hash = game.board.get_hash()
-            position_history[pos_hash] = position_history.get(pos_hash, 0) + 1
-            if position_history[pos_hash] >= 3:
-                return 0.5  # Draw by threefold repetition
-
-            if game.get_current_turn() == mcts_player_color:
-                mcts = MCTS(self.model, self.config)
-                move = mcts.get_move(game.board, temperature=1.0)
-            else:
-                move = opponent.select_move(game.board)
-
-            if not move:
-                return 0.5  # Draw - no valid moves
-
-            game.make_move(move[0], move[1])
-
-            print(game.board)
-            print(move_count)
-            move_count += 1
-
-        # Check game outcome using BitBoard methods
-        if game.board.is_checkmate(mcts_player_color):
-            return 0  # Loss - we're in checkmate
-        elif game.board.is_checkmate(opponent_color):
-            return 1  # Win - opponent is in checkmate
-        elif game.board.is_stalemate(mcts_player_color) or game.board.is_stalemate(
-            opponent_color
-        ):
-            return 0.5  # Draw - stalemate
-        elif game.board.is_draw():
-            return 0.5  # Draw - insufficient material or other draw condition
-
-        return 0.5  # Fallback draw

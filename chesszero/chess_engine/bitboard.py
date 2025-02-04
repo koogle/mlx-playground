@@ -635,21 +635,45 @@ class BitBoard:
         for _, piece_type in black_pieces:
             black_counts[piece_type] += 1
 
+        # Check for any pawns, rooks, or queens - these are always sufficient material
+        if (
+            white_counts[0] > 0
+            or white_counts[3] > 0
+            or white_counts[4] > 0
+            or black_counts[0] > 0
+            or black_counts[3] > 0
+            or black_counts[4] > 0
+        ):
+            return False
+
         # Insufficient material cases:
 
         # 1. King vs King
         if len(white_pieces) == 1 and len(black_pieces) == 1:
             return True
 
-        # 2. King and minor piece vs King
-        if (len(white_pieces) == 2 and len(black_pieces) == 1) or (
-            len(white_pieces) == 1 and len(black_pieces) == 2
+        # 2. King and minor piece(s) vs lone King
+        if (len(white_pieces) >= 2 and len(black_pieces) == 1) or (
+            len(white_pieces) == 1 and len(black_pieces) >= 2
         ):
-            # Check if extra piece is a knight or bishop
-            if (white_counts[1] == 1 or white_counts[2] == 1) or (
-                black_counts[1] == 1 or black_counts[2] == 1
-            ):
-                return True
+            # If either side has only knights, it's a draw
+            white_minors = white_counts[1] + white_counts[2]  # knights + bishops
+            black_minors = black_counts[1] + black_counts[2]  # knights + bishops
+
+            if len(black_pieces) == 1:  # White has the extra pieces
+                # Two knights vs lone king is a draw
+                if white_counts[1] == 2 and white_minors == 2:
+                    return True
+                # Single minor piece vs king is a draw
+                if white_minors == 1:
+                    return True
+            elif len(white_pieces) == 1:  # Black has the extra pieces
+                # Two knights vs lone king is a draw
+                if black_counts[1] == 2 and black_minors == 2:
+                    return True
+                # Single minor piece vs king is a draw
+                if black_minors == 1:
+                    return True
 
         # 3. King and bishop vs King and bishop (same colored squares)
         if len(white_pieces) == 2 and len(black_pieces) == 2:
@@ -661,10 +685,10 @@ class BitBoard:
                 black_bishop_pos = next(
                     pos for pos, piece_type in black_pieces if piece_type == 2
                 )
-                # Check if bishops are on same colored squares
-                if (white_bishop_pos[0] + white_bishop_pos[1]) % 2 == (
-                    black_bishop_pos[0] + black_bishop_pos[1]
-                ) % 2:
+                # Check if bishops are on same colored squares (using XOR)
+                if (white_bishop_pos[0] ^ white_bishop_pos[1]) == (
+                    black_bishop_pos[0] ^ black_bishop_pos[1]
+                ):
                     return True
 
         # 4. King and knight vs King and knight

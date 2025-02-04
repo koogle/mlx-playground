@@ -233,6 +233,7 @@ class Trainer:
         }
 
     def play_evaluation_game_worker(
+        self,
         model: ChessNet,
         config: ModelConfig,
         game_id: int,

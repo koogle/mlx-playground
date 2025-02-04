@@ -234,10 +234,6 @@ class Trainer:
         """Evaluate current model against random player"""
         self.logger.info("\nEvaluating against random player...")
 
-        # Set MCTS to evaluation mode
-        self.mcts.training = False
-        self.mcts.debug = self.config.debug  # Ensure debug flag is passed through
-
         random_player = RandomPlayer()
         wins = 0
         losses = 0

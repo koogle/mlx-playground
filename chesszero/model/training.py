@@ -39,15 +39,7 @@ class Trainer:
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         self.training_log = self.log_dir / f"training_log_{timestamp}.txt"
 
-        self.last_eval_time = time.time()
         self.logger = logging.getLogger(__name__)
-
-        # Add file handler for training log
-        file_handler = logging.FileHandler(self.training_log)
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        )
-        self.logger.addHandler(file_handler)
 
         # Log initial setup
         self.logger.info("=== Training Session Started ===")
@@ -136,11 +128,8 @@ class Trainer:
                 self.logger.info(f"Average policy loss: {avg_policy_loss:.4f}")
                 self.logger.info(f"Average value loss: {avg_value_loss:.4f}")
 
-                # Check if it's time for evaluation
-                current_time = time.time()
-                minutes_since_last_eval = (current_time - self.last_eval_time) / 60
-
-                if minutes_since_last_eval >= self.config.eval_interval_minutes:
+                # Check if it's time for evaluation based on epoch interval
+                if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
                     win_rate, wins, losses, draws = self.evaluate()
                     self.logger.info(f"Win rate vs random: {win_rate:.2%}")
@@ -154,9 +143,6 @@ class Trainer:
                         optimizer_state=self.optimizer.state,
                     )
                     self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
-
-                    # Update last eval time
-                    self.last_eval_time = current_time
 
             total_time = time.time() - start_time
             self.logger.info("\n=== Training Completed ===")
@@ -197,8 +183,8 @@ class Trainer:
                     mx.sum(policies * mx.log(pred_policies + 1e-8), axis=1)
                 )
 
-                # Value loss calculation
-                v_loss = mx.mean(mx.square(values - pred_values))
+                # Value loss calculation needs to be scaled against policy loss
+                v_loss = mx.mean(mx.square(values - pred_values)) * 10
 
                 total_loss = p_loss + v_loss
                 return total_loss, (p_loss, v_loss)

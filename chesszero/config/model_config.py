@@ -24,13 +24,6 @@ class ModelConfig:
     dirichlet_epsilon: float = 0.25  # Weight of Dirichlet noise
 
     # Training
-    """
-    batch_size: int = 2048
-    n_epochs: int = 500
-    learning_rate: float = 0.2
-    momentum: float = 0.9
-    weight_decay: float = 1e-4
-    """
     batch_size: int = 2048
     n_epochs: int = 500
     learning_rate: float = 0.2
@@ -47,5 +40,5 @@ class ModelConfig:
     debug: bool = True
 
     # Logging
-    eval_interval_minutes: int = 30  # Run evaluation every 30 minutes
+    eval_interval_epochs: int = 5  # Run evaluation every 5 epochs
     display_eval_game: bool = True  # Show board positions during evaluation

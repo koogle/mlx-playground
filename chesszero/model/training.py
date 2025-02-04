@@ -267,6 +267,7 @@ class Trainer:
 
         # Maximum moves before forced draw (100 moves = 50 full moves)
         MAX_MOVES = 200
+        print("Playing eval game")
 
         while not game.board.is_game_over():
             # Check for draw by repetition
@@ -289,6 +290,9 @@ class Trainer:
                 return 0.5  # Draw - no valid moves
 
             game.make_move(move[0], move[1])
+
+            print(game.board)
+            print(move_count)
             move_count += 1
 
         # Check game outcome using BitBoard methods

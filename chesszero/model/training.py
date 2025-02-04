@@ -271,14 +271,8 @@ class Trainer:
     ) -> float:
         """Play a single evaluation game with adjusted scoring"""
         game = ChessGame()
-        moves_without_progress = 0
-        max_moves_without_progress = 50  # Fifty move rule
 
         while not game.board.is_game_over():
-            # Check for move limit or repetition
-            if moves_without_progress >= max_moves_without_progress:
-                return 0.5  # Draw due to no progress
-
             if game.get_current_turn() == mcts_player_color:
                 move = self.mcts.get_move(game.board)
             else:
@@ -286,12 +280,6 @@ class Trainer:
 
             if not move:
                 return 0.5  # Draw - no valid moves
-
-            # Track moves without progress
-            if game.board.is_capture_or_pawn_move(move[0], move[1]):
-                moves_without_progress = 0
-            else:
-                moves_without_progress += 1
 
             game.make_move(move[0], move[1])
 

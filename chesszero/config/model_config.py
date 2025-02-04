@@ -31,15 +31,14 @@ class ModelConfig:
     momentum: float = 0.9
     weight_decay: float = 1e-4
     """
-    batch_size: int = 128  # 2048
+    batch_size: int = 2048
     n_epochs: int = 500
     learning_rate: float = 0.2
     momentum: float = 0.9
     weight_decay: float = 1e-4
 
     # Self-play
-    n_games_per_iteration: int = 10  # Fewer games per iteration for more frequent evals
-    # n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
+    n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
     temperature: float = 1.0  # Initial temperature for move selection
     temp_decay_steps: int = 10  # Number of moves before temperature decay
     temp_final: float = 0.1  # Final temperature after decay

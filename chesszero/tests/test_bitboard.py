@@ -89,26 +89,30 @@ class TestBoard(unittest.TestCase):
         """Test pinned piece movement restrictions"""
         # Clear the board
         self.board.state.fill(0)
+        self.board.king_positions = {
+            0: (0, 5),  # Move king to f1
+            1: (7, 4),
+        }
 
-        # Setup: White king at e1, White queen at e2, Black rook at e8
+        # Setup: White king at f1, White queen at f2, Black rook at f8
         # This creates a vertical pin
-        self.board.state[5, 0, 4] = 1  # White king at e1
-        self.board.state[4, 1, 4] = 1  # White queen at e2
-        self.board.state[9, 7, 4] = 1  # Black rook at e8
+        self.board.state[5, 0, 5] = 1  # White king at f1
+        self.board.state[4, 1, 5] = 1  # White queen at f2
+        self.board.state[9, 7, 5] = 1  # Black rook at f8
         self.board.state[12] = 1  # White to move
 
         # Get valid moves for the pinned queen
-        valid_moves = self.board.get_valid_moves((1, 4))
+        valid_moves = self.board.get_valid_moves((1, 5))
 
         # The queen can move along the pin line (vertically), including capturing the rook
         expected_moves = {
-            (2, 4),  # e3
-            (3, 4),  # e4
-            (4, 4),  # e5
-            (5, 4),  # e6
-            (6, 4),  # e7
-            (7, 4),  # e8 - capturing the rook is legal and removes the pin
-        }  # Only moves along the e-file
+            (2, 5),  # f3
+            (3, 5),  # f4
+            (4, 5),  # f5
+            (5, 5),  # f6
+            (6, 5),  # f7
+            (7, 5),  # f8 - capturing the rook is legal and removes the pin
+        }  # Only moves along the f-file
         assert (
             valid_moves == expected_moves
         ), f"Expected {expected_moves}, got {valid_moves}"
@@ -200,3 +204,77 @@ class TestBoard(unittest.TestCase):
         assert (3, 0) in moves  # Double push to a4
         assert (2, 1) in moves  # Capture to b3
         assert len(moves) == 3  # All three moves should be possible
+
+    def test_stalemate(self):
+        """Test stalemate detection with classic stalemate position"""
+        # Clear the board first
+        self.board.state.fill(0)
+        self.board.king_positions = {
+            0: (0, 6),  # White king at g1
+            1: (0, 0),  # Black king at a1
+        }
+
+        # Set up a classic stalemate position:
+        # Black king at a1, White queen at c2, White king at g1
+        self.board.state[11, 0, 0] = 1  # Black king at a1
+        self.board.state[4, 1, 2] = 1  # White queen at c2
+        self.board.state[5, 0, 6] = 1  # White king at g1
+        self.board.state[12] = 0  # Black to move
+
+        # Verify stalemate
+        assert self.board.is_stalemate(1)  # Black should be in stalemate
+        assert not self.board.is_in_check(1)  # Black should not be in check
+        assert self.board.is_game_over()  # Game should be over
+
+    def test_insufficient_material_draws(self):
+        """Test various insufficient material scenarios"""
+        # Clear the board first
+        self.board.state.fill(0)
+
+        # Test 1: King vs King
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        assert self.board.is_draw()
+
+        # Test 2: King + Knight vs King
+        self.board.state[1, 0, 1] = 1  # Add white knight at b1
+        assert self.board.is_draw()
+
+        # Test 3: King + Bishop vs King
+        self.board.state.fill(0)  # Clear board
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[2, 0, 2] = 1  # Add white bishop at c1
+        assert self.board.is_draw()
+
+        # Test 4: King + 2 Knights vs King
+        self.board.state.fill(0)  # Clear board
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[1, 0, 1] = 1  # White knight at b1
+        self.board.state[1, 0, 6] = 1  # White knight at g1
+        assert self.board.is_draw()
+
+        # Test 5: King + Bishop vs King + Bishop (same color squares)
+        self.board.state.fill(0)  # Clear board
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[2, 0, 2] = 1  # White bishop at c1 (light square)
+        self.board.state[8, 7, 5] = 1  # Black bishop at f8 (light square)
+        assert self.board.is_draw()
+
+        # Test 6: King + Bishop vs King + Bishop (different color squares - not a draw)
+        self.board.state.fill(0)  # Clear board
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[2, 0, 2] = 1  # White bishop at c1 (light square)
+        self.board.state[8, 7, 4] = 1  # Black bishop at e8 (dark square)
+        assert not self.board.is_draw()
+
+        # Test 7: King + Knight vs King + Knight
+        self.board.state.fill(0)  # Clear board
+        self.board.state[5, 0, 4] = 1  # White king at e1
+        self.board.state[11, 7, 4] = 1  # Black king at e8
+        self.board.state[1, 0, 1] = 1  # White knight at b1
+        self.board.state[7, 7, 6] = 1  # Black knight at g8
+        assert self.board.is_draw()

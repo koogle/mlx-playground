@@ -586,6 +586,7 @@ class BitBoard:
 
     def is_stalemate(self, color: int) -> bool:
         """Check if the given color is in stalemate"""
+
         # If in check, it's not stalemate
         if self.is_in_check(color):
             return False
@@ -594,7 +595,6 @@ class BitBoard:
         for piece_pos, _ in self.get_all_pieces(color):
             if self.get_valid_moves(piece_pos):
                 return False
-
         return True
 
     def test_blocked_pawn(self):
@@ -700,23 +700,31 @@ class BitBoard:
 
     def is_game_over(self) -> bool:
         """Check if the game is over (checkmate or draw)"""
-        current_turn = self.get_current_turn()
         cache_key = self.get_hash()
 
         if cache_key in BitBoard._game_over_cache:
             return BitBoard._game_over_cache[cache_key]
 
-        # Check all pieces for valid moves
-        has_moves = False
-        for (r, c), _ in self.get_all_pieces(current_turn):
-            if self.get_valid_moves((r, c)):
-                has_moves = True
-                break
+        current_turn = self.get_current_turn()
+        opponent_color = 1 - current_turn
 
-        # Check for checkmate/stalemate
-        result = not has_moves
-        BitBoard._game_over_cache[cache_key] = result
-        return result
+        # Check for checkmate
+        if self.is_checkmate(current_turn) or self.is_checkmate(opponent_color):
+            BitBoard._game_over_cache[cache_key] = True
+            return True
+
+        # Check for stalemate
+        elif self.is_stalemate(current_turn):
+            BitBoard._game_over_cache[cache_key] = True
+            return True
+
+        # Check for draw
+        elif self.is_draw():
+            BitBoard._game_over_cache[cache_key] = True
+            return True
+
+        BitBoard._game_over_cache[cache_key] = False
+        return False
 
     def get_game_result(self, perspective_color: Optional[int] = None) -> float:
         """Get the game result from the given color's perspective
@@ -739,6 +747,10 @@ class BitBoard:
         # Check if opponent is checkmated
         elif self.is_checkmate(opponent_color):
             return 1.0  # Win
+        elif self.is_stalemate(perspective_color):
+            return 0.0  # Draw
+        elif self.is_stalemate(opponent_color):
+            return 0.0  # Draw
 
         # Check for draw
         elif self.is_draw():

@@ -49,7 +49,10 @@ def play_single_game(
 
         # Process game results
         white_result = game.board.get_game_result(perspective_color=0)
-        black_result = -1 * white_result
+        if white_result == 0:
+            black_result = 0
+        else:
+            black_result = -1 * white_result
 
         # Send results back through queue
         result_queue.put(

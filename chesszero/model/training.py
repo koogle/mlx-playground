@@ -230,7 +230,7 @@ class Trainer:
             "system_percent": psutil.virtual_memory().percent,
         }
 
-    def evaluate(self, n_games: int = 100) -> Tuple[float, int, int, int]:
+    def evaluate(self, n_games: int = 10) -> Tuple[float, int, int, int]:
         """Evaluate current model against random player"""
         self.logger.info("\nEvaluating against random player...")
 
@@ -266,7 +266,6 @@ class Trainer:
         opponent_color = 1 - mcts_player_color
 
         # Maximum moves before forced draw (100 moves = 50 full moves)
-        MAX_MOVES = 200
         print("Playing eval game")
 
         while not game.board.is_game_over():
@@ -275,10 +274,6 @@ class Trainer:
             position_history[pos_hash] = position_history.get(pos_hash, 0) + 1
             if position_history[pos_hash] >= 3:
                 return 0.5  # Draw by threefold repetition
-
-            # Check for move limit exceeded
-            if move_count >= MAX_MOVES:
-                return 0.5  # Draw by move limit
 
             if game.get_current_turn() == mcts_player_color:
                 mcts = MCTS(self.model, self.config)

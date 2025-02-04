@@ -99,31 +99,6 @@ class ChessGame:
             return True
         return False
 
-    def get_game_state(self) -> str:
-        """Get the current game state as a string"""
-        current_turn = self.board.get_current_turn()
-
-        if self.board.is_checkmate(current_turn):
-            winner = "Black" if current_turn == 0 else "White"
-            return f"Checkmate - {winner} wins"
-
-        if self.board.is_stalemate(current_turn):
-            return "Draw by stalemate"
-
-        if self.board.is_draw():
-            return "Draw by insufficient material"
-
-        if self.moves_without_progress >= 75:
-            return "Draw by 75-move rule"
-
-        if len(self.move_history) >= 200:
-            return "Draw by maximum moves"
-
-        if self.board.is_in_check(current_turn):
-            return "Check"
-
-        return "Ongoing"
-
     def get_result(self) -> float:
         """Get the game result from current player's perspective"""
         current_turn = self.board.get_current_turn()

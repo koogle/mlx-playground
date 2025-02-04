@@ -242,7 +242,7 @@ class Trainer:
 
         # Play as both white and black
         for color in [0, 1]:
-            for game_idx in range(n_games // 2):
+            for _ in range(n_games // 2):
                 # Show board for first evaluation game of each color if enabled
                 # show_board = self.config.display_eval_game and game_idx == 0
 
@@ -261,8 +261,24 @@ class Trainer:
     def play_evaluation_game(self, opponent, mcts_player_color) -> float:
         """Play a single evaluation game with adjusted scoring"""
         game = ChessGame()
+        move_count = 0
+        position_history = {}  # Track repeated positions
+        opponent_color = 1 - mcts_player_color
+
+        # Maximum moves before forced draw (100 moves = 50 full moves)
+        MAX_MOVES = 200
 
         while not game.board.is_game_over():
+            # Check for draw by repetition
+            pos_hash = game.board.get_hash()
+            position_history[pos_hash] = position_history.get(pos_hash, 0) + 1
+            if position_history[pos_hash] >= 3:
+                return 0.5  # Draw by threefold repetition
+
+            # Check for move limit exceeded
+            if move_count >= MAX_MOVES:
+                return 0.5  # Draw by move limit
+
             if game.get_current_turn() == mcts_player_color:
                 mcts = MCTS(self.model, self.config)
                 move = mcts.get_move(game.board, temperature=1.0)
@@ -273,15 +289,18 @@ class Trainer:
                 return 0.5  # Draw - no valid moves
 
             game.make_move(move[0], move[1])
+            move_count += 1
 
         # Check game outcome using BitBoard methods
         if game.board.is_checkmate(mcts_player_color):
             return 0  # Loss - we're in checkmate
-        elif game.board.is_checkmate(1 - mcts_player_color):
+        elif game.board.is_checkmate(opponent_color):
             return 1  # Win - opponent is in checkmate
         elif game.board.is_stalemate(mcts_player_color) or game.board.is_stalemate(
-            1 - mcts_player_color
+            opponent_color
         ):
             return 0.5  # Draw - stalemate
         elif game.board.is_draw():
             return 0.5  # Draw - insufficient material or other draw condition
+
+        return 0.5  # Fallback draw

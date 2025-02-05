@@ -342,7 +342,7 @@ class Trainer:
             self.best_model = ChessNet(self.config)
             self.best_model.load_weights(tree_flatten(self.model.parameters()))
 
-            return 0.0, 0, 0, 0  # Default to 0% win rate for first evaluation
+            return 0.0, 0, 0, 0, None  # Default to 0% win rate for first evaluation
 
         wins = 0
         losses = 0

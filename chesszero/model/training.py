@@ -184,7 +184,10 @@ class Trainer:
                 )
 
                 # Value loss calculation needs to be scaled against policy loss
-                v_loss = mx.mean(mx.square(values - pred_values)) * 10
+                # win_bonus = mx.mean(
+                #    mx.maximum(0, pred_values - 0.8)
+                # )  # Encourage predicting wins
+                v_loss = mx.mean(mx.square(values - pred_values)) * 2
 
                 total_loss = p_loss + v_loss
                 return total_loss, (p_loss, v_loss)
@@ -257,7 +260,7 @@ class Trainer:
                     move = opponent.select_move(game.board)
 
                 if not move:
-                    result_queue.put((game_id, 0.5))  # Draw
+                    result_queue.put((game_id, 0.4))  # Slight penalty for draws
                     return
 
                 game.make_move(move[0], move[1])
@@ -271,11 +274,11 @@ class Trainer:
             elif game.board.is_stalemate(mcts_player_color) or game.board.is_stalemate(
                 opponent_color
             ):
-                result = 0.5  # Draw
+                result = 0.4  # Slight penalty for draws
             elif game.board.is_draw():
-                result = 0.5  # Draw
+                result = 0.4  # Slight penalty for draws
             else:
-                result = 0.5  # Fallback draw
+                result = 0.4  # Slight penalty for draws
 
             result_queue.put((game_id, result))
 

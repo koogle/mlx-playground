@@ -18,10 +18,10 @@ class ModelConfig:
     policy_output_dim: int = 4672  # All possible moves: 8x8x73
 
     # MCTS
-    n_simulations: int = 1600  # Reduced number of simulations for faster training
-    c_puct: float = 1.0  # Exploration constant
-    dirichlet_alpha: float = 0.3  # Dirichlet noise parameter
-    dirichlet_epsilon: float = 0.25  # Weight of Dirichlet noise
+    n_simulations: int = 1600  # Fewer but higher quality simulations
+    c_puct: float = 1  # Increased exploration
+    dirichlet_alpha: float = 0.55  # More noise
+    dirichlet_epsilon: float = 0.3  # Stronger noise influence
 
     # Training
     batch_size: int = 1024  # 2048
@@ -33,8 +33,8 @@ class ModelConfig:
     # Self-play
     n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
     temperature: float = 1.0  # Initial temperature for move selection
-    temp_decay_steps: int = 10  # Number of moves before temperature decay
-    temp_final: float = 0.1  # Final temperature after decay
+    temp_decay_steps: int = 30  # Slower decay
+    temp_final: float = 0.5  # Maintain some exploration
 
     # Debug options
     debug: bool = True

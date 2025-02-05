@@ -41,4 +41,3 @@ class ModelConfig:
 
     # Logging
     eval_interval_epochs: int = 1  # Run evaluation every 5 epochs
-    display_eval_game: bool = True  # Show board positions during evaluation

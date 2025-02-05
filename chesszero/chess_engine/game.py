@@ -99,32 +99,6 @@ class ChessGame:
             return True
         return False
 
-    def get_result(self) -> float:
-        """Get the game result from current player's perspective"""
-        current_turn = self.board.get_current_turn()
-
-        # Check for checkmate
-        if self.board.is_checkmate(current_turn):
-            return -1.0  # Loss for current player
-
-        # Check for stalemate
-        if self.board.is_stalemate(current_turn):
-            return 0.0  # Draw
-
-        # Check for insufficient material
-        if self.board.is_draw():
-            return 0.0  # Draw
-
-        # Check for 75-move rule
-        if self.moves_without_progress >= 75:
-            return 0.0  # Draw
-
-        # Check for maximum game length
-        if len(self.move_history) >= 200:
-            return 0.0  # Draw
-
-        return 0.0  # Game not over
-
     def can_claim_draw(self) -> bool:
         """Check if a player can claim a draw (50-move rule)"""
         return self.moves_without_progress >= 50
@@ -426,32 +400,3 @@ class ChessGame:
         to_square = files[to_pos[1]] + ranks[to_pos[0]]
 
         return f"{from_square}{to_square}"
-
-    def get_game_result(self, perspective_color: Optional[int] = None) -> float:
-        """Get the game result from the given color's perspective
-        Args:
-            perspective_color: 0 for white, 1 for black. If None, uses current turn
-        Returns:
-            1.0 for win
-            -1.0 for loss
-            0.0 for draw
-        """
-        if perspective_color is None:
-            perspective_color = self.board.get_current_turn()
-
-        opponent_color = 1 - perspective_color
-
-        # Check if perspective player is checkmated
-        if self.board.is_checkmate(perspective_color):
-            return -1.0  # Loss
-
-        # Check if opponent is checkmated
-        elif self.board.is_checkmate(opponent_color):
-            return 1.0  # Win
-
-        # Check for draws (stalemate or insufficient material or 50-move rule)
-        elif self.board.is_stalemate(perspective_color) or self.board.is_draw():
-            return 0.0  # Draw
-
-        # Game not over
-        return 0.0

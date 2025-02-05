@@ -747,9 +747,9 @@ class BitBoard:
         Args:
             perspective_color: 0 for white, 1 for black. If None, uses current turn
         Returns:
-            1.0 for win
+            0.0 for win
             -1.0 for loss
-            0.0 for draw
+            -0.5 for draw
         """
         if perspective_color is None:
             perspective_color = self.get_current_turn()
@@ -762,18 +762,18 @@ class BitBoard:
 
         # Check if opponent is checkmated
         elif self.is_checkmate(opponent_color):
-            return 1.0  # Win
+            return 0.0  # Win
         elif self.is_stalemate(perspective_color):
-            return 0.0  # Draw
+            return -0.5  # Draw
         elif self.is_stalemate(opponent_color):
-            return 0.0  # Draw
+            return -0.5  # Draw
 
         # Check for draw
         elif self.is_draw():
-            return 0.0  # Draw
+            return -0.5  # Draw
 
         # Game not over
-        return 0.0
+        return -0.5
 
     def _has_insufficient_material(self) -> bool:
         """Fast insufficient material check"""

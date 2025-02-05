@@ -150,6 +150,7 @@ class Trainer:
                 # Evaluate against best model
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
+
                     win_rate, wins, losses, draws, eval_games = (
                         self.evaluate_against_best()
                     )

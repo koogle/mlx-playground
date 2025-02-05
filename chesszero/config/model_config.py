@@ -40,4 +40,4 @@ class ModelConfig:
     debug: bool = False
 
     # Logging
-    eval_interval_epochs: int = 1  # Run evaluation every 5 epochs
+    eval_interval_epochs: int = 10  # Run evaluation every 5 epochs

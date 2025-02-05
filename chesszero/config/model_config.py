@@ -37,7 +37,7 @@ class ModelConfig:
     temp_final: float = 0.5  # Maintain some exploration
 
     # Debug options
-    debug: bool = True
+    debug: bool = False
 
     # Logging
     eval_interval_epochs: int = 1  # Run evaluation every 5 epochs

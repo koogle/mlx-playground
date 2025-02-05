@@ -762,18 +762,18 @@ class BitBoard:
 
         # Check if opponent is checkmated
         elif self.is_checkmate(opponent_color):
-            return 0.0  # Win
+            return 1.0  # Win
         elif self.is_stalemate(perspective_color):
-            return -0.5  # Draw
+            return 0.0  # Draw
         elif self.is_stalemate(opponent_color):
-            return -0.5  # Draw
+            return 0.0  # Draw
 
         # Check for draw
         elif self.is_draw():
-            return -0.5  # Draw
+            return 0.0  # Draw
 
         # Game not over
-        return -0.5
+        return None
 
     def _has_insufficient_material(self) -> bool:
         """Fast insufficient material check"""

@@ -184,12 +184,17 @@ class Trainer:
                 )
 
                 # Value loss calculation needs to be scaled against policy loss
-                # win_bonus = mx.mean(
-                #    mx.maximum(0, pred_values - 0.8)
-                # )  # Encourage predicting wins
-                v_loss = mx.mean(mx.square(values - pred_values)) * 2
+                win_bonus = mx.mean(
+                    mx.maximum(0, pred_values - 0.8)
+                )  # Encourage predicting wins
+                v_loss = (mx.mean(mx.square(values - pred_values)) * 2) - (
+                    win_bonus * 0.1
+                )
 
-                total_loss = p_loss + v_loss
+                draw_penalty = (
+                    mx.mean(mx.square(pred_values - 0.5)) * 0.5
+                )  # Penalize predicting draws
+                total_loss = p_loss + v_loss + draw_penalty
                 return total_loss, (p_loss, v_loss)
 
             # Compute loss and gradients in one step

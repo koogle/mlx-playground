@@ -423,7 +423,8 @@ class MCTS:
             if leaf_node.board.is_game_over():
                 # Terminal state - use game result
                 value = leaf_node.board.get_game_result()
-                self.backup(path, value)
+                if value is not None:
+                    self.backup(path, value)
             elif leaf_node.is_expanded:
                 # Expanded node - use current value estimate
                 self.backup(path, leaf_node.value())

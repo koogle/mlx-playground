@@ -7,6 +7,7 @@ from model.mcts import MCTS
 from model.self_play import (
     create_batches,
     generate_games,
+    get_policy_distribution,
 )
 from config.model_config import ModelConfig
 from pathlib import Path
@@ -82,6 +83,7 @@ class Trainer:
         """Main training loop with parallel game generation"""
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()
+        eval_games = None
 
         try:
             for epoch in range(self.start_epoch, n_epochs):
@@ -92,6 +94,14 @@ class Trainer:
 
                 # Generate self-play games in parallel
                 games = generate_games(self.model, self.config, n_workers)
+
+                # Add evaluation games to training data
+                if eval_games is not None:
+                    self.logger.info(
+                        f"Adding {len(eval_games)} evaluation games to training data"
+                    )
+                    games.extend(eval_games)
+                    eval_games = None
 
                 # Create batches with memory tracking
                 batches = list(create_batches(games, self.config.batch_size))
@@ -140,7 +150,9 @@ class Trainer:
                 # Evaluate against best model
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
-                    win_rate, wins, losses, draws = self.evaluate_against_best()
+                    win_rate, wins, losses, draws, eval_games = (
+                        self.evaluate_against_best()
+                    )
 
                     self.logger.info(f"Win rate vs best: {win_rate:.2%}")
                     self.logger.info(f"Wins: {wins}, Losses: {losses}, Draws: {draws}")
@@ -152,6 +164,7 @@ class Trainer:
                             tree_flatten(self.model.parameters())
                         )
                         self.best_model_win_rate = win_rate
+
                     else:
                         # Revert to best model
                         self.logger.info("Reverting to best model")
@@ -260,25 +273,31 @@ class Trainer:
         mcts_player_color: int,
         result_queue: mp.Queue,
     ):
-        """Worker process that plays a single evaluation game"""
+        """Worker process that plays a single evaluation game and collects training data"""
         try:
             game = ChessGame()
+            game_history = []
             move_count = 0
 
             opponent_color = 1 - mcts_player_color
 
             while not game.board.is_game_over():
-                # Check for draw by repetition
+                current_state = mx.array(game.board.state, dtype=mx.float32)
+
                 if game.get_current_turn() == mcts_player_color:
                     mcts = MCTS(model, config)
-                    move = mcts.get_move(game.board, temperature=1.0)
                 else:
                     mcts = MCTS(best_model, config)
-                    move = mcts.get_move(game.board, temperature=1.0)
 
+                move = mcts.get_move(game.board, temperature=1.0)
                 if not move:
-                    result_queue.put((game_id, 0))  # Draw
-                    return
+                    break
+
+                # Collect policy distribution
+                policy = get_policy_distribution(
+                    mcts.root_node, config.policy_output_dim
+                )
+                game_history.append((current_state, policy, None))
 
                 game.make_move(move[0], move[1])
                 move_count += 1
@@ -297,17 +316,25 @@ class Trainer:
             else:
                 result = 0  # Draw
 
-            result_queue.put((game_id, result))
+            # Send both result and game history
+            result_queue.put(
+                {
+                    "game_id": game_id,
+                    "result": result,
+                    "history": game_history,
+                    "perspective_color": mcts_player_color,
+                }
+            )
 
         except Exception as e:
             logging.error(f"Error in evaluation game {game_id}: {str(e)}")
             logging.error(traceback.format_exc())
-            result_queue.put((game_id, None))
+            result_queue.put(None)
 
     def evaluate_against_best(
         self, n_games: int = 40, max_workers: int = 10
     ) -> Tuple[float, int, int, int]:
-        """Evaluate current model against best model"""
+        """Evaluate current model against best model and collect training data"""
         self.logger.info("\nEvaluating against best model...")
 
         if self.best_model is None:
@@ -315,11 +342,12 @@ class Trainer:
             self.best_model = ChessNet(self.config)
             self.best_model.load_weights(tree_flatten(self.model.parameters()))
 
-            return 0.1, 0, 0, 0  # Default to 10% win rate for first evaluation
+            return 0.0, 0, 0, 0  # Default to 0% win rate for first evaluation
 
         wins = 0
         losses = 0
         draws = 0
+        evaluation_games_data = []
         total_games = 0
 
         # Create process context and result queue
@@ -334,7 +362,7 @@ class Trainer:
             for color in [0, 1]:
                 games_per_color = n_games // 2
                 while games_completed < total_games + games_per_color:
-                    # Launch new workers up to max_workers
+                    # Launch workers and collect results (existing code)
                     while (
                         len(active_workers) < max_workers and game_id < games_per_color
                     ):
@@ -355,17 +383,32 @@ class Trainer:
 
                     # Collect results
                     try:
-                        game_id, result = result_queue.get(timeout=1)
+                        result = result_queue.get(timeout=1)
                         if result is not None:
                             games_completed += 1
-                            if result == 1:
+                            game_result = result["result"]
+
+                            if game_result == 1:
                                 wins += 1
-                            elif result == 0:
+                            elif game_result == -1:
                                 losses += 1
                             else:
                                 draws += 1
+
+                            # Store game history for training
+                            evaluation_games_data.append(
+                                (
+                                    result["history"],
+                                    (
+                                        game_result
+                                        if result["perspective_color"] == 0
+                                        else -game_result
+                                    ),
+                                )
+                            )
+
                             self.logger.info(
-                                f"Evaluation game {game_id} completed with result: {result}"
+                                f"Evaluation game {result['game_id']} completed with result: {game_result}"
                             )
 
                     except Empty:
@@ -376,12 +419,11 @@ class Trainer:
                         (p, gid) for p, gid in active_workers if p.is_alive()
                     ]
 
-                # Reset game_id for next color
                 game_id = 0
                 total_games = games_completed
 
         finally:
-            # Clean up any remaining workers
+            # Clean up remaining workers
             for p, _ in active_workers:
                 if p.is_alive():
                     p.terminate()
@@ -389,4 +431,6 @@ class Trainer:
 
         total_games = wins + losses + draws
         win_rate = wins / total_games if total_games > 0 else 0
-        return win_rate, wins, losses, draws
+
+        # Return the collected game data for training
+        return win_rate, wins, losses, draws, evaluation_games_data

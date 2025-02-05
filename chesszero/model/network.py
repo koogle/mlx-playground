@@ -1,7 +1,7 @@
 import mlx.core as mx
 import mlx.nn as nn
 from config.model_config import ModelConfig
-from typing import Tuple
+from typing import Tuple, Optional
 from mlx.utils import tree_map_with_path
 import json
 from pathlib import Path
@@ -230,7 +230,12 @@ class ChessNet(nn.Module):
         return total_loss
 
     def save_checkpoint(
-        self, checkpoint_dir: str, epoch: int, optimizer_state=None, interrupted=False
+        self,
+        checkpoint_dir: str,
+        epoch: int,
+        optimizer_state=None,
+        interrupted=False,
+        best_model_win_rate: Optional[float] = None,
     ):
         """Save model checkpoint and training state"""
         checkpoint_dir = Path(checkpoint_dir)
@@ -259,6 +264,7 @@ class ChessNet(nn.Module):
             "epoch": epoch,
             "optimizer_state": optimizer_state,
             "config": vars(self.config),
+            "best_model_win_rate": best_model_win_rate,
         }
         state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
         with open(state_path, "w") as f:

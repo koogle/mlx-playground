@@ -8,7 +8,6 @@ from model.self_play import (
     create_batches,
     generate_games,
 )
-from utils.random_player import RandomPlayer
 from config.model_config import ModelConfig
 from pathlib import Path
 import time
@@ -20,6 +19,7 @@ import os
 import traceback
 import multiprocessing as mp
 from queue import Empty
+from mlx.utils import tree_flatten
 
 
 class Trainer:
@@ -48,6 +48,10 @@ class Trainer:
         self.logger.info(f"Checkpoint directory: {self.checkpoint_dir}")
         self.logger.info(f"Model config:\n{vars(config)}")
 
+        # Add best model tracking
+        self.best_model = None
+        self.best_model_win_rate = 0.0
+
         if resume_epoch is not None:
             self.logger.info(f"Resuming from epoch {resume_epoch}")
             self.model, state = ChessNet.load_checkpoint(checkpoint_dir, resume_epoch)
@@ -60,6 +64,11 @@ class Trainer:
             )
             if state.get("optimizer_state"):
                 self.optimizer.state.update(state["optimizer_state"])
+            if state.get("best_model_win_rate"):
+                self.best_model_win_rate = state.get("best_model_win_rate", 0.0)
+                self.best_model, _ = ChessNet.load_checkpoint(
+                    checkpoint_dir, resume_epoch
+                )
         else:
             self.model = ChessNet(config)
             self.start_epoch = 0
@@ -128,12 +137,27 @@ class Trainer:
                 self.logger.info(f"Average policy loss: {avg_policy_loss:.4f}")
                 self.logger.info(f"Average value loss: {avg_value_loss:.4f}")
 
-                # Check if it's time for evaluation based on epoch interval
+                # Evaluate against best model
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
-                    win_rate, wins, losses, draws = self.evaluate()
-                    self.logger.info(f"Win rate vs random: {win_rate:.2%}")
+                    win_rate, wins, losses, draws = self.evaluate_against_best()
+
+                    self.logger.info(f"Win rate vs best: {win_rate:.2%}")
                     self.logger.info(f"Wins: {wins}, Losses: {losses}, Draws: {draws}")
+
+                    if win_rate > 0.55:
+                        # New model is better, update best model
+                        self.logger.info("New model is better, updating best model")
+                        self.best_model.load_weights(
+                            tree_flatten(self.model.parameters())
+                        )
+                        self.best_model_win_rate = win_rate
+                    else:
+                        # Revert to best model
+                        self.logger.info("Reverting to best model")
+                        self.model.load_weights(
+                            tree_flatten(self.best_model.parameters())
+                        )
 
                     # Save checkpoint after evaluation
                     self.logger.info("Saving checkpoint...")
@@ -141,6 +165,7 @@ class Trainer:
                         self.checkpoint_dir,
                         epoch + 1,
                         optimizer_state=self.optimizer.state,
+                        best_model_win_rate=self.best_model_win_rate,
                     )
                     self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
 
@@ -161,40 +186,26 @@ class Trainer:
 
     def train_on_batch(self, batch):
         """Train on a single batch of data with memory optimizations"""
-        states, policies, values = batch  # Unpack the batch correctly
+        states, policies, values = batch
 
         try:
             # Track memory usage
             mem_before = self._get_memory_usage()
             self.logger.debug(f"Memory before training step: {mem_before}")
 
-            @mx.compile  # Compile for better performance
+            @mx.compile
             def loss_fn(model_params, states, policies, values):
                 self.model.update(model_params)
                 pred_policies, pred_values = self.model(states)
 
-                # Ensure pred_values is a proper MLX array and reshape if needed
-                if isinstance(pred_values, dict):
-                    pred_values = mx.array(list(pred_values.values()), dtype=mx.float32)
-                pred_values = mx.reshape(pred_values, values.shape)
-
-                # Policy loss calculation (with numerical stability)
+                # Simplified loss calculation without manual bonuses/penalties
                 p_loss = -mx.mean(
                     mx.sum(policies * mx.log(pred_policies + 1e-8), axis=1)
                 )
-
-                # Value loss calculation needs to be scaled against policy loss
-                win_bonus = mx.mean(
-                    mx.maximum(0, pred_values - 0.8)
-                )  # Encourage predicting wins
-                v_loss = (mx.mean(mx.square(values - pred_values)) * 2) - (
-                    win_bonus * 0.1
-                )
-
-                draw_penalty = (
-                    mx.mean(mx.square(pred_values - 0.5)) * 0.5
-                )  # Penalize predicting draws
-                total_loss = p_loss + v_loss + draw_penalty
+                if isinstance(pred_values, dict):
+                    pred_values = mx.array(list(pred_values.values()), dtype=mx.float32)
+                v_loss = mx.mean(mx.square(values - pred_values))
+                total_loss = p_loss + v_loss
                 return total_loss, (p_loss, v_loss)
 
             # Compute loss and gradients in one step
@@ -243,6 +254,7 @@ class Trainer:
     def play_evaluation_game_worker(
         self,
         model: ChessNet,
+        best_model: ChessNet,
         config: ModelConfig,
         game_id: int,
         mcts_player_color: int,
@@ -253,7 +265,6 @@ class Trainer:
             game = ChessGame()
             move_count = 0
 
-            opponent = RandomPlayer()
             opponent_color = 1 - mcts_player_color
 
             while not game.board.is_game_over():
@@ -262,7 +273,8 @@ class Trainer:
                     mcts = MCTS(model, config)
                     move = mcts.get_move(game.board, temperature=1.0)
                 else:
-                    move = opponent.select_move(game.board)
+                    mcts = MCTS(best_model, config)
+                    move = mcts.get_move(game.board, temperature=1.0)
 
                 if not move:
                     result_queue.put((game_id, 0.4))  # Slight penalty for draws
@@ -292,11 +304,17 @@ class Trainer:
             logging.error(traceback.format_exc())
             result_queue.put((game_id, None))
 
-    def evaluate(
-        self, n_games: int = 20, max_workers: int = 10
+    def evaluate_against_best(
+        self, n_games: int = 40, max_workers: int = 10
     ) -> Tuple[float, int, int, int]:
-        """Evaluate current model against random player using parallel workers"""
-        self.logger.info("\nEvaluating against random player...")
+        """Evaluate current model against best model"""
+        self.logger.info("\nEvaluating against best model...")
+
+        if self.best_model is None:
+            self.logger.info("No best model yet, using current model as best")
+            self.best_model = ChessNet(self.config)
+            self.best_model.load_state_dict(self.model.state_dict())
+            return 0.1, 0, 0, 0  # Default to 10% win rate for first evaluation
 
         wins = 0
         losses = 0
@@ -323,6 +341,7 @@ class Trainer:
                             target=self.play_evaluation_game_worker,
                             args=(
                                 self.model,
+                                self.best_model,
                                 self.config,
                                 game_id,
                                 color,

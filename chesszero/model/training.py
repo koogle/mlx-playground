@@ -277,7 +277,7 @@ class Trainer:
                     move = mcts.get_move(game.board, temperature=1.0)
 
                 if not move:
-                    result_queue.put((game_id, 0.4))  # Slight penalty for draws
+                    result_queue.put((game_id, 0))  # Draw
                     return
 
                 game.make_move(move[0], move[1])
@@ -285,17 +285,17 @@ class Trainer:
 
             # Determine game result
             if game.board.is_checkmate(mcts_player_color):
-                result = 0  # Loss
+                result = -1  # Loss
             elif game.board.is_checkmate(opponent_color):
                 result = 1  # Win
             elif game.board.is_stalemate(mcts_player_color) or game.board.is_stalemate(
                 opponent_color
             ):
-                result = 0.4  # Slight penalty for draws
+                result = 0  # Draw
             elif game.board.is_draw():
-                result = 0.4  # Slight penalty for draws
+                result = 0  # Draw
             else:
-                result = 0.4  # Slight penalty for draws
+                result = 0  # Draw
 
             result_queue.put((game_id, result))
 

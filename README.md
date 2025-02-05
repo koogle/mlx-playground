@@ -8,9 +8,10 @@ A chess engine implementation inspired by AlphaZero, using MLX for neural networ
 
 ### Key Features
 - Neural MCTS implementation with extensive caching
-- Process-isolated MCTS for memory safety
+- Highly parallelized self-play and evaluation pipeline
+- Process-isolated MCTS for memory safety and parallel execution
 - MLX-based neural network with residual blocks
-- Self-play training pipeline
+- Self-play training with evaluation games recycling
 - Bitboard-based chess engine
 - Real-time move evaluation
 
@@ -43,21 +44,33 @@ Model Configuration:
 - Configurable simulation count (default 1000)
 - Temperature-based exploration
 
-```python
-# Example MCTS early stopping output:
-"Clear dominance - visits ratio: 6.7, value diff: 0.96"
-"Stopping simulations early at simulation 256 of 1000"
-```
+#### Training Pipeline
+1. Parallel self-play game generation
+   - Multiple worker processes generating games simultaneously
+   - Configurable number of workers for hardware optimization
+   - Process isolation for memory safety and parallel execution
+
+2. Evaluation through self-play
+   - Regular evaluation against best model checkpoint
+   - Parallel evaluation games for faster assessment
+   - Winning evaluation games recycled into training data
+   - Automatic model selection based on win rate
+
+3. Training optimization
+   - Efficient batch creation from both self-play and evaluation games
+   - Regular checkpointing with best model tracking
+   - Memory-optimized training process
+   - Gradient updates with momentum
+
+### Performance Features
+- Multi-process game generation for both training and evaluation
+- Configurable number of worker processes
+- Memory-efficient process isolation
+- Progress tracking for individual game workers
 
 ### Known Limitations
-- Memory leaks in core MCTS implementation
+- Memory leaks in core MCTS implementation, fixed through process isolation
 - Process isolation adds overhead
-
-### Training Pipeline
-1. Self-play game generation
-2. Position and result collection
-3. Batch creation and training
-4. Regular evaluation against random player
 
 ### Sample Output
 ```
@@ -75,9 +88,9 @@ Model Configuration:
 
 ### ChessZero Usage
 
-1. Training:
+1. Training with parallel processing:
 ```bash
-python chesszero/train.py
+python chesszero/train.py --workers 8  # Adjust worker count based on CPU cores
 ```
 
 2. Play against AI:

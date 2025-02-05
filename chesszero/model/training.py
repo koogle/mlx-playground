@@ -313,7 +313,8 @@ class Trainer:
         if self.best_model is None:
             self.logger.info("No best model yet, using current model as best")
             self.best_model = ChessNet(self.config)
-            self.best_model.load_state_dict(self.model.state_dict())
+            self.best_model.load_weights(tree_flatten(self.model.parameters()))
+
             return 0.1, 0, 0, 0  # Default to 10% win rate for first evaluation
 
         wins = 0

@@ -1,4 +1,6 @@
+from typing import Callable, Optional
 from mlx_lm import load, generate
+import mlx.nn as nn
 
 
 def main():
@@ -9,11 +11,18 @@ def main():
     # Forward pass to capture layer 16 activations
     activations = []
 
-    def hook_fn(module, inputs, outputs):
+    def hook_fn(outputs):
         print(outputs.shape)
         activations.append(outputs.detach())
 
-    model.layers[len(model.layers) - 1].register_forward_hook(hook_fn)
+    original_fn = model.layers[len(model.layers) - 1].__call__
+
+    def hook_fn_wrapper(*args, **kwargs):
+        outputs = original_fn(*args, **kwargs)
+        hook_fn(outputs)
+        return outputs
+
+    model.layers[len(model.layers) - 1].__call__ = hook_fn_wrapper
 
     while True:
         try:

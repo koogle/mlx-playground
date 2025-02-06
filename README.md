@@ -2,6 +2,16 @@
 
 This repository contains machine learning examples implemented using Apple's MLX framework, focusing on efficient implementations for Apple Silicon.
 
+## Sparse Auto-Encoder (SAE) [*]
+
+A project exploring sparse auto-encoders and their application to understanding LLM internals. Currently under active development.
+
+### Key Features
+- Implementation of sparse auto-encoders using MLX
+- Tools for analyzing LLM activations
+- Focus on understanding feature detection in language models
+- Experiments with different sparsity approaches
+
 ## ChessZero
 
 A chess engine implementation inspired by AlphaZero, using MLX for neural network computations and Monte Carlo Tree Search (MCTS) for move selection.
@@ -11,7 +21,7 @@ A chess engine implementation inspired by AlphaZero, using MLX for neural networ
 - Highly parallelized self-play and evaluation pipeline
 - Process-isolated MCTS for memory safety and parallel execution
 - MLX-based neural network with residual blocks
-- Self-play training with evaluation games recycling
+- Automated model selection through competitive self-play evaluation
 - Bitboard-based chess engine
 - Real-time move evaluation
 

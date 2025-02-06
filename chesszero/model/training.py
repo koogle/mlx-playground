@@ -286,16 +286,22 @@ class Trainer:
         game_id: int,
         player_color: int,
         result_queue: mp.Queue,
+        max_workers: int,
     ):
         """Worker process that plays a single evaluation game and collects training data"""
         try:
             game = ChessGame()
             game_history = []
-            move_count = 0
 
-            while not game.board.is_game_over():
-                current_state = mx.array(game.board.state, dtype=mx.float32)
+            pbar = tqdm(
+                desc=f"Evaluation game {game_id}",
+                position=game_id % max_workers,
+                leave=False,
+                unit="moves",
+                unit_scale=True,
+            )
 
+            while not game.is_over():
                 if game.get_current_turn() == player_color:
                     mcts = MCTS(model, config)
                 else:
@@ -309,10 +315,13 @@ class Trainer:
                 policy = get_policy_distribution(
                     mcts.root_node, config.policy_output_dim
                 )
-                game_history.append((current_state, policy, None))
-
+                state = mx.array(game.board.state, dtype=mx.float32)
+                game_history.append((state, policy, None))
                 game.make_move(move[0], move[1])
-                move_count += 1
+
+                pbar.update(1)
+
+            pbar.close()
 
             # Send both result and game history
             result_queue.put(
@@ -321,7 +330,7 @@ class Trainer:
                     "result": game.board.get_game_result(player_color),
                     "history": game_history,
                     "perspective_color": player_color,
-                    "final_board_str": str(game.board),
+                    "final_board": str(game.board),
                 }
             )
 
@@ -370,6 +379,7 @@ class Trainer:
                                 game_id,
                                 color,
                                 result_queue,
+                                max_workers,
                             ),
                         )
                         p.start()
@@ -403,7 +413,7 @@ class Trainer:
                             )
 
                             self.logger.info(
-                                f"Evaluation game {result['game_id']} completed with result: {game_result} and board:\n{result['final_board_str']}"
+                                f"Evaluation game {result['game_id']} completed with result for {result['perspective_color']}: {game_result} and board:\n{result['final_board']}"
                             )
 
                     except Empty:

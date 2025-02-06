@@ -166,22 +166,22 @@ class Trainer:
                         )
                         self.best_model_win_rate = win_rate
 
+                        # Save checkpoint after evaluation
+                        self.logger.info("Saving checkpoint...")
+                        self.model.save_checkpoint(
+                            self.checkpoint_dir,
+                            epoch + 1,
+                            optimizer_state=self.optimizer.state,
+                            best_model_win_rate=self.best_model_win_rate,
+                        )
+                        self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
+
                     else:
                         # Revert to best model
                         self.logger.info("Reverting to best model")
                         self.model.load_weights(
                             tree_flatten(self.best_model.parameters())
                         )
-
-                    # Save checkpoint after evaluation
-                    self.logger.info("Saving checkpoint...")
-                    self.model.save_checkpoint(
-                        self.checkpoint_dir,
-                        epoch + 1,
-                        optimizer_state=self.optimizer.state,
-                        best_model_win_rate=self.best_model_win_rate,
-                    )
-                    self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
 
             total_time = time.time() - start_time
             self.logger.info("\n=== Training Completed ===")

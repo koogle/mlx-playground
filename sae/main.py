@@ -6,6 +6,15 @@ def main():
     model, tokenizer = load("mlx-community/Llama-3.2-1B-Instruct-MLXTuned")
     print("Model loaded! Enter your prompts below (/q to quit)")
 
+    # Forward pass to capture layer 16 activations
+    activations = []
+
+    def hook_fn(module, inputs, outputs):
+        print(outputs.shape)
+        activations.append(outputs.detach())
+
+    model.layers[len(model.layers) - 1].register_forward_hook(hook_fn)
+
     while True:
         try:
             prompt = input("\nPrompt> ")
@@ -24,7 +33,7 @@ def main():
                 )
 
             print("\nGenerating response...")
-            response = generate(model, tokenizer, prompt=prompt, verbose=True)
+            response = generate(model, tokenizer, prompt=prompt, verbose=False)
             print("\nResponse:", response)
 
         except KeyboardInterrupt:

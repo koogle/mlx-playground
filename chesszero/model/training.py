@@ -158,6 +158,10 @@ class Trainer:
                         self.logger.info(
                             "No best model yet, using current model as best"
                         )
+                        self.best_model = ChessNet(self.config)
+                        self.best_model.load_weights(
+                            tree_flatten(self.model.parameters())
+                        )
                         updated = True
                     else:
                         win_rate, wins, losses, draws, eval_games = result

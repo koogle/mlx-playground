@@ -431,7 +431,8 @@ class Trainer:
                     p.join()
 
         total_games = wins + losses + draws
-        win_rate = wins / total_games if total_games > 0 else 0
+        # For the win rate do not consider draws
+        win_rate = wins / (total_games - draws) if (total_games - draws) > 0 else 0
 
         # Return the collected game data for training
         return win_rate, wins, losses, draws, evaluation_games_data

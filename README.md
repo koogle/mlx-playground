@@ -210,6 +210,11 @@ yolo/
     └── voc.py    # VOC dataset loader
 ```
 
+
+## Diffusion [not done]
+
+Created an outline but haven't looked at it much.
+
 ## Contributing
 
 Contributions are welcome! Key areas for improvement:

@@ -151,21 +151,37 @@ class Trainer:
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
 
-                    win_rate, wins, losses, draws, eval_games = (
-                        self.evaluate_against_best()
-                    )
+                    updated = False
+                    result = self.evaluate_against_best()
 
-                    self.logger.info(f"Win rate vs best: {win_rate:.2%}")
-                    self.logger.info(f"Wins: {wins}, Losses: {losses}, Draws: {draws}")
-
-                    if win_rate > 0.55:
-                        # New model is better, update best model
-                        self.logger.info("New model is better, updating best model")
-                        self.best_model.load_weights(
-                            tree_flatten(self.model.parameters())
+                    if result is None:
+                        self.logger.info(
+                            "No best model yet, using current model as best"
                         )
-                        self.best_model_win_rate = win_rate
+                        updated = True
+                    else:
+                        win_rate, wins, losses, draws, eval_games = result
 
+                        self.logger.info(f"Win rate vs best: {win_rate:.2%}")
+                        self.logger.info(
+                            f"Wins: {wins}, Losses: {losses}, Draws: {draws}"
+                        )
+
+                        if win_rate > 0.55:
+                            self.logger.info("New model is better, updating best model")
+                            self.best_model.load_weights(
+                                tree_flatten(self.model.parameters())
+                            )
+                            self.best_model_win_rate = win_rate
+                            updated = True
+                        else:
+                            # Revert to best model
+                            self.logger.info("Reverting to best model")
+                            self.model.load_weights(
+                                tree_flatten(self.best_model.parameters())
+                            )
+
+                    if updated:
                         # Save checkpoint after evaluation
                         self.logger.info("Saving checkpoint...")
                         self.model.save_checkpoint(
@@ -175,13 +191,6 @@ class Trainer:
                             best_model_win_rate=self.best_model_win_rate,
                         )
                         self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
-
-                    else:
-                        # Revert to best model
-                        self.logger.info("Reverting to best model")
-                        self.model.load_weights(
-                            tree_flatten(self.best_model.parameters())
-                        )
 
             total_time = time.time() - start_time
             self.logger.info("\n=== Training Completed ===")
@@ -324,11 +333,7 @@ class Trainer:
         self.logger.info("\nEvaluating against best model...")
 
         if self.best_model is None:
-            self.logger.info("No best model yet, using current model as best")
-            self.best_model = ChessNet(self.config)
-            self.best_model.load_weights(tree_flatten(self.model.parameters()))
-
-            return 0.0, 0, 0, 0, None  # Default to 0% win rate for first evaluation
+            return None
 
         wins = 0
         losses = 0

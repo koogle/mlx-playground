@@ -271,7 +271,7 @@ class Trainer:
         best_model: ChessNet,
         config: ModelConfig,
         game_id: int,
-        mcts_player_color: int,
+        player_color: int,
         result_queue: mp.Queue,
     ):
         """Worker process that plays a single evaluation game and collects training data"""
@@ -280,12 +280,10 @@ class Trainer:
             game_history = []
             move_count = 0
 
-            opponent_color = 1 - mcts_player_color
-
             while not game.board.is_game_over():
                 current_state = mx.array(game.board.state, dtype=mx.float32)
 
-                if game.get_current_turn() == mcts_player_color:
+                if game.get_current_turn() == player_color:
                     mcts = MCTS(model, config)
                 else:
                     mcts = MCTS(best_model, config)
@@ -303,27 +301,14 @@ class Trainer:
                 game.make_move(move[0], move[1])
                 move_count += 1
 
-            # Determine game result
-            if game.board.is_checkmate(mcts_player_color):
-                result = -1  # Loss
-            elif game.board.is_checkmate(opponent_color):
-                result = 1  # Win
-            elif game.board.is_stalemate(mcts_player_color) or game.board.is_stalemate(
-                opponent_color
-            ):
-                result = 0  # Draw
-            elif game.board.is_draw():
-                result = 0  # Draw
-            else:
-                result = 0  # Draw
-
             # Send both result and game history
             result_queue.put(
                 {
                     "game_id": game_id,
-                    "result": result,
+                    "result": game.board.get_game_result(player_color),
                     "history": game_history,
-                    "perspective_color": mcts_player_color,
+                    "perspective_color": player_color,
+                    "final_board_str": str(game.board),
                 }
             )
 
@@ -409,7 +394,7 @@ class Trainer:
                             )
 
                             self.logger.info(
-                                f"Evaluation game {result['game_id']} completed with result: {game_result}"
+                                f"Evaluation game {result['game_id']} completed with result: {game_result} and board:\n{result['final_board_str']}"
                             )
 
                     except Empty:

@@ -106,10 +106,11 @@ class Trainer:
                 ):
                     try:
 
-                        loss, p_loss, v_loss = self.train_on_batch(batch)
+                        loss, p_loss, v_loss, l2_loss = self.train_on_batch(batch)
                         total_loss += loss
                         policy_loss += p_loss
                         value_loss += v_loss
+                        l2_loss += l2_loss
                         n_batches += 1
 
                     except Exception as e:
@@ -121,13 +122,15 @@ class Trainer:
                 avg_loss = total_loss / n_batches if n_batches > 0 else 0
                 avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
                 avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
+                avg_l2_loss = l2_loss / n_batches if n_batches > 0 else 0
 
                 epoch_time = time.time() - epoch_start_time
 
                 self.logger.info(f"Epoch completed in {epoch_time:.1f}s")
-                self.logger.info(f"Average total loss: {avg_loss:.4f}")
                 self.logger.info(f"Average policy loss: {avg_policy_loss:.4f}")
+                self.logger.info(f"Average l2 loss: {avg_l2_loss:.4f}")
                 self.logger.info(f"Average value loss: {avg_value_loss:.4f}")
+                self.logger.info(f"Average total loss: {avg_loss:.4f}")
 
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
@@ -233,9 +236,9 @@ class Trainer:
                 )
 
                 total_loss = p_loss + v_loss + l2_loss
-                return total_loss, (p_loss, v_loss)
+                return total_loss, (p_loss, v_loss, l2_loss)
 
-            (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn)(
+            (loss, (p_loss, v_loss, l2_loss)), grads = mx.value_and_grad(loss_fn)(
                 self.model.parameters(), states, policies, values
             )
 
@@ -251,7 +254,7 @@ class Trainer:
             mem_diff = {k: mem_after[k] - mem_before[k] for k in mem_before}
             self.logger.debug(f"Memory change during step: {mem_diff}")
 
-            return loss.item(), p_loss.item(), v_loss.item()
+            return loss.item(), p_loss.item(), v_loss.item(), l2_loss.item()
 
         except Exception as e:
             self.logger.error("\nError in training step:")

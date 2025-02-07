@@ -27,8 +27,6 @@ class ModelConfig:
     batch_size: int = 1024  # 2048
     n_epochs: int = 1000
     learning_rate: float = 0.2
-    momentum: float = 0.9
-    weight_decay: float = 1e-4
 
     # Self-play
     n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals

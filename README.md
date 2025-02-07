@@ -70,7 +70,7 @@ Model Configuration:
    - Efficient batch creation from both self-play and evaluation games
    - Regular checkpointing with best model tracking
    - Memory-optimized training process
-   - Gradient updates with momentum
+   - Using Adam optimizer
 
 ### Performance Features
 - Multi-process game generation for both training and evaluation

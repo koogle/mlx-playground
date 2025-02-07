@@ -26,7 +26,6 @@ def play_single_game(
         game = ChessGame()
         game_history = []
 
-        # Create a position for this game's progress bar that won't overlap with others
         position = game_id % max_workers  # Cycle through max_workers positions
         pbar = tqdm(
             desc=f"Game {game_id}",
@@ -38,10 +37,8 @@ def play_single_game(
 
         while not game.is_over():
             mcts = MCTS(model, config)
-            # Get move and policy for current position
             move = mcts.get_move(game.board, temperature=1.0)
             if not move:
-                # No valid moves
                 break
 
             policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
@@ -53,18 +50,14 @@ def play_single_game(
 
         pbar.close()
 
-        # Process game results
         white_result = game.board.get_game_result(perspective_color=0)
-
         if white_result is None:
             white_result = 0.0
-
         if white_result == 0.0:
             black_result = 0.0
         else:
             black_result = -white_result
 
-        # Send results back through queue
         result_queue.put(
             {
                 "game_id": game_id,
@@ -85,14 +78,12 @@ def play_single_game(
 def generate_games(
     model: ChessNet, config: ModelConfig, max_workers: int = 5
 ) -> List[Tuple]:
-    """Generate games using a pool of workers"""
     logger = logging.getLogger(__name__)
     games_data = []
     total_games_needed = config.n_games_per_iteration
     games_completed = 0
     game_id = 0
 
-    # Create process context and result queue
     ctx = mp.get_context("spawn")
     result_queue = ctx.Queue()
 
@@ -100,7 +91,6 @@ def generate_games(
 
     try:
         while games_completed < total_games_needed:
-            # Launch new workers up to max_workers
             while len(active_workers) < max_workers and game_id < total_games_needed:
                 p = ctx.Process(
                     target=play_single_game,
@@ -110,7 +100,6 @@ def generate_games(
                 active_workers.append((p, game_id))
                 game_id += 1
 
-            # Collect results from completed workers
             try:
                 result = result_queue.get(timeout=1)
                 if result is not None:
@@ -131,11 +120,9 @@ def generate_games(
             except Empty:
                 logger.debug("No results available in queue yet")
 
-            # Clean up completed workers
             active_workers = [(p, gid) for p, gid in active_workers if p.is_alive()]
 
     finally:
-        # Clean up any remaining workers
         for p, _ in active_workers:
             if p.is_alive():
                 p.terminate()
@@ -160,13 +147,10 @@ def create_batches(games, batch_size: int):
     all_values = []
 
     for game_history, perspective_result in games:
-        # Process each move in the game
         for move_num, (state, policy, _) in enumerate(game_history):
             all_states.append(state)
             all_policies.append(policy)
 
-            # If this is from white's perspective, even moves get perspective_result
-            # If this is from black's perspective, odd moves get perspective_result
             is_perspective_move = move_num % 2 == 0
             value_target = (
                 perspective_result if is_perspective_move else -perspective_result
@@ -179,12 +163,10 @@ def create_batches(games, batch_size: int):
         print("Warning: No positions to create batches from!")
         return
 
-    # Convert to arrays
     states = mx.array(all_states)
     policies = mx.array(all_policies)
     values = mx.array(all_values)
 
-    # Create batches
     n_samples = len(states)
     indices = mx.arange(n_samples)
     print(f"Creating batches of size {batch_size} from {n_samples} samples")
@@ -199,8 +181,7 @@ def create_batches(games, batch_size: int):
 
 
 def get_policy_distribution(root_node, policy_output_dim: int):
-    """Convert MCTS visit counts to policy distribution"""
-    # Use numpy array for indexing, convert to MLX at the end
+    """Convert MCTS visit counts to policy distribution we are doing this in numpy"""
     policy = np.zeros(policy_output_dim, dtype=np.float32)
 
     for move, child in root_node.children.items():
@@ -211,13 +192,10 @@ def get_policy_distribution(root_node, policy_output_dim: int):
         if move_idx < len(policy):
             policy[move_idx] = child.visit_count
 
-    # Normalize using numpy first
     policy = policy / np.sum(policy) if np.sum(policy) > 0 else policy
 
-    # Convert to MLX array at the end
     return mx.array(policy)
 
 
 def encode_board(board: BitBoard) -> mx.array:
-    """Convert BitBoard state to network input format"""
     return mx.array(board.state, dtype=mx.float32)

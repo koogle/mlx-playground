@@ -36,7 +36,6 @@ class Trainer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        # Set up training log file
         self.log_dir = self.checkpoint_dir / "logs"
         self.log_dir.mkdir(exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -44,12 +43,10 @@ class Trainer:
 
         self.logger = logging.getLogger(__name__)
 
-        # Log initial setup
         self.logger.info("=== Training Session Started ===")
         self.logger.info(f"Checkpoint directory: {self.checkpoint_dir}")
         self.logger.info(f"Model config:\n{vars(config)}")
 
-        # Add best model tracking
         self.best_model = None
         self.best_model_win_rate = 0.0
 
@@ -57,12 +54,7 @@ class Trainer:
             self.logger.info(f"Resuming from epoch {resume_epoch}")
             self.model, state = ChessNet.load_checkpoint(checkpoint_dir, resume_epoch)
             self.start_epoch = resume_epoch + 1
-            # Recreate optimizer with saved state if needed
-            self.optimizer = optim.SGD(
-                learning_rate=config.learning_rate,
-                momentum=config.momentum,
-                weight_decay=config.weight_decay,
-            )
+            self.optimizer = optim.Adam(learning_rate=config.learning_rate)
             if state.get("optimizer_state"):
                 self.optimizer.state.update(state["optimizer_state"])
             if state.get("best_model_win_rate"):
@@ -73,11 +65,7 @@ class Trainer:
         else:
             self.model = ChessNet(config)
             self.start_epoch = 0
-            self.optimizer = optim.SGD(
-                learning_rate=config.learning_rate,
-                momentum=config.momentum,
-                weight_decay=config.weight_decay,
-            )
+            self.optimizer = optim.Adam(learning_rate=config.learning_rate)
 
     def train(self, n_epochs: Optional[int] = None, n_workers: int = 5):
         """Main training loop with parallel game generation"""
@@ -87,15 +75,14 @@ class Trainer:
 
         try:
             for epoch in range(self.start_epoch, n_epochs):
+
                 epoch_start_time = time.time()
                 self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
                 self.logger.info(f"Generating games using {n_workers} workers...")
                 self.model.train()
 
-                # Generate self-play games in parallel
                 games = generate_games(self.model, self.config, n_workers)
 
-                # Add evaluation games to training data
                 if eval_games is not None:
                     self.logger.info(
                         f"Adding {len(eval_games)} evaluation games to training data"
@@ -103,14 +90,11 @@ class Trainer:
                     games.extend(eval_games)
                     eval_games = None
 
-                # Create batches with memory tracking
                 batches = list(create_batches(games, self.config.batch_size))
 
-                # Clear games data after creating batches
                 del games
                 gc.collect()
 
-                # Train on game data with periodic cleanup
                 self.logger.info(f"Training on game data in epoch {epoch + 1}...")
                 total_loss = 0
                 n_batches = 0
@@ -134,20 +118,17 @@ class Trainer:
                         self.logger.error(traceback.format_exc())
                         continue
 
-                # Calculate averages and log results
                 avg_loss = total_loss / n_batches if n_batches > 0 else 0
                 avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
                 avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
 
                 epoch_time = time.time() - epoch_start_time
 
-                # Log detailed training statistics
                 self.logger.info(f"Epoch completed in {epoch_time:.1f}s")
                 self.logger.info(f"Average total loss: {avg_loss:.4f}")
                 self.logger.info(f"Average policy loss: {avg_policy_loss:.4f}")
                 self.logger.info(f"Average value loss: {avg_value_loss:.4f}")
 
-                # Evaluate against best model
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
 
@@ -179,14 +160,12 @@ class Trainer:
                             self.best_model_win_rate = win_rate
                             updated = True
                         else:
-                            # Revert to best model
                             self.logger.info("Reverting to best model")
                             self.model.load_weights(
                                 tree_flatten(self.best_model.parameters())
                             )
 
                     if updated:
-                        # Save checkpoint after evaluation
                         self.logger.info("Saving checkpoint...")
                         self.model.save_checkpoint(
                             self.checkpoint_dir,
@@ -216,7 +195,6 @@ class Trainer:
         states, policies, values = batch
 
         try:
-            # Track memory usage
             mem_before = self._get_memory_usage()
             self.logger.debug(f"Memory before training step: {mem_before}")
 
@@ -225,33 +203,33 @@ class Trainer:
                 self.model.update(model_params)
                 pred_policies, pred_values = self.model(states)
 
-                # Simplified loss calculation without manual bonuses/penalties
                 p_loss = -mx.mean(
                     mx.sum(policies * mx.log(pred_policies + 1e-8), axis=1)
                 )
-                if isinstance(pred_values, dict):
-                    pred_values = mx.array(list(pred_values.values()), dtype=mx.float32)
+
                 v_loss = mx.mean(mx.square(values - pred_values))
-                total_loss = p_loss + v_loss
+
+                l2_reg = 1e-4  # c parameter from paper
+                l2_loss = l2_reg * sum(
+                    mx.sum(mx.square(p)) for p in tree_flatten(model_params)
+                )
+
+                total_loss = p_loss + v_loss + l2_loss
                 return total_loss, (p_loss, v_loss)
 
-            # Compute loss and gradients in one step
             (loss, (p_loss, v_loss)), grads = mx.value_and_grad(loss_fn)(
                 self.model.parameters(), states, policies, values
             )
 
-            # Update model parameters and immediately evaluate
             self.optimizer.update(self.model, grads)
             mx.eval(self.model.parameters(), self.optimizer.state)
 
-            # Clean up intermediate tensors
             del grads
-            gc.collect()  # Force garbage collection
+            gc.collect()
 
             mem_after = self._get_memory_usage()
             self.logger.debug(f"Memory after training step: {mem_after}")
 
-            # Memory change logging
             mem_diff = {k: mem_after[k] - mem_before[k] for k in mem_before}
             self.logger.debug(f"Memory change during step: {mem_diff}")
 
@@ -273,8 +251,8 @@ class Trainer:
         process = psutil.Process(os.getpid())
         mem_info = process.memory_info()
         return {
-            "rss": mem_info.rss / (1024 * 1024),  # RSS in MB
-            "vms": mem_info.vms / (1024 * 1024),  # VMS in MB
+            "rss": mem_info.rss / (1024 * 1024),
+            "vms": mem_info.vms / (1024 * 1024),
             "system_percent": psutil.virtual_memory().percent,
         }
 
@@ -311,7 +289,6 @@ class Trainer:
                 if not move:
                     break
 
-                # Collect policy distribution
                 policy = get_policy_distribution(
                     mcts.root_node, config.policy_output_dim
                 )
@@ -323,7 +300,6 @@ class Trainer:
 
             pbar.close()
 
-            # Send both result and game history
             result_queue.put(
                 {
                     "game_id": game_id,
@@ -354,7 +330,6 @@ class Trainer:
         evaluation_games_data = []
         total_games = 0
 
-        # Create process context and result queue
         ctx = mp.get_context("spawn")
         result_queue = ctx.Queue()
         active_workers = []
@@ -362,11 +337,9 @@ class Trainer:
         games_completed = 0
 
         try:
-            # Play as both white and black
             for color in [0, 1]:
                 games_per_color = n_games // 2
                 while games_completed < total_games + games_per_color:
-                    # Launch workers and collect results (existing code)
                     while (
                         len(active_workers) < max_workers and game_id < games_per_color
                     ):
@@ -386,7 +359,6 @@ class Trainer:
                         active_workers.append((p, game_id))
                         game_id += 1
 
-                    # Collect results
                     try:
                         result = result_queue.get(timeout=1)
                         if result is not None:
@@ -400,7 +372,6 @@ class Trainer:
                             else:
                                 draws += 1
 
-                            # Store game history for training
                             evaluation_games_data.append(
                                 (
                                     result["history"],
@@ -419,7 +390,6 @@ class Trainer:
                     except Empty:
                         pass
 
-                    # Clean up completed workers
                     active_workers = [
                         (p, gid) for p, gid in active_workers if p.is_alive()
                     ]
@@ -428,15 +398,12 @@ class Trainer:
                 total_games = games_completed
 
         finally:
-            # Clean up remaining workers
             for p, _ in active_workers:
                 if p.is_alive():
                     p.terminate()
                     p.join()
 
         total_games = wins + losses + draws
-        # For the win rate do not consider draws
         win_rate = wins / (total_games - draws) if (total_games - draws) > 0 else 0
 
-        # Return the collected game data for training
         return win_rate, wins, losses, draws, evaluation_games_data

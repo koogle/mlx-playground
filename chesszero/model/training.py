@@ -229,7 +229,7 @@ class Trainer:
 
                 l2_reg = 1e-4  # c parameter from paper
                 l2_loss = l2_reg * sum(
-                    mx.sum(mx.square(p)) for p in tree_flatten(model_params)
+                    mx.sum(mx.square(p[1])) for p in tree_flatten(model_params)
                 )
 
                 total_loss = p_loss + v_loss + l2_loss

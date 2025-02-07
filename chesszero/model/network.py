@@ -21,7 +21,6 @@ class ResidualBlock(nn.Module):
         self.bn2 = nn.BatchNorm(n_filters)
 
         self.relu = nn.ReLU()
-        self.debug = False
 
         # Clip values to prevent explosion
         self.clip_value = 10.0
@@ -29,65 +28,23 @@ class ResidualBlock(nn.Module):
     def __call__(self, x: mx.array) -> mx.array:
         identity = x
 
-        if self.debug:
-            print("\nResBlock input:", x.shape)
-            print("Input has NaN:", mx.isnan(x).any())
-
         # First conv block
         out = self.conv1(x)
         out = mx.clip(out, -self.clip_value, self.clip_value)
-        if self.debug:
-            print(
-                "After conv1:",
-                mx.isnan(out).any(),
-                "min:",
-                out.min(),
-                "max:",
-                out.max(),
-            )
-
         out = self.bn1(out)
         out = mx.clip(out, -self.clip_value, self.clip_value)
-        if self.debug:
-            print(
-                "After bn1:", mx.isnan(out).any(), "min:", out.min(), "max:", out.max()
-            )
-
         out = self.relu(out)
-        if self.debug:
-            print("After relu1:", mx.isnan(out).any())
 
         # Second conv block
         out = self.conv2(out)
         out = mx.clip(out, -self.clip_value, self.clip_value)
-        if self.debug:
-            print(
-                "After conv2:",
-                mx.isnan(out).any(),
-                "min:",
-                out.min(),
-                "max:",
-                out.max(),
-            )
-
         out = self.bn2(out)
         out = mx.clip(out, -self.clip_value, self.clip_value)
-        if self.debug:
-            print(
-                "After bn2:", mx.isnan(out).any(), "min:", out.min(), "max:", out.max()
-            )
 
         # Skip connection with clipping
         out = out + identity
         out = mx.clip(out, -self.clip_value, self.clip_value)
-        if self.debug:
-            print(
-                "After skip:", mx.isnan(out).any(), "min:", out.min(), "max:", out.max()
-            )
-
         out = self.relu(out)
-        if self.debug:
-            print("After final relu:", mx.isnan(out).any())
 
         return out
 
@@ -171,11 +128,9 @@ class ChessNet(nn.Module):
         x = self.conv_input(x)  # Now expects 19 input channels
         x = self.bn_input(x)
         x = self.relu(x)
-        mx.eval(x)  # Evaluate after input block
 
         # Residual tower
         x = self.residual_tower(x)
-        mx.eval(x)  # Evaluate after residual tower
 
         # Policy head
         policy = self.policy_conv(x)
@@ -184,7 +139,6 @@ class ChessNet(nn.Module):
         policy = mx.reshape(policy, (-1, 32 * 8 * 8))
         policy = self.policy_fc(policy)
         policy = mx.softmax(policy, axis=-1)
-        mx.eval(policy)  # Evaluate policy output
 
         # Value head
         value = self.value_conv(x)
@@ -195,10 +149,6 @@ class ChessNet(nn.Module):
         value = self.relu(value)
         value = self.value_fc2(value)
         value = mx.tanh(value)
-        mx.eval(value)  # Evaluate value output
-
-        # Clean up intermediate tensor x
-        del x
 
         return policy, value
 
@@ -277,15 +227,12 @@ class ChessNet(nn.Module):
         """Load model checkpoint and return model and training state"""
         checkpoint_dir = Path(checkpoint_dir)
 
-        # Load model parameters
         model_path = checkpoint_dir / f"model_epoch_{epoch}.safetensors"
 
-        # Load training state
         state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
         with open(state_path) as f:
             state = json.load(f)
 
-        # Convert optimizer state back to MLX arrays if it exists
         if state["optimizer_state"] is not None:
             state["optimizer_state"] = {
                 "step": mx.array(state["optimizer_state"]["step"], dtype=mx.uint64),

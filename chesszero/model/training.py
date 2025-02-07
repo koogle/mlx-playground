@@ -203,8 +203,26 @@ class Trainer:
                 self.model.update(model_params)
                 pred_policies, pred_values = self.model(states)
 
+                # Add label smoothing
+                smoothing = 0.1  # Typical values are between 0.1 and 0.2
+                smooth_policies = (
+                    1 - smoothing
+                ) * policies + smoothing / policies.shape[1]
+
+                # Alternative approach: KL divergence regularization
+                # This would encourage the predicted policy to stay close to the MCTS policy
+                # while allowing some exploration:
+                #
+                # temperature = 1.0  # Higher temperature = more exploration
+                # scaled_policies = mx.softmax(mx.log(policies + 1e-8) / temperature)
+                # scaled_pred = mx.softmax(mx.log(pred_policies + 1e-8) / temperature)
+                # kl_div = mx.sum(scaled_policies * (
+                #     mx.log(scaled_policies + 1e-8) - mx.log(scaled_pred + 1e-8)
+                # ), axis=1)
+                # p_loss = mx.mean(kl_div)
+
                 p_loss = -mx.mean(
-                    mx.sum(policies * mx.log(pred_policies + 1e-8), axis=1)
+                    mx.sum(smooth_policies * mx.log(pred_policies + 1e-8), axis=1)
                 )
 
                 v_loss = mx.mean(mx.square(values - pred_values))

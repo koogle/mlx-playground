@@ -232,9 +232,10 @@ class Trainer:
 
                 l2_reg = 1e-6  # Reduced from 1e-4 to avoid dominating other losses
 
-                l2_loss = l2_reg * sum(
-                    mx.sum(mx.square(p[1])) / p[1].size
-                    for p in tree_flatten(model_params)
+                l2_loss = (
+                    l2_reg
+                    * sum(mx.sum(mx.square(p[1])) for p in tree_flatten(model_params))
+                    / len(tree_flatten(model_params))
                 )
 
                 total_loss = p_loss + v_loss + l2_loss

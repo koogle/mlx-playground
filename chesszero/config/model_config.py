@@ -29,7 +29,7 @@ class ModelConfig:
     learning_rate: float = 0.2
 
     # Self-play
-    n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
+    n_games_per_iteration: int = 1  # Fewer games per iteration for more frequent evals
     temperature: float = 1.0  # Initial temperature for move selection
     temp_decay_steps: int = 30  # Slower decay
     temp_final: float = 0.5  # Maintain some exploration

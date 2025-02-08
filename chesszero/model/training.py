@@ -100,17 +100,17 @@ class Trainer:
                 n_batches = 0
                 policy_loss = 0
                 value_loss = 0
+                l2_total = 0
 
                 for batch_idx, batch in enumerate(
                     tqdm(batches, desc="Training batches")
                 ):
                     try:
-
                         loss, p_loss, v_loss, l2_loss = self.train_on_batch(batch)
                         total_loss += loss
                         policy_loss += p_loss
                         value_loss += v_loss
-                        l2_loss += l2_loss
+                        l2_total += l2_loss
                         n_batches += 1
 
                     except Exception as e:
@@ -122,7 +122,7 @@ class Trainer:
                 avg_loss = total_loss / n_batches if n_batches > 0 else 0
                 avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
                 avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
-                avg_l2_loss = l2_loss / n_batches if n_batches > 0 else 0
+                avg_l2_loss = l2_total / n_batches if n_batches > 0 else 0
 
                 epoch_time = time.time() - epoch_start_time
 
@@ -230,9 +230,11 @@ class Trainer:
 
                 v_loss = mx.mean(mx.square(values - pred_values))
 
-                l2_reg = 1e-4  # c parameter from paper
+                l2_reg = 1e-6  # Reduced from 1e-4 to avoid dominating other losses
+
                 l2_loss = l2_reg * sum(
-                    mx.sum(mx.square(p[1])) for p in tree_flatten(model_params)
+                    mx.sum(mx.square(p[1])) / p[1].size
+                    for p in tree_flatten(model_params)
                 )
 
                 total_loss = p_loss + v_loss + l2_loss

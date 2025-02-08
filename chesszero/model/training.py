@@ -230,12 +230,10 @@ class Trainer:
 
                 v_loss = mx.mean(mx.square(values - pred_values))
 
-                l2_reg = 1e-4
+                l2_reg = 1e-6
 
                 l2_loss = (
-                    l2_reg
-                    * sum(mx.sum(mx.square(p[1])) for p in tree_flatten(model_params))
-                    / len(tree_flatten(model_params))
+                    l2_reg * mx.sum(mx.square(p[1])) for p in tree_flatten(model_params)
                 )
 
                 total_loss = p_loss + v_loss + l2_loss

@@ -230,7 +230,7 @@ class Trainer:
 
                 v_loss = mx.mean(mx.square(values - pred_values))
 
-                l2_reg = 1e-6  # Reduced from 1e-4 to avoid dominating other losses
+                l2_reg = 1e-7
 
                 l2_loss = (
                     l2_reg

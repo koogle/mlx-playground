@@ -233,7 +233,7 @@ class Trainer:
                 )
 
                 v_loss = mx_losses.mse_loss(
-                    predictions=pred_values, targets=values, reduction="mean"
+                    predictions=pred_values.squeeze(), targets=values, reduction="mean"
                 )
 
                 l2_reg = 1e-6

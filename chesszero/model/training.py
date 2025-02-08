@@ -1,5 +1,6 @@
 import mlx.core as mx
 import mlx.optimizers as optim
+import mlx.nn.losses as mx_losses
 from typing import Tuple, Optional
 from chess_engine.game import ChessGame
 from model.network import ChessNet
@@ -207,10 +208,10 @@ class Trainer:
                 pred_policies, pred_values = self.model(states)
 
                 # Add label smoothing
-                smoothing = 0.1  # Typical values are between 0.1 and 0.2
-                smooth_policies = (
-                    1 - smoothing
-                ) * policies + smoothing / policies.shape[1]
+                # smoothing = 0.1  # Typical values are between 0.1 and 0.2
+                # smooth_policies = (
+                #     1 - smoothing
+                # ) * policies + smoothing / policies.shape[1]
 
                 # Alternative approach: KL divergence regularization
                 # This would encourage the predicted policy to stay close to the MCTS policy
@@ -224,16 +225,23 @@ class Trainer:
                 # ), axis=1)
                 # p_loss = mx.mean(kl_div)
 
-                p_loss = -mx.mean(
-                    mx.sum(smooth_policies * mx.log(pred_policies + 1e-8), axis=1)
+                # p_loss = -mx.mean(
+                #     mx.sum(smooth_policies * mx.log(pred_policies + 1e-8), axis=1)
+                # )
+                p_loss = mx_losses.cross_entropy(
+                    logits=pred_policies, targets=policies, reduction="mean"
                 )
 
-                v_loss = mx.mean(mx.square(values - pred_values))
+                v_loss = mx_losses.mse_loss(
+                    predictions=pred_values, targets=values, reduction="mean"
+                )
 
                 l2_reg = 1e-6
 
-                l2_loss = (
-                    l2_reg * mx.sum(mx.square(p[1])) for p in tree_flatten(model_params)
+                l2_loss = sum(
+                    l2_reg * mx.sum(mx.square(p[1]))
+                    for p in tree_flatten(model_params)
+                    if len(p[1].shape) > 1
                 )
 
                 total_loss = p_loss + v_loss + l2_loss

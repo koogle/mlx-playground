@@ -295,12 +295,8 @@ class BitBoard:
         if color == -1 or color != self.get_current_turn():
             return set()
 
-        # print("Current turn", self.get_current_turn())
-
-        # Generate basic moves first
         moves = set()
 
-        # Map piece types to pattern indices
         pattern_map = {
             0: 0,  # Pawn
             1: 1,  # Knight
@@ -332,7 +328,6 @@ class BitBoard:
 
         # Filter moves that would leave king in check
         if self.is_in_check(color):
-            print(f"{color} in check, checking {pos} {moves}")
             moves = self._get_check_resolving_moves(pos, moves)
 
         BitBoard._valid_moves_cache[cache_key] = moves
@@ -341,9 +336,7 @@ class BitBoard:
     def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
         """Get all valid pawn moves including captures and promotions"""
         moves = set()
-        direction = (
-            1 if color == 0 else -1
-        )  # White moves up (+1), Black moves down (-1)
+        direction = 1 if color == 0 else -1
         start_row = 1 if color == 0 else 6
         promotion_row = 7 if color == 0 else 0
 
@@ -722,39 +715,33 @@ class BitBoard:
 
         return False
 
-    def is_game_over(self, print_debug: bool = False) -> bool:
-        if print_debug:
-            print("start board game is over check----")
-        try:
-            """Check if the game is over (checkmate or draw)"""
-            cache_key = self.get_hash()
+    def is_game_over(self) -> bool:
+        """Check if the game is over (checkmate or draw)"""
+        cache_key = self.get_hash()
 
-            if cache_key in BitBoard._game_over_cache:
-                return BitBoard._game_over_cache[cache_key]
+        if cache_key in BitBoard._game_over_cache:
+            return BitBoard._game_over_cache[cache_key]
 
-            current_turn = self.get_current_turn()
-            opponent_color = 1 - current_turn
+        current_turn = self.get_current_turn()
+        opponent_color = 1 - current_turn
 
-            # Check for checkmate
-            if self.is_checkmate(current_turn) or self.is_checkmate(opponent_color):
-                BitBoard._game_over_cache[cache_key] = True
-                return True
+        # Check for checkmate
+        if self.is_checkmate(current_turn) or self.is_checkmate(opponent_color):
+            BitBoard._game_over_cache[cache_key] = True
+            return True
 
-            # Check for stalemate
-            elif self.is_stalemate(current_turn):
-                BitBoard._game_over_cache[cache_key] = True
-                return True
+        # Check for stalemate
+        elif self.is_stalemate(current_turn):
+            BitBoard._game_over_cache[cache_key] = True
+            return True
 
-            # Check for draw
-            elif self.is_draw():
-                BitBoard._game_over_cache[cache_key] = True
-                return True
+        # Check for draw
+        elif self.is_draw():
+            BitBoard._game_over_cache[cache_key] = True
+            return True
 
-            BitBoard._game_over_cache[cache_key] = False
-            return False
-        finally:
-            if print_debug:
-                print("end board game is over check----")
+        BitBoard._game_over_cache[cache_key] = False
+        return False
 
     def get_game_result(self, perspective_color: Optional[int] = None) -> float:
         """Get the game result from the given color's perspective
@@ -866,6 +853,10 @@ class BitBoard:
         """Fast board hashing using numpy"""
         # Use numpy's built-in hashing for arrays
         return hash_board_state(self.state.tobytes())
+
+    def __hash__(self) -> int:
+        """Hash the board"""
+        return self.get_hash()
 
     def _init_knight_attacks(self):
         """Pre-compute knight attack patterns for each square"""
@@ -1043,8 +1034,6 @@ class BitBoard:
             if test_board.make_move(pos, move):
                 if not test_board.is_in_check(color):
                     valid_moves.add(move)
-
-        print(f"Moves for {color}: {moves} -> {valid_moves}")
 
         return valid_moves
 

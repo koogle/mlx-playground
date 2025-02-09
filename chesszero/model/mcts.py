@@ -1,4 +1,3 @@
-from functools import lru_cache
 import numpy as np
 from typing import List, Tuple, Set, Dict
 import mlx.core as mx
@@ -173,9 +172,8 @@ class MCTS:
 
         board = node.board
         policy_np = np.array(policy)
-        print("Pre valid moves:")
+
         all_valid_moves = self._get_all_valid_moves(board)
-        print(f"All valid moves: {all_valid_moves}")
 
         if not all_valid_moves:
             return
@@ -320,14 +318,12 @@ class MCTS:
             node.value_sum += v
         del values_along_path
 
-    @lru_cache(maxsize=10000)
     def _get_all_valid_moves(
         self, board: BitBoard
     ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
         """Get all valid moves for current player with caching"""
         board_hash = board.get_hash()
         if board_hash in MCTS._all_moves_cache:
-            print("Returning moves in cache")
             return MCTS._all_moves_cache[board_hash]
 
         moves = {}

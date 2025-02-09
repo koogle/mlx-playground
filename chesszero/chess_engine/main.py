@@ -1,6 +1,7 @@
-from chesszero.config.model_config import ModelConfig
-from chesszero.model.network import ChessNet
-from game import ChessGame
+from config.model_config import ModelConfig
+from model.network import ChessNet
+from model.mcts import MCTS
+from chess_engine.game import ChessGame
 import random
 import argparse
 import time
@@ -31,12 +32,34 @@ def main():
         type=str,
         help="Load a model checkpoint",
     )
+    parser.add_argument(
+        "--epoch",
+        type=int,
+        default=0,
+        help="Epoch to load from checkpoint",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Temperature for AI move selection (0 = deterministic, 1 = more exploratory)",
+    )
     args = parser.parse_args()
 
-    model = ChessNet()
-    config = ModelConfig()
+    # Initialize game and AI components
+    game = ChessGame()
+    ai_model = None
+    mcts = None
 
-    game = ChessGame(model, config)
+    if args.mode in ["ai", "auto"] and args.checkpoint:
+        try:
+            config = ModelConfig()
+            ai_model, _ = ChessNet.load_checkpoint(args.checkpoint, args.epoch)
+            mcts = MCTS(ai_model, config)
+            print(f"\nLoaded AI model from checkpoint: {args.checkpoint}")
+        except Exception as e:
+            print(f"Error loading model checkpoint: {e}")
+            return
 
     print("Welcome to Chess!")
     if args.mode != "auto":
@@ -70,14 +93,14 @@ def main():
         ai_color = random.choice([0, 1])
         print(f"\nYou are playing as {'Black' if ai_color == 0 else 'White'}")
 
-    while not game.board.is_game_over():
+    while not game.is_over():
         print(game)  # Show the board and current turn
-
         current_color = game.get_current_turn()
 
         # AI's turn (either in ai mode or auto mode)
         if args.mode == "auto" or (args.mode == "ai" and current_color == ai_color):
-            if not handle_ai_turn(game):
+            if not handle_ai_turn(game, mcts, args.temperature):
+                print("AI couldn't find a valid move")
                 break
             if args.mode == "auto":
                 time.sleep(args.delay)
@@ -87,21 +110,37 @@ def main():
                 print("\nGame aborted.")
                 break
 
-        # if game.move_history:
-        #    print("\nLast move:", game.move_history[-1])
-
     print("\nGame Over!")
     print("\nFinal game history:")
     print_move_history(game)
 
 
-def handle_ai_turn(game: ChessGame) -> bool:
-    """Handle AI move selection and execution"""
-    # Get all pieces of current color
+def handle_ai_turn(game: ChessGame, mcts: MCTS, temperature: float = 1.0) -> bool:
+    """Handle AI move selection and execution using MCTS"""
+    if mcts is None:
+        # Fallback to random moves if no AI model is available
+        return handle_random_move(game)
+
+    print(
+        f"\nAI ({('White' if game.get_current_turn() == 0 else 'Black')}) is thinking..."
+    )
+    move = mcts.get_move(game.board, temperature=temperature)
+
+    if not move:
+        return False
+
+    from_pos, to_pos = move
+    move_str = game._coords_to_algebraic(from_pos, to_pos)
+    print(f"AI plays: {move_str}")
+
+    return game.make_move(from_pos, to_pos)
+
+
+def handle_random_move(game: ChessGame) -> bool:
+    """Make a random move when no AI model is available"""
     current_color = game.get_current_turn()
     pieces = game.board.get_all_pieces(current_color)
 
-    # Collect all valid moves
     valid_moves = []
     for pos, _ in pieces:
         moves = game.board.get_valid_moves(pos)
@@ -111,10 +150,9 @@ def handle_ai_turn(game: ChessGame) -> bool:
     if not valid_moves:
         return False
 
-    # Choose and make a random move
     from_pos, to_pos = random.choice(valid_moves)
     move_str = game._coords_to_algebraic(from_pos, to_pos)
-    print(f"AI plays: {move_str}")
+    print(f"Random move: {move_str}")
 
     return game.make_move(from_pos, to_pos)
 
@@ -126,8 +164,10 @@ def handle_human_turn(game: ChessGame) -> bool:
             move = input("Enter move: ").strip()
             if move.lower() == "quit":
                 return False
+            if move.lower() == "history":
+                print_move_history(game)
+                continue
 
-            # Use make_move_algebraic instead of make_move
             if game.make_move_algebraic(move):
                 return True
             else:

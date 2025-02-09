@@ -26,10 +26,9 @@ def play_single_game(
         game = ChessGame()
         game_history = []
 
-        position = game_id % max_workers  # Cycle through max_workers positions
         pbar = tqdm(
             desc=f"Game {game_id}",
-            position=position,
+            position=game_id,
             leave=False,
             unit="moves",
             unit_scale=True,

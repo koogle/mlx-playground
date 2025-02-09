@@ -125,7 +125,7 @@ def handle_ai_turn(game: ChessGame, mcts: MCTS, temperature: float = 1.0) -> boo
         f"\nAI ({('White' if game.get_current_turn() == 0 else 'Black')}) is thinking..."
     )
     move = mcts.get_move(game.board, temperature=temperature)
-
+    print("Getting moves")
     if not move:
         return False
 
@@ -169,6 +169,7 @@ def handle_human_turn(game: ChessGame) -> bool:
                 continue
 
             if game.make_move_algebraic(move):
+                print("Human move done")
                 return True
             else:
                 print("Invalid move, try again")

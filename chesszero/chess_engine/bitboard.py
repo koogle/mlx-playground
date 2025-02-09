@@ -295,6 +295,8 @@ class BitBoard:
         if color == -1 or color != self.get_current_turn():
             return set()
 
+        # print("Current turn", self.get_current_turn())
+
         # Generate basic moves first
         moves = set()
 
@@ -330,6 +332,7 @@ class BitBoard:
 
         # Filter moves that would leave king in check
         if self.is_in_check(color):
+            print(f"{color} in check, checking {pos} {moves}")
             moves = self._get_check_resolving_moves(pos, moves)
 
         BitBoard._valid_moves_cache[cache_key] = moves
@@ -496,17 +499,24 @@ class BitBoard:
                 # For sliding pieces, check along each direction until we hit something
                 for row_delta, col_delta in pattern.directions:
                     current_row, current_col = (
-                        row - row_delta,
-                        col - col_delta,
-                    )  # Look backwards
+                        row + row_delta,
+                        col + col_delta,
+                    )  # Look forward
                     while 0 <= current_row < 8 and 0 <= current_col < 8:
                         if self.state[channel, current_row, current_col]:
                             return True
                         target_color, _ = self.get_piece_at(current_row, current_col)
                         if target_color != -1:  # Hit any piece
                             break
-                        current_row -= row_delta
-                        current_col -= col_delta
+                        current_row += row_delta
+                        current_col += col_delta
+            else:
+                # For non-sliding pieces (knight, king), check each possible position
+                for row_delta, col_delta in pattern.directions:
+                    current_row, current_col = row + row_delta, col + col_delta
+                    if 0 <= current_row < 8 and 0 <= current_col < 8:
+                        if self.state[channel, current_row, current_col]:
+                            return True
         return False
 
     def is_in_check(self, color: int) -> bool:
@@ -586,7 +596,7 @@ class BitBoard:
             return False
 
         # Try all pieces' moves
-        for pos, piece_type in self.get_all_pieces(color):
+        for pos, _ in self.get_all_pieces(color):
             moves = self.get_valid_moves(pos)
             if moves:
                 return False
@@ -595,8 +605,6 @@ class BitBoard:
 
     def is_stalemate(self, color: int) -> bool:
         """Check if the given color is in stalemate"""
-
-        # If in check, it's not stalemate
         if self.is_in_check(color):
             return False
 
@@ -1029,6 +1037,8 @@ class BitBoard:
             if test_board.make_move(pos, move):
                 if not test_board.is_in_check(color):
                     valid_moves.add(move)
+
+        print(f"Moves for {color}: {moves} -> {valid_moves}")
 
         return valid_moves
 

@@ -174,6 +174,7 @@ class MCTS:
         board = node.board
         policy_np = np.array(policy)
         all_valid_moves = self._get_all_valid_moves(board)
+        print(f"All valid moves: {all_valid_moves}")
 
         if not all_valid_moves:
             return
@@ -329,8 +330,9 @@ class MCTS:
 
         moves = {}
         pieces = board.get_all_pieces(board.get_current_turn())
-        for pos, _ in pieces:
+        for pos, piece in pieces:
             valid_moves = board.get_valid_moves(pos)
+            print(f"Valid moves for {pos}: {valid_moves}")
             if valid_moves:
                 moves[pos] = valid_moves
 

@@ -126,7 +126,6 @@ def handle_ai_turn(game: ChessGame, mcts: MCTS, temperature: float = 1.0) -> boo
         f"\nAI ({('White' if game.get_current_turn() == 0 else 'Black')}) is thinking..."
     )
     move = mcts.get_move(game.board, temperature=temperature)
-    print("Getting moves")
     if not move:
         return False
 

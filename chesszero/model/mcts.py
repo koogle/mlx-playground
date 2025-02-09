@@ -173,6 +173,7 @@ class MCTS:
 
         board = node.board
         policy_np = np.array(policy)
+        print("Pre valid moves:")
         all_valid_moves = self._get_all_valid_moves(board)
         print(f"All valid moves: {all_valid_moves}")
 
@@ -326,13 +327,13 @@ class MCTS:
         """Get all valid moves for current player with caching"""
         board_hash = board.get_hash()
         if board_hash in MCTS._all_moves_cache:
+            print("Returning moves in cache")
             return MCTS._all_moves_cache[board_hash]
 
         moves = {}
         pieces = board.get_all_pieces(board.get_current_turn())
         for pos, piece in pieces:
             valid_moves = board.get_valid_moves(pos)
-            print(f"Valid moves for {pos}: {valid_moves}")
             if valid_moves:
                 moves[pos] = valid_moves
 

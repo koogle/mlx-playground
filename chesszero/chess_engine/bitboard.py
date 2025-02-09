@@ -751,7 +751,6 @@ class BitBoard:
                 return True
 
             BitBoard._game_over_cache[cache_key] = False
-
             return False
         finally:
             if print_debug:

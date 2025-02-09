@@ -78,7 +78,8 @@ class ChessGame:
             )
             self.move_history.append(move_str)
             return True
-        return False
+        else:
+            return False
 
     def make_move_coords(
         self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], move_str: str
@@ -211,24 +212,6 @@ class ChessGame:
                 history.append(f"{move_num}. {self.move_history[i]}")
 
         return "\n".join(history)
-
-    def is_over(self) -> bool:
-        """Check if the game is over (checkmate, stalemate, or draw)"""
-        current_turn = self.board.get_current_turn()
-
-        # Check for checkmate
-        if self.board.is_checkmate(current_turn):
-            return True
-
-        # Check for stalemate
-        if self.board.is_stalemate(current_turn):
-            return True
-
-        # Check for insufficient material
-        if self.board.is_draw():
-            return True
-
-        return False
 
     def get_current_turn(self) -> int:
         """Get current player's turn (0 for white, 1 for black)"""

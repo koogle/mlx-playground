@@ -309,7 +309,7 @@ class Trainer:
                 unit_scale=True,
             )
 
-            while not game.is_over():
+            while not game.board.is_game_over():
                 if game.get_current_turn() == player_color:
                     mcts = MCTS(model, config)
                 else:

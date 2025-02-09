@@ -35,7 +35,7 @@ def play_single_game(
             unit_scale=True,
         )
 
-        while not game.is_over():
+        while not game.board.is_game_over():
             mcts = MCTS(model, config)
             move = mcts.get_move(game.board, temperature=1.0)
             if not move:

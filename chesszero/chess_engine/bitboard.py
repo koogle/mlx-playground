@@ -722,33 +722,40 @@ class BitBoard:
 
         return False
 
-    def is_game_over(self) -> bool:
-        """Check if the game is over (checkmate or draw)"""
-        cache_key = self.get_hash()
+    def is_game_over(self, print_debug: bool = False) -> bool:
+        if print_debug:
+            print("start board game is over check----")
+        try:
+            """Check if the game is over (checkmate or draw)"""
+            cache_key = self.get_hash()
 
-        if cache_key in BitBoard._game_over_cache:
-            return BitBoard._game_over_cache[cache_key]
+            if cache_key in BitBoard._game_over_cache:
+                return BitBoard._game_over_cache[cache_key]
 
-        current_turn = self.get_current_turn()
-        opponent_color = 1 - current_turn
+            current_turn = self.get_current_turn()
+            opponent_color = 1 - current_turn
 
-        # Check for checkmate
-        if self.is_checkmate(current_turn) or self.is_checkmate(opponent_color):
-            BitBoard._game_over_cache[cache_key] = True
-            return True
+            # Check for checkmate
+            if self.is_checkmate(current_turn) or self.is_checkmate(opponent_color):
+                BitBoard._game_over_cache[cache_key] = True
+                return True
 
-        # Check for stalemate
-        elif self.is_stalemate(current_turn):
-            BitBoard._game_over_cache[cache_key] = True
-            return True
+            # Check for stalemate
+            elif self.is_stalemate(current_turn):
+                BitBoard._game_over_cache[cache_key] = True
+                return True
 
-        # Check for draw
-        elif self.is_draw():
-            BitBoard._game_over_cache[cache_key] = True
-            return True
+            # Check for draw
+            elif self.is_draw():
+                BitBoard._game_over_cache[cache_key] = True
+                return True
 
-        BitBoard._game_over_cache[cache_key] = False
-        return False
+            BitBoard._game_over_cache[cache_key] = False
+
+            return False
+        finally:
+            if print_debug:
+                print("end board game is over check----")
 
     def get_game_result(self, perspective_color: Optional[int] = None) -> float:
         """Get the game result from the given color's perspective

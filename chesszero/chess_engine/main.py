@@ -93,8 +93,9 @@ def main():
         ai_color = random.choice([0, 1])
         print(f"\nYou are playing as {'Black' if ai_color == 0 else 'White'}")
 
-    while not game.is_over():
+    while not game.board.is_game_over(print_debug=True):
         print(game)  # Show the board and current turn
+
         current_color = game.get_current_turn()
 
         # AI's turn (either in ai mode or auto mode)

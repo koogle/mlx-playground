@@ -1,13 +1,21 @@
 from typing import Tuple, List, Optional
 from chess_engine.bitboard import BitBoard
+from model.network import ChessNet
+from model.mcts import MCTS
+from config.model_config import ModelConfig
 
 # from bitboard import BitBoard
 
 
 class ChessGame:
-    def __init__(self):
+    def __init__(
+        self, model: Optional[ChessNet] = None, config: Optional[ModelConfig] = None
+    ):
         self.board = BitBoard()
         self.move_history: List[str] = []
+        self.moves_without_progress = 0
+        self.model = model
+        self.config = config
 
     def _get_piece_symbol(self, piece_type: int) -> str:
         """Get the algebraic notation symbol for a piece."""
@@ -400,3 +408,87 @@ class ChessGame:
         to_square = files[to_pos[1]] + ranks[to_pos[0]]
 
         return f"{from_square}{to_square}"
+
+    def get_ai_move(
+        self, temperature: float = 1.0
+    ) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+        """Get a move from the AI model using MCTS"""
+        if self.model is None or self.config is None:
+            raise ValueError("Model and config must be set to use AI moves")
+
+        mcts = MCTS(self.model, self.config)
+        move = mcts.get_move(self.board, temperature=temperature)
+
+        if not move:
+            return None
+
+        return move
+
+    @classmethod
+    def from_checkpoint(
+        cls, checkpoint_dir: str, epoch: int, config: ModelConfig
+    ) -> "ChessGame":
+        """Create a game instance with an AI model loaded from a checkpoint"""
+        model, _ = ChessNet.load_checkpoint(checkpoint_dir, epoch)
+        return cls(model=model, config=config)
+
+    def play_against_ai(self, player_color: int = 0, temperature: float = 1.0):
+        """Interactive game loop for playing against the AI
+
+        Args:
+            player_color: 0 for white, 1 for black
+            temperature: Controls randomness of AI moves (0 = deterministic, 1 = more exploratory)
+        """
+        if self.model is None:
+            raise ValueError("Model must be set to play against AI")
+
+        print("\nPlaying against AI")
+        print("Enter moves in algebraic notation (e.g. 'e2e4', 'Nf3')")
+        print("Type 'quit' to end the game\n")
+
+        while not self.is_over():
+            print(self)
+            current_turn = self.get_current_turn()
+
+            if current_turn == player_color:
+                # Player's turn
+                while True:
+                    try:
+                        move_str = input(
+                            f"\nYour move ({'White' if current_turn == 0 else 'Black'}): "
+                        )
+                        if move_str.lower() == "quit":
+                            return
+
+                        if self.make_move_algebraic(move_str):
+                            break
+                        else:
+                            print("Invalid move, try again")
+                    except Exception as e:
+                        print(f"Error: {e}")
+                        print("Invalid move, try again")
+            else:
+                # AI's turn
+                print(
+                    f"\nAI ({('White' if current_turn == 0 else 'Black')}) is thinking..."
+                )
+                move = self.get_ai_move(temperature=temperature)
+                if move is None:
+                    print("AI couldn't find a valid move")
+                    break
+
+                from_pos, to_pos = move
+                move_str = self._coords_to_algebraic(from_pos, to_pos)
+                print(f"AI plays: {move_str}")
+                self.make_move(from_pos, to_pos)
+
+        # Game over
+        print("\nGame Over!")
+        print(self)
+        result = self.board.get_game_result(player_color)
+        if result == 1:
+            print("You won!")
+        elif result == -1:
+            print("AI won!")
+        else:
+            print("Draw!")

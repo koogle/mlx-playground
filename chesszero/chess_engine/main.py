@@ -1,3 +1,5 @@
+from chesszero.config.model_config import ModelConfig
+from chesszero.model.network import ChessNet
 from game import ChessGame
 import random
 import argparse
@@ -24,9 +26,17 @@ def main():
         type=str,
         help="Load and replay a game from a history file",
     )
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        help="Load a model checkpoint",
+    )
     args = parser.parse_args()
 
-    game = ChessGame()
+    model = ChessNet()
+    config = ModelConfig()
+
+    game = ChessGame(model, config)
 
     print("Welcome to Chess!")
     if args.mode != "auto":

@@ -278,3 +278,49 @@ class TestBoard(unittest.TestCase):
         self.board.state[1, 0, 1] = 1  # White knight at b1
         self.board.state[7, 7, 6] = 1  # Black knight at g8
         assert self.board.is_draw()
+
+    def test_king_moves_in_check(self):
+        """Test that king moves are correctly limited when in check"""
+        self.board.state.fill(0)
+
+        # Setup position:
+        # Black queen at e4 checking white king at e2
+        # White king can move to: d1, d2, d3, e1, e3, f1, f2, f3
+        # But e1 and e3 are attacked by queen
+        self.board.state[10, 3, 4] = 1  # Black queen at e4
+        self.board.state[5, 1, 4] = 1  # White king at e2
+        self.board.state[11, 7, 4] = 1  # Black king at e8 (needed)
+        self.board.state[12] = 1  # White to move
+        self.board.king_positions = {
+            0: (1, 4),  # e2
+            1: (7, 4),  # e8
+        }
+
+        # Get valid moves for white king
+        valid_moves = set()
+
+        for pos, _ in self.board.get_all_pieces(self.board.get_current_turn()):
+            moves = self.board.get_valid_moves(pos)
+            for move in moves:
+                valid_moves.add(move)
+
+        # Expected safe squares for the king
+        expected_moves = {
+            (0, 3),  # d1
+            (1, 3),  # d2
+            (0, 5),  # f1
+            (1, 5),  # f2
+        }
+
+        # Verify moves
+        assert (
+            valid_moves == expected_moves
+        ), f"Expected moves {expected_moves}, got {valid_moves}"
+
+        assert self.board.is_in_check(0), "White should be in check"
+        assert not self.board.is_checkmate(0), "This should not be checkmate"
+
+        self.board.make_move((1, 4), (1, 3))  # King to d2
+        assert not self.board.is_in_check(
+            0
+        ), "White should no longer be in check after king move"

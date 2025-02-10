@@ -723,10 +723,9 @@ class BitBoard:
             return BitBoard._game_over_cache[cache_key]
 
         current_turn = self.get_current_turn()
-        opponent_color = 1 - current_turn
 
         # Check for checkmate
-        if self.is_checkmate(current_turn) or self.is_checkmate(opponent_color):
+        if self.is_checkmate(current_turn):
             BitBoard._game_over_cache[cache_key] = True
             return True
 

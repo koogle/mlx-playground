@@ -303,7 +303,7 @@ class Trainer:
 
             pbar = tqdm(
                 desc=f"Evaluation game {game_id}",
-                position=game_id,
+                position=game_id % max_workers,
                 leave=False,
                 unit="moves",
                 unit_scale=True,

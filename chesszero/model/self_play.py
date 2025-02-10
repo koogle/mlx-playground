@@ -28,7 +28,7 @@ def play_single_game(
 
         pbar = tqdm(
             desc=f"Game {game_id}",
-            position=game_id,
+            position=game_id % max_workers,
             leave=False,
             unit="moves",
             unit_scale=True,

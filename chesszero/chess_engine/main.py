@@ -162,9 +162,9 @@ def handle_human_turn(game: ChessGame) -> bool:
     while True:
         try:
             move = input("Enter move (or 'r' for random move): ").strip()
-            if move.lower() == "quit":
+            if move.lower() == "quit" or move.lower() == "q":
                 return False
-            if move.lower() == "history":
+            if move.lower() == "history" or move.lower() == "h":
                 print_move_history(game)
                 continue
             if move.lower() == "r" or move.lower() == "random":

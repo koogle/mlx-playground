@@ -161,12 +161,19 @@ def handle_human_turn(game: ChessGame) -> bool:
     """Handle a human player's turn"""
     while True:
         try:
-            move = input("Enter move: ").strip()
+            move = input("Enter move (or 'r' for random move): ").strip()
             if move.lower() == "quit":
                 return False
             if move.lower() == "history":
                 print_move_history(game)
                 continue
+            if move.lower() == "r" or move.lower() == "random":
+                # Make a random move
+                if handle_random_move(game):
+                    return True
+                else:
+                    print("No valid random moves available")
+                    continue
 
             if game.make_move_algebraic(move):
                 print("Human move done")
@@ -175,7 +182,7 @@ def handle_human_turn(game: ChessGame) -> bool:
                 print("Invalid move, try again")
         except (ValueError, IndexError) as e:
             print(f"Invalid move format: {e}")
-            print("Please use formats like: e2e4, e4, Nf3, or O-O")
+            print("Please use formats like: e2e4, e4, Nf3, O-O, or 'r' for random move")
 
 
 def print_move_history(game):

@@ -19,7 +19,7 @@ def load_batch(batch_path: str) -> Tuple[np.ndarray, np.ndarray]:
 
     Returns:
         (images, labels) tuple where:
-        - images: (N, 32, 32, 3) array of images in HWC format
+        - images: (N, 32, 32, 3) array of images in CHW format
         - labels: (N,) array of labels
     """
     batch = unpickle(batch_path)
@@ -28,8 +28,6 @@ def load_batch(batch_path: str) -> Tuple[np.ndarray, np.ndarray]:
 
     # Reshape data: (num_samples, 3072) -> (num_samples, 3, 32, 32)
     data = data.reshape(-1, 3, 32, 32)
-    # Convert from CHW to HWC format
-    data = data.transpose(0, 2, 3, 1)
 
     return data, np.array(labels)
 

@@ -25,8 +25,21 @@ class NoiseScheduler:
             self.betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
         )
 
-    def q_sample(self, x_start, t, noise=None):
-        """Forward diffusion process"""
+    def add_noise(self, x_start, t, noise=None):
+        """
+        Forward diffusion process - adds noise to clean images.
+
+        This implements the key formula that lets us jump to any timestep t directly:
+        x_t = sqrt(alpha_cumprod_t) * x_0 + sqrt(1 - alpha_cumprod_t) * noise
+
+        Args:
+            x_start: Clean images to add noise to
+            t: Timestep(s) indicating how much noise to add (0 = clean, 999 = pure noise)
+            noise: Optional pre-generated noise (for reproducibility)
+
+        Returns:
+            Noisy images at timestep t
+        """
         if noise is None:
             noise = mx.random.normal(x_start.shape)
 
@@ -40,17 +53,8 @@ class NoiseScheduler:
             sqrt_one_minus_alphas_cumprod_t, axis=(1, 2, 3)
         )
 
+        # Calculate noised image for any timestamp
         return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
-
-    def p_losses(self, denoise_model, x_start, t, noise=None):
-        """Calculate the loss for denoising model training"""
-        if noise is None:
-            noise = mx.random.normal(x_start.shape)
-
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        predicted_noise = denoise_model(x_noisy, t)
-
-        return mx.mean((noise - predicted_noise) ** 2)
 
     @mx.compile
     def p_sample(self, model, x, t, t_index):

@@ -129,17 +129,18 @@ class Block(nn.Module):
 class UNet(nn.Module):
     """
     U-Net architecture for diffusion models.
+    Optimized for CIFAR-10 (32x32 images).
     """
 
     def __init__(
         self,
         in_channels=3,
-        model_channels=32,
+        model_channels=64,  # Base channel count
         out_channels=3,
-        num_res_blocks=1,
-        attention_levels=[2],
-        channel_mult=(1, 2, 4),
-        time_emb_dim=None,
+        num_res_blocks=2,  # More res blocks for better learning
+        attention_levels=[],  # No attention for 32x32 images (too small)
+        channel_mult=(1, 2, 2, 2),  # Channel multipliers for each level
+        time_emb_dim=256,  # Time embedding dimension
     ):
         super().__init__()
         self.out_channels = out_channels  # Store as instance variable
@@ -147,10 +148,10 @@ class UNet(nn.Module):
         # Time embeddings
         self.time_mlp = (
             nn.Sequential(
-                SinusoidalPositionEmbeddings(model_channels),
-                nn.Linear(model_channels, model_channels * 4),
+                SinusoidalPositionEmbeddings(time_emb_dim),
+                nn.Linear(time_emb_dim, time_emb_dim),
                 nn.ReLU(),
-                nn.Linear(model_channels * 4, model_channels * 4),
+                nn.Linear(time_emb_dim, time_emb_dim),
             )
             if time_emb_dim is not None
             else None
@@ -180,9 +181,7 @@ class UNet(nn.Module):
                 block = Block(
                     in_ch=now_channels,
                     out_ch=out_channels,
-                    time_emb_dim=(
-                        model_channels * 4 if time_emb_dim is not None else None
-                    ),
+                    time_emb_dim=time_emb_dim if time_emb_dim is not None else None,
                 )
                 self.downs.append(block)
                 now_channels = out_channels
@@ -197,7 +196,7 @@ class UNet(nn.Module):
         self.mid = Block(
             in_ch=now_channels,
             out_ch=now_channels,
-            time_emb_dim=model_channels * 4 if time_emb_dim is not None else None,
+            time_emb_dim=time_emb_dim if time_emb_dim is not None else None,
         )
 
         # Upsampling
@@ -215,9 +214,7 @@ class UNet(nn.Module):
                 block = Block(
                     in_ch=in_channels,
                     out_ch=out_channels,
-                    time_emb_dim=(
-                        model_channels * 4 if time_emb_dim is not None else None
-                    ),
+                    time_emb_dim=time_emb_dim if time_emb_dim is not None else None,
                     up=True if i == num_res_blocks else False,
                 )
                 self.ups.append(block)

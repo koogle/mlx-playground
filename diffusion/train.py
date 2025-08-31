@@ -7,7 +7,7 @@ import argparse
 from model import UNet
 from scheduler import NoiseScheduler
 from loss import diffusion_loss
-from utils import save_checkpoint, load_checkpoint
+from utils import save_checkpoint
 from data.cifar10 import load_train_data, CIFAR10DataLoader
 
 
@@ -20,7 +20,7 @@ def train_step(model, scheduler, optimizer, images):
     # Convert from HWC to CHW format for the model
     images = mx.transpose(images, (0, 3, 1, 2))
 
-    print(f"\nDebug shapes in train_step:")
+    print("Debug shapes in train_step:")
     print(f"Images shape after conversion: {images.shape}")
 
     # Sample random timesteps
@@ -150,12 +150,11 @@ def main():
     # Initialize model, scheduler and optimizer
     model = UNet(
         in_channels=3,
-        model_channels=32,  # Smaller model for CIFAR-10
         out_channels=3,
-        num_res_blocks=1,
-        attention_levels=[],  # No attention for small images
-        channel_mult=(1, 2, 2, 2),  # Adjusted for 32x32 images
-        time_emb_dim=32,
+        model_channels=64,
+        num_res_blocks=2,
+        channel_mult=(1, 2, 2, 2),  # 4 levels: 32->16->8->4
+        time_emb_dim=256,
     )
 
     scheduler = NoiseScheduler(

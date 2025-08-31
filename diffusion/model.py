@@ -3,7 +3,28 @@ import mlx.nn as nn
 
 
 class SinusoidalPositionEmbeddings(nn.Module):
-    """Positional embeddings for the timestep"""
+    """Positional embeddings for the timestep
+    
+    Transforms scalar timesteps into high-dimensional representations using
+    sinusoidal functions at different frequencies. This allows the model to
+    distinguish between different noise levels during the diffusion process.
+    
+    WHY THIS IS ESSENTIAL:
+    The UNet needs to behave completely differently at different timesteps:
+    - At t=1000: Input is pure noise, network must imagine global structure
+    - At t=500: Network must denoise while preserving emerging features  
+    - At t=0: Network must only remove subtle noise, preserve all details
+    
+    Without time embeddings, the network would try to apply the same denoising
+    operation regardless of noise level, which would fail catastrophically.
+    The time embedding acts as a "dial" that tells the network how aggressive
+    to be with denoising at each step.
+    
+    The encoding uses a geometric progression of frequencies from high to low,
+    ensuring both fine-grained and coarse temporal information is captured.
+    Each timestep gets a unique, smooth representation where nearby timesteps
+    have similar embeddings.
+    """
 
     def __init__(self, dim):
         super().__init__()
@@ -11,9 +32,19 @@ class SinusoidalPositionEmbeddings(nn.Module):
 
     def __call__(self, time):
         half_dim = self.dim // 2
+        
+        # Create a geometric progression of frequencies from 1 to 1/10000
+        # This gives us wavelengths from 2π to 20000π
         embeddings = mx.log(mx.array(10000)) / (half_dim - 1)
         embeddings = mx.exp(mx.arange(half_dim) * -embeddings)
+        
+        # Scale each frequency by the timestep value
+        # Shape: [batch_size, half_dim]
         embeddings = time[:, None] * embeddings[None, :]
+        
+        # Apply sine to first half and cosine to second half
+        # This creates orthogonal components for each frequency
+        # Final shape: [batch_size, dim]
         embeddings = mx.concatenate([mx.sin(embeddings), mx.cos(embeddings)], axis=-1)
         return embeddings
 

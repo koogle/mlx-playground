@@ -4,10 +4,10 @@ import mlx.core as mx
 import mlx.optimizers as optim
 from pathlib import Path
 import argparse
-from model import UNet
-from scheduler import NoiseScheduler
-from loss import diffusion_loss
-from utils import save_checkpoint
+from diffusion.model import UNet
+from diffusion.scheduler import NoiseScheduler
+from diffusion.loss import diffusion_loss
+from diffusion.utils import save_checkpoint
 from data.cifar10 import load_train_data, CIFAR10DataLoader
 
 

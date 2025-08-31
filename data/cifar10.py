@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 import mlx.core as mx
 from typing import Tuple, Optional, Union
-from download_cifar10 import download_cifar10
+from data.download_cifar10 import download_cifar10
 
 
 def unpickle(file):
@@ -211,11 +211,11 @@ class CIFAR10DataLoader:
         batch_labels = self.labels[batch_indices]
 
         self.batch_idx += 1
-        
+
         # Always convert to MLX arrays
         batch_images = mx.array(batch_images)
         batch_labels = mx.array(batch_labels)
-        
+
         return batch_images, batch_labels
 
     def __len__(self):

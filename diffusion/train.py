@@ -1,9 +1,14 @@
 import os
+import sys
 import time
 import mlx.core as mx
 import mlx.optimizers as optim
 from pathlib import Path
 import argparse
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from diffusion.model import UNet
 from diffusion.scheduler import NoiseScheduler
 from diffusion.loss import diffusion_loss

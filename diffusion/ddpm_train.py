@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import json
+import signal
 import mlx.core as mx
 import mlx.optimizers as optim
 import numpy as np
@@ -208,6 +209,28 @@ def save_loss_plot(loss_history, save_dir="./samples/ddpm"):
     print(f"  Loss history saved to {json_path}")
 
 
+def find_latest_checkpoint(checkpoint_dir):
+    """Find the latest checkpoint in the directory"""
+    if not os.path.exists(checkpoint_dir):
+        return None
+    
+    # Look for checkpoint files
+    checkpoints = []
+    for file in os.listdir(checkpoint_dir):
+        if file.startswith("checkpoint_epoch_") and file.endswith(".npz"):
+            try:
+                epoch = int(file.split("_")[2].split(".")[0])
+                checkpoints.append((epoch, os.path.join(checkpoint_dir, file)))
+            except:
+                continue
+    
+    if checkpoints:
+        # Return the checkpoint with highest epoch
+        checkpoints.sort(key=lambda x: x[0])
+        return checkpoints[-1][1]
+    return None
+
+
 def main():
     print("=" * 60)
     print("DDPM Training for CIFAR-10")
@@ -270,25 +293,49 @@ def main():
     # Create optimizer
     optimizer = optim.Adam(learning_rate=config["learning_rate"])
 
-    # Load checkpoint if resuming
+    # Load checkpoint if resuming or auto-load latest
     start_epoch = 0
-    if config["resume_from"]:
-        print(f"\nLoading checkpoint from {config['resume_from']}...")
+    checkpoint_to_load = config["resume_from"]
+    
+    # If no specific checkpoint specified, try to find the latest one
+    if not checkpoint_to_load:
+        latest_checkpoint = find_latest_checkpoint(config["checkpoint_dir"])
+        if latest_checkpoint:
+            print(f"\nFound existing checkpoint: {latest_checkpoint}")
+            checkpoint_to_load = latest_checkpoint
+    
+    if checkpoint_to_load:
+        print(f"\nLoading checkpoint from {checkpoint_to_load}...")
         try:
-            start_epoch = load_checkpoint(model, optimizer, config["resume_from"])
+            start_epoch = load_checkpoint(model, optimizer, checkpoint_to_load)
             print(f"Resumed from epoch {start_epoch}")
         except Exception as e:
             print(f"Failed to load checkpoint: {e}")
             print("Starting from scratch...")
 
+    # Set up signal handler for graceful shutdown
+    interrupted = False
+    current_epoch = start_epoch
+    
+    def signal_handler(signum, frame):
+        nonlocal interrupted
+        print("\n\nReceived interrupt signal. Saving checkpoint...")
+        interrupted = True
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
     # Training loop
     print(f"\nStarting training from epoch {start_epoch}...")
+    print("Press Ctrl+C to save and exit gracefully")
     print("-" * 40)
 
     best_loss = float("inf")
     loss_history = {"epoch_losses": [], "batch_losses": [], "config": config}
 
     for epoch in range(start_epoch, config["num_epochs"]):
+        current_epoch = epoch
+        if interrupted:
+            break
         print(f"\nEpoch {epoch + 1}/{config['num_epochs']}")
         start_time = time.time()
 
@@ -335,9 +382,26 @@ def main():
 
         # Save loss plots every epoch
         save_loss_plot(loss_history, config["sample_dir"])
-
-    print("\n" + "=" * 60)
-    print("Training completed!")
+        
+        # Check if interrupted
+        if interrupted:
+            break
+    
+    # Save checkpoint on interrupt or completion
+    if interrupted:
+        print("\nSaving checkpoint due to interruption...")
+        save_checkpoint(
+            model, optimizer, current_epoch + 1, 
+            loss_history["epoch_losses"][-1] if loss_history["epoch_losses"] else 999.0,
+            config["checkpoint_dir"]
+        )
+        print(f"Checkpoint saved at epoch {current_epoch + 1}")
+        print("Training interrupted but progress saved!")
+        print("Run the script again to resume from this checkpoint.")
+    else:
+        print("\n" + "=" * 60)
+        print("Training completed!")
+    
     print(f"Best loss: {best_loss:.4f}")
     print(f"Checkpoints saved to: {config['checkpoint_dir']}")
     print(f"Samples saved to: {config['sample_dir']}")

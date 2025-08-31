@@ -7,15 +7,21 @@ import argparse
 from model import UNet
 from scheduler import NoiseScheduler
 from loss import diffusion_loss
-from data.voc import VOCDiffusionDataset, create_data_loader
 from utils import save_checkpoint, load_checkpoint
+from data.cifar10 import load_train_data, CIFAR10DataLoader
 
 
-def train_step(model, scheduler, optimizer, images, text_embeddings):
+def train_step(model, scheduler, optimizer, images):
     """Single training step"""
-    # Print shapes for debugging
+    # Images are already MLX arrays from the dataloader
+    # Normalize from [0, 1] to [-1, 1]
+    images = images * 2.0 - 1.0
+
+    # Convert from HWC to CHW format for the model
+    images = mx.transpose(images, (0, 3, 1, 2))
+
     print(f"\nDebug shapes in train_step:")
-    print(f"Images shape: {images.shape}")
+    print(f"Images shape after conversion: {images.shape}")
 
     # Sample random timesteps
     batch_size = images.shape[0]
@@ -32,12 +38,10 @@ def train_step(model, scheduler, optimizer, images, text_embeddings):
     def loss_fn(params):
         # Expand timesteps to match model's expected input format
         t_expanded = mx.expand_dims(t, axis=-1)  # [batch_size, 1]
-        print(f"Expanded timesteps shape: {t_expanded.shape}")
 
         # Get model prediction
         model.update(params)
         predicted_noise = model(noisy_images, t_expanded)
-        print(f"Predicted noise shape: {predicted_noise.shape}")
 
         return diffusion_loss(predicted_noise, noise)
 
@@ -62,9 +66,9 @@ def train_epoch(model, scheduler, train_loader, optimizer):
     num_batches = 0
     start_time = time.time()
 
-    for batch_idx, (images, descriptions) in enumerate(train_loader):
-        # Training step - no try/except, let errors propagate
-        loss = train_step(model, scheduler, optimizer, images, descriptions)
+    for batch_idx, (images, labels) in enumerate(train_loader):
+        # Training step
+        loss = train_step(model, scheduler, optimizer, images)
         current_loss = loss.item()
         total_loss += current_loss
         num_batches += 1
@@ -74,10 +78,8 @@ def train_epoch(model, scheduler, train_loader, optimizer):
             avg_loss = total_loss / num_batches
             print(f"\nBatch {batch_idx}/{len(train_loader)}")
             print(f"Loss: {current_loss:.4f}, Avg Loss: {avg_loss:.4f}")
-            print(f"Sample text: {descriptions[0]}")
-            # Print shapes for debugging
             print(f"Images shape: {images.shape}")
-            print(f"Current batch size: {images.shape[0]}")
+            print(f"Labels: {labels[:5]}")  # Show first 5 labels
 
     epoch_loss = total_loss / max(num_batches, 1)
     epoch_time = time.time() - start_time
@@ -91,8 +93,8 @@ def parse_args():
         "--mode",
         type=str,
         default="dev",
-        choices=["dev", "full"],
-        help="Training mode: dev (local development) or full (full training)",
+        choices=["dev", "full", "test"],
+        help="Training mode: dev (local development), full (full training), or test (single step test)",
     )
     parser.add_argument(
         "--batch-size",
@@ -117,44 +119,43 @@ def parse_args():
 
 def main():
     args = parse_args()
-    print("\nInitializing training...")
-    print(f"Mode: {args.mode}")
-    print(f"Data directory: {args.data_dir}")
+    print(f"Initializing training {args.mode}...")
 
-    # Set image size and batch size based on mode
-    image_size = 64  # Start with smaller images for faster training
     batch_size = args.batch_size or (4 if args.mode == "dev" else 32)
 
-    # Create dataset with size limits for dev mode
-    print("\nCreating datasets...")
-    train_dataset = VOCDiffusionDataset(
-        data_dir=args.data_dir, year="2012", image_set="train", img_size=image_size
+    print("Loading CIFAR-10 dataset...")
+    train_images, train_labels = load_train_data(
+        data_dir="./cifar-10",
+        download=True,
+        normalize=True,
     )
 
     # Limit dataset size in dev mode
     if args.mode == "dev":
-        dev_size = 10  # Use only 10 images for dev mode
-        train_dataset.image_ids = train_dataset.image_ids[:dev_size]
+        dev_size = 100  # Use only 100 images for dev mode
+        train_images = train_images[:dev_size]
+        train_labels = train_labels[:dev_size]
         print(f"Dev mode: Limited to {dev_size} images")
 
     # Create data loader
-    train_loader = create_data_loader(
-        dataset=train_dataset, batch_size=batch_size, shuffle=True
+    train_loader = CIFAR10DataLoader(
+        images=train_images, labels=train_labels, batch_size=batch_size, shuffle=True
     )
 
-    print(f"Dataset size: {len(train_dataset)}")
+    print(f"Dataset size: {len(train_images)}")
+    print(f"Image shape: {train_images.shape[1:]}")
     print(f"Batch size: {batch_size}")
-    print(f"Expected batches per epoch: {len(train_dataset) // batch_size}")
+    print(f"Expected batches per epoch: {len(train_loader)}")
 
     # Initialize model, scheduler and optimizer
     model = UNet(
         in_channels=3,
-        model_channels=64,  # Smaller model for dev mode
+        model_channels=32,  # Smaller model for CIFAR-10
         out_channels=3,
         num_res_blocks=1,
-        attention_levels=[2],
-        channel_mult=(1, 2, 4),
-        time_emb_dim=64,
+        attention_levels=[],  # No attention for small images
+        channel_mult=(1, 2, 2, 2),  # Adjusted for 32x32 images
+        time_emb_dim=32,
     )
 
     scheduler = NoiseScheduler(
@@ -165,15 +166,27 @@ def main():
 
     optimizer = optim.Adam(learning_rate=1e-4)
 
-    # Verify data loader
-    print("\nVerifying data loader...")
+    # Test with single batch
+    print("\nTesting with single batch...")
     try:
         first_batch = next(iter(train_loader))
-        images, descriptions = first_batch
-        print(f"First batch shapes - Images: {images.shape}")
-        print(f"Sample description: {descriptions[0]}")
+        images, labels = first_batch
+        print(f"First batch - Images: {images.shape}, Labels: {labels.shape}")
+        print(f"Sample labels: {labels[:5]}")
+
+        # Run single training step
+        print("\nRunning single training step...")
+        loss = train_step(model, scheduler, optimizer, images)
+        print(f"Training step successful! Loss: {loss.item():.4f}")
+
+        if args.mode == "test":
+            print("\nTest mode complete - single step successful!")
+            return
     except Exception as e:
-        print(f"Error loading first batch: {str(e)}")
+        print(f"Error in test step: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
         raise
 
     # Training loop

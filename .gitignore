@@ -174,4 +174,4 @@ chesszero/checkpoints
 
 # Data
 data/*.tag.gz
-data/cifar10
+data/cifar-10

@@ -20,36 +20,34 @@ def download_with_progress(url: str, filename: str):
         print(f"\nError downloading file: {e}")
         raise
 
-def download_voc(data_dir: str, year: str = "2012"):
-    """Download and extract PASCAL VOC dataset"""
-    if year not in ["2007", "2012"]:
-        raise ValueError("Year must be '2007' or '2012'")
-    
+def download_cifar10(data_dir: str = "./cifar-10"):
+    """Download and extract CIFAR-10 dataset"""
     # Create directory if it doesn't exist
     os.makedirs(data_dir, exist_ok=True)
     
-    # URLs for different years
-    urls = {
-        "2007": "http://host.robots.ox.ac.uk/pascal/VOC/voc2007/VOCtrainval_06-Nov-2007.tar",
-        "2012": "http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar"
-    }
-    
-    url = urls[year]
-    filename = os.path.join(data_dir, f"VOC{year}.tar")
+    url = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
+    filename = os.path.join(data_dir, "cifar-10-python.tar.gz")
     
     # Download if not already present
     if not os.path.exists(filename):
-        print(f"Downloading VOC{year} dataset from {url}")
+        print(f"Downloading CIFAR-10 dataset from {url}")
         download_with_progress(url, filename)
+    else:
+        print(f"CIFAR-10 archive already exists at {filename}")
     
     # Extract if not already extracted
-    if not os.path.exists(os.path.join(data_dir, f"VOC{year}")):
-        print(f"Extracting VOC{year} dataset...")
-        with tarfile.open(filename) as tar:
+    extracted_dir = os.path.join(data_dir, "cifar-10-batches-py")
+    if not os.path.exists(extracted_dir):
+        print(f"Extracting CIFAR-10 dataset to {data_dir}...")
+        with tarfile.open(filename, 'r:gz') as tar:
             tar.extractall(data_dir)
+        print("Extraction complete!")
+    else:
+        print(f"CIFAR-10 already extracted at {extracted_dir}")
     
     print("Dataset ready!")
+    return extracted_dir
 
 if __name__ == "__main__":
     # Example usage
-    download_voc("./VOCdevkit", "2012")
+    download_cifar10()

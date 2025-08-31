@@ -7,8 +7,8 @@ requires-python = ">=3.12"
 dependencies = [
     "dataclasses>=0.8",
     "memory-profiler>=0.61.0",
-    "mlx-lm>=0.20.6",
     "mlx>=0.21.1",
+    "mlx-lm>=0.20.6",
     "numpy>=2.2.0",
     "opencv-python>=4.10.0.84",
     "pillow>=11.0.0",

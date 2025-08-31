@@ -171,3 +171,7 @@ diffusion/checkpoints
 
 # Chesszero
 chesszero/checkpoints
+
+# Data
+data/*.tag.gz
+data/cifar10

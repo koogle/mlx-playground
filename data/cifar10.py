@@ -15,10 +15,10 @@ def unpickle(file):
 def load_batch(batch_path: str) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load a single CIFAR-10 batch file
-    
+
     Args:
         batch_path: Path to the batch file
-    
+
     Returns:
         (images, labels) tuple where:
         - images: (N, 32, 32, 3) array of images in HWC format
@@ -39,16 +39,16 @@ def load_batch(batch_path: str) -> Tuple[np.ndarray, np.ndarray]:
 def _ensure_dataset_exists(data_dir: str, download: bool) -> str:
     """
     Ensure dataset exists and return the extracted directory path
-    
+
     Args:
         data_dir: Directory containing the dataset
         download: Whether to download if not found
-    
+
     Returns:
         Path to the extracted dataset directory
     """
     extracted_dir = os.path.join(data_dir, "cifar-10-batches-py")
-    
+
     if not os.path.exists(extracted_dir):
         if download:
             download_cifar10(data_dir)
@@ -56,7 +56,7 @@ def _ensure_dataset_exists(data_dir: str, download: bool) -> str:
             raise FileNotFoundError(
                 f"Dataset not found at {extracted_dir}. Set download=True to download it."
             )
-    
+
     return extracted_dir
 
 
@@ -65,29 +65,29 @@ def load_files(
     file_name: str = None,
     data_dir: str = "./cifar-10",
     download: bool = True,
-    normalize: bool = True
+    normalize: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load CIFAR-10 data from specific files or file pattern
-    
+
     Args:
         file_pattern: Pattern to match files (e.g., "data_batch_" for training)
         file_name: Specific file name (e.g., "test_batch" for test)
         data_dir: Directory containing the dataset
         download: Whether to download if not found
         normalize: Whether to normalize pixel values to [0, 1]
-    
+
     Returns:
         (images, labels) tuple
     """
     if file_pattern is None and file_name is None:
         raise ValueError("Either file_pattern or file_name must be specified")
-    
+
     extracted_dir = _ensure_dataset_exists(data_dir, download)
-    
+
     images_list = []
     labels_list = []
-    
+
     if file_name:
         # Load a specific file
         file_path = os.path.join(extracted_dir, file_name)
@@ -98,98 +98,80 @@ def load_files(
         labels_list.append(labels)
     else:
         # Load files matching pattern
-        batch_files = sorted([f for f in os.listdir(extracted_dir) if f.startswith(file_pattern)])
+        batch_files = sorted(
+            [f for f in os.listdir(extracted_dir) if f.startswith(file_pattern)]
+        )
         if not batch_files:
-            raise FileNotFoundError(f"No files matching pattern '{file_pattern}' found in {extracted_dir}")
-        
+            raise FileNotFoundError(
+                f"No files matching pattern '{file_pattern}' found in {extracted_dir}"
+            )
+
         for batch_file in batch_files:
             batch_path = os.path.join(extracted_dir, batch_file)
             images, labels = load_batch(batch_path)
             images_list.append(images)
             labels_list.append(labels)
-    
+
     # Concatenate all batches
     images = np.concatenate(images_list, axis=0)
     labels = np.concatenate(labels_list, axis=0)
-    
+
     # Normalize if requested
     if normalize:
         images = images.astype(np.float32) / 255.0
-    
+
     return images, labels
 
 
 def load_train_data(
-    data_dir: str = "./cifar-10",
-    download: bool = True,
-    normalize: bool = True
+    data_dir: str = "./cifar-10", download: bool = True, normalize: bool = True
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load CIFAR-10 training data
-    
-    Args:
-        data_dir: Directory containing the dataset
-        download: Whether to download if not found
-        normalize: Whether to normalize pixel values to [0, 1]
-    
-    Returns:
-        (train_images, train_labels) tuple where:
-        - train_images: (50000, 32, 32, 3) array
-        - train_labels: (50000,) array
     """
     images, labels = load_files(
         file_pattern="data_batch_",
         data_dir=data_dir,
         download=download,
-        normalize=normalize
+        normalize=normalize,
     )
     print(f"Loaded CIFAR-10 training data: {images.shape[0]} samples")
     return images, labels
 
 
 def load_test_data(
-    data_dir: str = "./cifar-10",
-    download: bool = True,
-    normalize: bool = True
+    data_dir: str = "./cifar-10", download: bool = True, normalize: bool = True
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load CIFAR-10 test data
-    
-    Args:
-        data_dir: Directory containing the dataset
-        download: Whether to download if not found
-        normalize: Whether to normalize pixel values to [0, 1]
-    
-    Returns:
-        (test_images, test_labels) tuple where:
-        - test_images: (10000, 32, 32, 3) array
-        - test_labels: (10000,) array
     """
     images, labels = load_files(
         file_name="test_batch",
         data_dir=data_dir,
         download=download,
-        normalize=normalize
+        normalize=normalize,
     )
     print(f"Loaded CIFAR-10 test data: {images.shape[0]} samples")
     return images, labels
 
 
 def load_cifar10(
-    data_dir: str = "./cifar-10", 
-    download: bool = True, 
+    data_dir: str = "./cifar-10",
+    download: bool = True,
     normalize: bool = True,
-    load_test: bool = True
-) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[Optional[np.ndarray], Optional[np.ndarray]]]:
+    load_test: bool = True,
+) -> Tuple[
+    Tuple[np.ndarray, np.ndarray], Tuple[Optional[np.ndarray], Optional[np.ndarray]]
+]:
     """
     Load complete CIFAR-10 dataset
-    
+
     Args:
         data_dir: Directory to save/load the dataset
         download: Whether to download the dataset if not found
         normalize: Whether to normalize pixel values to [0, 1]
         load_test: Whether to load the test dataset
-    
+
     Returns:
         ((train_images, train_labels), (test_images, test_labels))
         - train_images: (50000, 32, 32, 3) array
@@ -199,17 +181,17 @@ def load_cifar10(
     """
     # Load training data
     train_images, train_labels = load_train_data(data_dir, download, normalize)
-    
+
     # Load test data if requested
     if load_test:
         test_images, test_labels = load_test_data(data_dir, download, normalize)
     else:
         test_images, test_labels = None, None
-    
+
     print("CIFAR-10 dataset loaded successfully")
     print(f"  Image shape: {train_images.shape[1:]}")
     print(f"  Num classes: {len(np.unique(train_labels))}")
-    
+
     return (train_images, train_labels), (test_images, test_labels)
 
 
@@ -274,15 +256,15 @@ if __name__ == "__main__":
     # Example usage - load only training data for diffusion
     train_images, train_labels = load_train_data()
     print(f"Training data shape: {train_images.shape}")
-    
+
     # Or load everything
     (train_images, train_labels), (test_images, test_labels) = load_cifar10()
-    
+
     # Create data loaders
     train_loader = CIFAR10DataLoader(
         train_images, train_labels, batch_size=64, shuffle=True
     )
-    
+
     if test_images is not None:
         test_loader = CIFAR10DataLoader(
             test_images, test_labels, batch_size=64, shuffle=False

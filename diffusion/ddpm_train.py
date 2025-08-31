@@ -39,6 +39,7 @@ def train_step(model, scheduler, optimizer, images):
     # Add noise to images (forward diffusion process)
     noisy_images = scheduler.add_noise(images, t, noise)
 
+    @mx.compile
     def loss_fn(params):
         model.update(params)
         # Predict the noise
@@ -121,6 +122,7 @@ def train_epoch(model, scheduler, optimizer, train_loader, epoch, sample_every=1
     """Train for one epoch"""
     total_loss = 0
     num_batches = 0
+    batch_start_time = time.time()
 
     for batch_idx, (images, labels) in enumerate(train_loader):
         # Training step
@@ -130,10 +132,12 @@ def train_epoch(model, scheduler, optimizer, train_loader, epoch, sample_every=1
 
         # Print progress
         if batch_idx % 100 == 0:
+            batch_time = time.time() - batch_start_time
             avg_loss = total_loss / num_batches
             print(
-                f"  Batch {batch_idx}/{len(train_loader)}: Loss = {loss.item():.4f}, Avg = {avg_loss:.4f}"
+                f"  Batch {batch_idx}/{len(train_loader)}: Loss = {loss.item():.4f}, Avg = {avg_loss:.4f}, Time = {batch_time:.2f}s"
             )
+            batch_start_time = time.time()  # Reset timer for next batch group
 
     return total_loss / num_batches
 

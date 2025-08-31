@@ -56,23 +56,32 @@ class NoiseScheduler:
         # Calculate noised image for any timestamp
         return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
 
-    @mx.compile
     def p_sample(self, model, x, t, t_index):
         """Sample from the model at timestep t"""
-        betas_t = self.betas[t]
-        sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t]
-        sqrt_recip_alphas_t = self.sqrt_recip_alphas[t]
+        # Get scalar values for this timestep
+        betas_t = self.betas[t_index]
+        sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t_index]
+        sqrt_recip_alphas_t = self.sqrt_recip_alphas[t_index]
+
+        # Convert from CHW to HWC for model
+        x_hwc = mx.transpose(x, (0, 2, 3, 1))
+        
+        # Get model prediction in HWC format
+        noise_pred_hwc = model(x_hwc, t)
+        
+        # Convert back to CHW
+        noise_pred = mx.transpose(noise_pred_hwc, (0, 3, 1, 2))
 
         # Equation 11 in the paper
         # Use our model (noise predictor) to predict the mean
         model_mean = sqrt_recip_alphas_t * (
-            x - betas_t * model(x, t) / sqrt_one_minus_alphas_cumprod_t
+            x - betas_t * noise_pred / sqrt_one_minus_alphas_cumprod_t
         )
 
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = self.posterior_variance[t]
+            posterior_variance_t = self.posterior_variance[t_index]
             noise = mx.random.normal(x.shape)
             return model_mean + mx.sqrt(posterior_variance_t) * noise
 
@@ -84,7 +93,8 @@ class NoiseScheduler:
         imgs = []
 
         for i in reversed(range(0, self.num_timesteps)):
-            img = self.p_sample(model, img, mx.array([i] * b), i)
+            t = mx.array([i] * b)
+            img = self.p_sample(model, img, t, i)
             imgs.append(img)
         return imgs
 

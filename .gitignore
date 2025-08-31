@@ -162,12 +162,15 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+samples/
+checkpoints/
 
 # Data
 yolo/VOCdevkit
 yolo/checkpoints
 
 diffusion/checkpoints
+diffusion/samples
 
 # Chesszero
 chesszero/checkpoints

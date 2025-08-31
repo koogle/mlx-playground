@@ -183,11 +183,6 @@ class DDPM_UNet(nn.Module):
                 now_channels = out_channels
                 channels.append(now_channels)
 
-                # Add attention at specified resolutions
-                resolution = 32 // (2**i)
-                if resolution in attention_resolutions:
-                    self.down_blocks.append(AttentionBlock(now_channels))
-
             # Downsample (except for the last block)
             if i != len(channel_multipliers) - 1:
                 self.down_blocks.append(
@@ -199,7 +194,6 @@ class DDPM_UNet(nn.Module):
 
         # Middle blocks
         self.mid_block1 = ResidualBlock(now_channels, now_channels, time_emb_dim)
-        self.mid_attn = AttentionBlock(now_channels)
         self.mid_block2 = ResidualBlock(now_channels, now_channels, time_emb_dim)
 
         # Upsampling
@@ -215,11 +209,6 @@ class DDPM_UNet(nn.Module):
                     )
                 )
                 now_channels = out_channels
-
-                # Add attention at specified resolutions
-                resolution = 32 // (2**i)
-                if resolution in attention_resolutions and j == num_res_blocks:
-                    self.up_blocks.append(AttentionBlock(now_channels))
 
             # Upsample (except for the last block)
             if i != 0:
@@ -250,21 +239,22 @@ class DDPM_UNet(nn.Module):
         for layer in self.down_blocks:
             if isinstance(layer, ResidualBlock):
                 h = layer(h, t_emb)
-            else:
+                hs.append(h)  # Save skip connection after residual block
+            else:  # Downsampling conv
                 h = layer(h)
-            hs.append(h)
+                hs.append(h)  # Save skip connection after downsampling
 
         # Middle
         h = self.mid_block1(h, t_emb)
-        h = self.mid_attn(h)
         h = self.mid_block2(h, t_emb)
 
         # Upsampling
         for layer in self.up_blocks:
             if isinstance(layer, ResidualBlock):
-                h = mx.concatenate([h, hs.pop()], axis=-1)
+                skip = hs.pop()
+                h = mx.concatenate([h, skip], axis=-1)
                 h = layer(h, t_emb)
-            else:
+            else:  # Upsampling conv
                 h = layer(h)
 
         # Final conv

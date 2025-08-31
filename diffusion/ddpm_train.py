@@ -5,11 +5,16 @@ Train DDPM on CIFAR-10
 import os
 import sys
 import time
+import json
 import mlx.core as mx
 import mlx.optimizers as optim
 import numpy as np
 from pathlib import Path
 from PIL import Image
+import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.use("Agg")  # Use non-interactive backend
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -118,28 +123,89 @@ def save_samples(samples, epoch, save_dir="./samples"):
     print(f"  Saved to {save_dir}/samples_epoch_{epoch}_*.png")
 
 
-def train_epoch(model, scheduler, optimizer, train_loader, epoch, sample_every=10):
+def train_epoch(
+    model, scheduler, optimizer, train_loader, epoch, sample_every=10, loss_history=None
+):
     """Train for one epoch"""
     total_loss = 0
     num_batches = 0
     batch_start_time = time.time()
+    batch_losses = []
 
     for batch_idx, (images, labels) in enumerate(train_loader):
         # Training step
         loss = train_step(model, scheduler, optimizer, images)
-        total_loss += loss.item()
+        loss_val = loss.item()
+        total_loss += loss_val
         num_batches += 1
+        batch_losses.append(loss_val)
 
         # Print progress
         if batch_idx % 100 == 0:
             batch_time = time.time() - batch_start_time
             avg_loss = total_loss / num_batches
             print(
-                f"  Batch {batch_idx}/{len(train_loader)}: Loss = {loss.item():.4f}, Avg = {avg_loss:.4f}, Time = {batch_time:.2f}s"
+                f"  Batch {batch_idx}/{len(train_loader)}: Loss = {loss_val:.4f}, Avg = {avg_loss:.4f}, Time = {batch_time:.2f}s"
             )
             batch_start_time = time.time()  # Reset timer for next batch group
 
-    return total_loss / num_batches
+            # Record loss for visualization
+            if loss_history is not None:
+                loss_history["batch_losses"].append(
+                    {
+                        "epoch": epoch,
+                        "batch": batch_idx,
+                        "loss": loss_val,
+                        "avg_loss": avg_loss,
+                    }
+                )
+
+    return total_loss / num_batches, batch_losses
+
+
+def save_loss_plot(loss_history, save_dir="./samples/ddpm"):
+    """Save loss visualization plots"""
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Create figure with subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+
+    # Plot epoch losses
+    if loss_history["epoch_losses"]:
+        epochs = range(1, len(loss_history["epoch_losses"]) + 1)
+        ax1.plot(epochs, loss_history["epoch_losses"], "b-", linewidth=2)
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Average Loss")
+        ax1.set_title("Training Loss per Epoch")
+        ax1.grid(True, alpha=0.3)
+
+    # Plot batch losses (last few epochs for clarity)
+    if loss_history["batch_losses"]:
+        recent_batches = loss_history["batch_losses"][-1000:]  # Last 1000 batches
+        batch_nums = range(len(recent_batches))
+        batch_loss_vals = [b["loss"] for b in recent_batches]
+        avg_loss_vals = [b["avg_loss"] for b in recent_batches]
+
+        ax2.plot(batch_nums, batch_loss_vals, "b-", alpha=0.3, label="Batch Loss")
+        ax2.plot(batch_nums, avg_loss_vals, "r-", linewidth=2, label="Running Avg")
+        ax2.set_xlabel("Batch (last 1000)")
+        ax2.set_ylabel("Loss")
+        ax2.set_title("Recent Batch Losses")
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plot_path = os.path.join(save_dir, "training_loss.png")
+    plt.savefig(plot_path, dpi=100, bbox_inches="tight")
+    plt.close()
+
+    # Also save loss history as JSON for later analysis
+    json_path = os.path.join(save_dir, "loss_history.json")
+    with open(json_path, "w") as f:
+        json.dump(loss_history, f, indent=2)
+
+    print(f"  Loss plots saved to {plot_path}")
+    print(f"  Loss history saved to {json_path}")
 
 
 def main():
@@ -220,20 +286,25 @@ def main():
     print("-" * 40)
 
     best_loss = float("inf")
+    loss_history = {"epoch_losses": [], "batch_losses": [], "config": config}
 
     for epoch in range(start_epoch, config["num_epochs"]):
         print(f"\nEpoch {epoch + 1}/{config['num_epochs']}")
         start_time = time.time()
 
         # Train one epoch
-        avg_loss = train_epoch(
+        avg_loss, batch_losses = train_epoch(
             model,
             scheduler,
             optimizer,
             train_loader,
             epoch,
             sample_every=config["sample_every"],
+            loss_history=loss_history,
         )
+
+        # Track epoch loss
+        loss_history["epoch_losses"].append(avg_loss)
 
         epoch_time = time.time() - start_time
         print(f"Epoch {epoch + 1} completed in {epoch_time:.1f}s")
@@ -261,6 +332,9 @@ def main():
         print(f"\nGenerating epoch {epoch + 1} samples...")
         samples = sample_images(model, scheduler, num_samples=8)
         save_samples(samples, epoch + 1, config["sample_dir"])
+
+        # Save loss plots every epoch
+        save_loss_plot(loss_history, config["sample_dir"])
 
     print("\n" + "=" * 60)
     print("Training completed!")

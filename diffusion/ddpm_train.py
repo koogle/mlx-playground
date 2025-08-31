@@ -9,6 +9,7 @@ import mlx.core as mx
 import mlx.optimizers as optim
 import numpy as np
 from pathlib import Path
+from PIL import Image
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -76,18 +77,42 @@ def sample_images(model, scheduler, num_samples=4):
 
 
 def save_samples(samples, epoch, save_dir="./samples"):
-    """Save generated samples as numpy array"""
+    """Save generated samples as PNG images"""
     os.makedirs(save_dir, exist_ok=True)
     
-    # Convert to numpy and save
+    # Convert to numpy
     samples_np = np.array(samples)
-    save_path = os.path.join(save_dir, f"samples_epoch_{epoch}.npy")
-    np.save(save_path, samples_np)
+    
+    # Convert to uint8 (0-255 range)
+    samples_uint8 = (samples_np * 255).astype(np.uint8)
+    
+    # Save each sample as a separate PNG
+    for i, sample in enumerate(samples_uint8):
+        save_path = os.path.join(save_dir, f"samples_epoch_{epoch}_img_{i}.png")
+        img = Image.fromarray(sample)
+        img.save(save_path)
+    
+    # Also create a grid image with all samples
+    grid_size = int(np.sqrt(len(samples_uint8)))
+    if grid_size * grid_size < len(samples_uint8):
+        grid_size += 1
+    
+    # Create grid image
+    img_size = samples_uint8.shape[1]
+    grid_img = np.zeros((grid_size * img_size, grid_size * img_size, 3), dtype=np.uint8)
+    
+    for idx, sample in enumerate(samples_uint8):
+        row = idx // grid_size
+        col = idx % grid_size
+        grid_img[row*img_size:(row+1)*img_size, col*img_size:(col+1)*img_size] = sample
+    
+    grid_path = os.path.join(save_dir, f"samples_epoch_{epoch}_grid.png")
+    Image.fromarray(grid_img).save(grid_path)
     
     # Print statistics
     print(f"  Generated {len(samples_np)} samples")
     print(f"  Sample range: [{samples_np.min():.3f}, {samples_np.max():.3f}]")
-    print(f"  Saved to {save_path}")
+    print(f"  Saved to {save_dir}/samples_epoch_{epoch}_*.png")
 
 
 def train_epoch(model, scheduler, optimizer, train_loader, epoch, sample_every=10):
@@ -106,8 +131,8 @@ def train_epoch(model, scheduler, optimizer, train_loader, epoch, sample_every=1
             avg_loss = total_loss / num_batches
             print(f"  Batch {batch_idx}/{len(train_loader)}: Loss = {loss.item():.4f}, Avg = {avg_loss:.4f}")
         
-        # Generate samples periodically
-        if batch_idx % sample_every == 0:
+        # Generate samples periodically (skip first batch)
+        if batch_idx % sample_every == 0 and batch_idx > 0:
             print(f"  Generating samples at batch {batch_idx}...")
             samples = sample_images(model, scheduler, num_samples=4)
             save_samples(samples, epoch * 1000 + batch_idx)  # Unique ID for each sample

@@ -8,25 +8,7 @@ from model import UNet
 from scheduler import NoiseScheduler
 from loss import diffusion_loss
 from data.voc import VOCDiffusionDataset, create_data_loader
-
-
-def save_checkpoint(model, optimizer, epoch, loss, save_dir):
-    """Save model checkpoint"""
-    os.makedirs(save_dir, exist_ok=True)
-
-    # Save model weights
-    model_path = os.path.join(save_dir, f"diffusion_epoch_{epoch}.npz")
-    model.save_weights(model_path)
-    print(f"Saved model to {model_path}")
-
-    # Save optimizer state
-    optim_path = os.path.join(save_dir, f"optimizer_epoch_{epoch}.npz")
-    mx.savez(
-        optim_path,
-        learning_rate=mx.array(optimizer.learning_rate),
-        step=mx.array(optimizer.state.get("step", 0)),
-    )
-    print(f"Saved optimizer state to {optim_path}")
+from utils import save_checkpoint, load_checkpoint
 
 
 def train_step(model, scheduler, optimizer, images, text_embeddings):
@@ -111,12 +93,6 @@ def parse_args():
         default="dev",
         choices=["dev", "full"],
         help="Training mode: dev (local development) or full (full training)",
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        default="./VOCdevkit/VOC2012",
-        help="Path to VOC dataset",
     )
     parser.add_argument(
         "--batch-size",

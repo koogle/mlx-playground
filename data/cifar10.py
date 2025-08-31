@@ -36,6 +36,89 @@ def load_batch(batch_path: str) -> Tuple[np.ndarray, np.ndarray]:
     return data, np.array(labels)
 
 
+def _ensure_dataset_exists(data_dir: str, download: bool) -> str:
+    """
+    Ensure dataset exists and return the extracted directory path
+    
+    Args:
+        data_dir: Directory containing the dataset
+        download: Whether to download if not found
+    
+    Returns:
+        Path to the extracted dataset directory
+    """
+    extracted_dir = os.path.join(data_dir, "cifar-10-batches-py")
+    
+    if not os.path.exists(extracted_dir):
+        if download:
+            download_cifar10(data_dir)
+        else:
+            raise FileNotFoundError(
+                f"Dataset not found at {extracted_dir}. Set download=True to download it."
+            )
+    
+    return extracted_dir
+
+
+def load_files(
+    file_pattern: str = None,
+    file_name: str = None,
+    data_dir: str = "./cifar-10",
+    download: bool = True,
+    normalize: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Load CIFAR-10 data from specific files or file pattern
+    
+    Args:
+        file_pattern: Pattern to match files (e.g., "data_batch_" for training)
+        file_name: Specific file name (e.g., "test_batch" for test)
+        data_dir: Directory containing the dataset
+        download: Whether to download if not found
+        normalize: Whether to normalize pixel values to [0, 1]
+    
+    Returns:
+        (images, labels) tuple
+    """
+    if file_pattern is None and file_name is None:
+        raise ValueError("Either file_pattern or file_name must be specified")
+    
+    extracted_dir = _ensure_dataset_exists(data_dir, download)
+    
+    images_list = []
+    labels_list = []
+    
+    if file_name:
+        # Load a specific file
+        file_path = os.path.join(extracted_dir, file_name)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+        images, labels = load_batch(file_path)
+        images_list.append(images)
+        labels_list.append(labels)
+    else:
+        # Load files matching pattern
+        batch_files = sorted([f for f in os.listdir(extracted_dir) if f.startswith(file_pattern)])
+        if not batch_files:
+            raise FileNotFoundError(f"No files matching pattern '{file_pattern}' found in {extracted_dir}")
+        
+        for batch_file in batch_files:
+            batch_path = os.path.join(extracted_dir, batch_file)
+            images, labels = load_batch(batch_path)
+            images_list.append(images)
+            labels_list.append(labels)
+    
+    # Concatenate all batches
+    images = np.concatenate(images_list, axis=0)
+    labels = np.concatenate(labels_list, axis=0)
+    
+    # Normalize if requested
+    if normalize:
+        images = images.astype(np.float32) / 255.0
+    
+    return images, labels
+
+
 def load_train_data(
     data_dir: str = "./cifar-10",
     download: bool = True,
@@ -54,43 +137,14 @@ def load_train_data(
         - train_images: (50000, 32, 32, 3) array
         - train_labels: (50000,) array
     """
-    extracted_dir = os.path.join(data_dir, "cifar-10-batches-py")
-
-    if not os.path.exists(extracted_dir):
-        if download:
-            download_cifar10(data_dir)
-        else:
-            raise FileNotFoundError(
-                f"Dataset not found at {extracted_dir}. Set download=True to download it."
-            )
-
-    # Find all data_batch files
-    batch_files = sorted(
-        [f for f in os.listdir(extracted_dir) if f.startswith("data_batch_")]
+    images, labels = load_files(
+        file_pattern="data_batch_",
+        data_dir=data_dir,
+        download=download,
+        normalize=normalize
     )
-
-    if not batch_files:
-        raise FileNotFoundError(f"No data_batch files found in {extracted_dir}")
-
-    train_images = []
-    train_labels = []
-
-    for batch_file in batch_files:
-        batch_path = os.path.join(extracted_dir, batch_file)
-        images, labels = load_batch(batch_path)
-        train_images.append(images)
-        train_labels.append(labels)
-
-    # Concatenate all batches
-    train_images = np.concatenate(train_images, axis=0)
-    train_labels = np.concatenate(train_labels, axis=0)
-
-    # Normalize if requested
-    if normalize:
-        train_images = train_images.astype(np.float32) / 255.0
-
-    print(f"Loaded CIFAR-10 training data: {train_images.shape[0]} samples")
-    return train_images, train_labels
+    print(f"Loaded CIFAR-10 training data: {images.shape[0]} samples")
+    return images, labels
 
 
 def load_test_data(
@@ -111,29 +165,14 @@ def load_test_data(
         - test_images: (10000, 32, 32, 3) array
         - test_labels: (10000,) array
     """
-    extracted_dir = os.path.join(data_dir, "cifar-10-batches-py")
-
-    if not os.path.exists(extracted_dir):
-        if download:
-            download_cifar10(data_dir)
-        else:
-            raise FileNotFoundError(
-                f"Dataset not found at {extracted_dir}. Set download=True to download it."
-            )
-
-    # Load test batch
-    test_file = os.path.join(extracted_dir, "test_batch")
-    if not os.path.exists(test_file):
-        raise FileNotFoundError(f"Test batch not found at {test_file}")
-    
-    test_images, test_labels = load_batch(test_file)
-
-    # Normalize if requested
-    if normalize:
-        test_images = test_images.astype(np.float32) / 255.0
-
-    print(f"Loaded CIFAR-10 test data: {test_images.shape[0]} samples")
-    return test_images, test_labels
+    images, labels = load_files(
+        file_name="test_batch",
+        data_dir=data_dir,
+        download=download,
+        normalize=normalize
+    )
+    print(f"Loaded CIFAR-10 test data: {images.shape[0]} samples")
+    return images, labels
 
 
 def load_cifar10(

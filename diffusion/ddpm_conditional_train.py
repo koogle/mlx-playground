@@ -232,7 +232,7 @@ def save_conditional_samples(samples, labels, epoch, save_dir="./samples"):
     # Use PIL to add text labels
     pil_img = Image.fromarray(grid_img)
     draw = ImageDraw.Draw(pil_img)
-    
+
     # Try to use a default font, fallback to basic if not available
     try:
         font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 12)
@@ -251,16 +251,18 @@ def save_conditional_samples(samples, labels, epoch, save_dir="./samples"):
 
         # Place the image
         pil_img.paste(Image.fromarray(sample), (x_start, y_start))
-        
+
         # Add label text below the image
         label_text = CIFAR10_CLASSES[label]
         text_y = y_start + img_size + 2
         text_x = x_start + img_size // 2
-        
+
         # Draw text centered below image
         bbox = draw.textbbox((0, 0), label_text, font=font)
         text_width = bbox[2] - bbox[0]
-        draw.text((text_x - text_width // 2, text_y), label_text, fill=(0, 0, 0), font=font)
+        draw.text(
+            (text_x - text_width // 2, text_y), label_text, fill=(0, 0, 0), font=font
+        )
 
     # Save grid
     grid_path = os.path.join(save_dir, f"conditional_samples_epoch_{epoch}.png")
@@ -311,7 +313,7 @@ def train_epoch(
         batch_losses.append(loss_val)
 
         # Print progress
-        if batch_idx % 10 == 0:
+        if batch_idx % 100 == 0:
             batch_time = time.time() - batch_start_time
             avg_loss = total_loss / num_batches
             print(
@@ -510,12 +512,12 @@ def main():
         samples_list = []
         labels_list = []
 
-        for class_idx in range(5):
+        for class_idx in range(1):
             samples, labels = sample_images_conditional(
                 model,
                 scheduler,
                 class_labels=class_idx,
-                num_samples=2,
+                num_samples=1,
                 guidance_scale=config["guidance_scale"],
             )
             samples_list.append(samples)

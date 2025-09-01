@@ -392,7 +392,7 @@ def main():
         attention_resolutions=(8,),
         num_classes=10,  # CIFAR-10 has 10 classes
         class_emb_dim=128,
-        use_cross_attention=True,  # Enable cross-attention to class embeddings
+        use_cross_attention=True,
     )
 
     # Create scheduler

@@ -1,6 +1,10 @@
 """
 Conditional DDPM model with CLIP-style embeddings for class-conditional generation
 Supports both text and class label conditioning
+
+Usage:
+- For training: Use __call__() method which allows gradient computation
+- For sampling/inference: Use sample() method which stops all gradient computation
 """
 
 import mlx.core as mx
@@ -53,8 +57,10 @@ class ConditionalResidualBlock(nn.Module):
         time_emb_dim=None,
         class_emb_dim=None,
         num_groups=8,
+        use_cross_attention=False,  # New parameter for cross-attention
     ):
         super().__init__()
+        self.use_cross_attention = use_cross_attention
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
@@ -81,6 +87,13 @@ class ConditionalResidualBlock(nn.Module):
         else:
             self.class_mlp = None
 
+        # Lightweight cross-attention for class conditioning
+        if use_cross_attention and class_emb_dim is not None:
+            self.cross_attn_norm = nn.GroupNorm(num_groups, out_channels)
+            self.cross_attn_q = nn.Conv2d(out_channels, out_channels, kernel_size=1)
+            self.cross_attn_kv = nn.Linear(class_emb_dim, out_channels * 2)
+            self.cross_attn_proj = nn.Conv2d(out_channels, out_channels, kernel_size=1)
+
         # Residual connection
         if in_channels != out_channels:
             self.residual_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
@@ -100,15 +113,43 @@ class ConditionalResidualBlock(nn.Module):
 
         # Add time embedding
         if self.time_mlp is not None and time_emb is not None:
-            time_emb = self.time_mlp(time_emb)
-            h = h + mx.expand_dims(mx.expand_dims(time_emb, 1), 1)
+            time_emb_out = self.time_mlp(time_emb)
+            h = h + mx.expand_dims(mx.expand_dims(time_emb_out, 1), 1)
 
         # Add class embedding
         if self.class_mlp is not None and class_emb is not None:
-            class_emb = self.class_mlp(class_emb)
-            h = h + mx.expand_dims(mx.expand_dims(class_emb, 1), 1)
+            class_emb_out = self.class_mlp(class_emb)
+            h = h + mx.expand_dims(mx.expand_dims(class_emb_out, 1), 1)
 
         h = self.norm2(self.conv2(h))
+        
+        # Apply lightweight cross-attention if enabled
+        if self.use_cross_attention and hasattr(self, 'cross_attn_q') and class_emb is not None:
+            b, height, width, c = h.shape
+            
+            # Normalize and compute queries
+            h_norm = self.cross_attn_norm(h)
+            q = self.cross_attn_q(h_norm)
+            q = mx.reshape(q, (b, height * width, c))
+            
+            # Compute keys and values from class embeddings
+            kv = self.cross_attn_kv(class_emb)
+            k, v = mx.split(kv, 2, axis=-1)
+            k = mx.expand_dims(k, 1)  # [b, 1, c]
+            v = mx.expand_dims(v, 1)  # [b, 1, c]
+            
+            # Scaled dot-product attention
+            scale = 1.0 / mx.sqrt(mx.array(c, dtype=mx.float32))
+            attn = mx.softmax(mx.matmul(q, mx.transpose(k, (0, 2, 1))) * scale, axis=-1)
+            cross_out = mx.matmul(attn, v)
+            
+            # Reshape and project back
+            cross_out = mx.reshape(cross_out, (b, height, width, c))
+            cross_out = self.cross_attn_proj(cross_out)
+            
+            # Add with small weight
+            h = h + 0.1 * cross_out
+        
         h = self.relu(h + self.residual_conv(x))
 
         return h
@@ -218,7 +259,7 @@ class ConditionalDDPM_UNet(nn.Module):
         dropout=0.1,
         num_classes=10,  # Number of classes for conditioning
         class_emb_dim=128,  # Dimension of class embeddings
-        use_cross_attention=False,  # Whether to use cross-attention to class
+        use_cross_attention=True,  # Whether to use cross-attention to class (default True for better conditioning)
     ):
         super().__init__()
 
@@ -251,9 +292,12 @@ class ConditionalDDPM_UNet(nn.Module):
             out_channels = base_channels * mult
 
             for j in range(num_res_blocks):
+                # Add cross-attention to every other residual block for better conditioning
+                use_block_cross_attn = use_cross_attention and (j % 2 == 1)
                 self.down_blocks.append(
                     ConditionalResidualBlock(
-                        now_channels, out_channels, time_emb_dim, class_emb_dim
+                        now_channels, out_channels, time_emb_dim, class_emb_dim,
+                        use_cross_attention=use_block_cross_attn
                     )
                 )
                 now_channels = out_channels
@@ -279,15 +323,17 @@ class ConditionalDDPM_UNet(nn.Module):
                 )
                 channels.append(now_channels)
 
-        # Middle blocks with attention
+        # Middle blocks with attention - add cross-attention to middle blocks too
         self.mid_block1 = ConditionalResidualBlock(
-            now_channels, now_channels, time_emb_dim, class_emb_dim
+            now_channels, now_channels, time_emb_dim, class_emb_dim,
+            use_cross_attention=use_cross_attention
         )
         self.mid_attention = ConditionalAttentionBlock(
             now_channels, class_emb_dim=class_emb_dim if use_cross_attention else None
         )
         self.mid_block2 = ConditionalResidualBlock(
-            now_channels, now_channels, time_emb_dim, class_emb_dim
+            now_channels, now_channels, time_emb_dim, class_emb_dim,
+            use_cross_attention=use_cross_attention
         )
 
         # Upsampling path
@@ -305,12 +351,15 @@ class ConditionalDDPM_UNet(nn.Module):
                     )
 
                 skip_channels = channels.pop()
+                # Add cross-attention to first residual block after skip connection
+                use_block_cross_attn = use_cross_attention and (j == 0)
                 self.up_blocks.append(
                     ConditionalResidualBlock(
                         now_channels + skip_channels,
                         out_channels,
                         time_emb_dim,
                         class_emb_dim,
+                        use_cross_attention=use_block_cross_attn
                     )
                 )
                 now_channels = out_channels
@@ -401,3 +450,28 @@ class ConditionalDDPM_UNet(nn.Module):
         h = self.conv_out(h)
 
         return h
+    
+    def sample(self, x, t, class_labels=None, unconditional_prob=0.0):
+        """
+        Sampling/inference forward pass without gradient computation
+        
+        Args:
+            x: [batch_size, height, width, channels] - Input noisy images
+            t: [batch_size] - Timesteps
+            class_labels: [batch_size] - Class labels for conditioning
+            unconditional_prob: Set to 0.0 for deterministic sampling
+        
+        Returns:
+            Predicted noise without gradients
+        """
+        # Stop gradients on all inputs to ensure no gradient computation
+        x = mx.stop_gradient(x)
+        t = mx.stop_gradient(t)
+        if class_labels is not None:
+            class_labels = mx.stop_gradient(class_labels)
+        
+        # Forward pass with stopped gradients
+        output = self.__call__(x, t, class_labels, unconditional_prob)
+        
+        # Stop gradients on output as well
+        return mx.stop_gradient(output)

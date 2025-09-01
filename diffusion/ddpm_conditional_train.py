@@ -229,8 +229,7 @@ def save_conditional_samples(samples, labels, epoch, save_dir="./samples"):
     # Create white background
     grid_img = np.ones((grid_height, grid_width, 3), dtype=np.uint8) * 255
 
-    # We'll use PIL to add text labels
-    from PIL import ImageDraw, ImageFont
+    # Use PIL to add text labels
     pil_img = Image.fromarray(grid_img)
     draw = ImageDraw.Draw(pil_img)
     
@@ -282,7 +281,7 @@ def train_epoch(
     train_loader,
     epoch,
     unconditional_prob=0.1,
-    sample_every=50,
+    sample_every=500,
     loss_history=None,
 ):
     """
@@ -336,7 +335,7 @@ def train_epoch(
                 )
 
         # Generate conditional samples periodically (skip first batch)
-        if batch_idx % sample_every == 200 and batch_idx > 0:
+        if batch_idx % sample_every == 0 and batch_idx > 0:
             print(f"  Generating conditional samples at batch {batch_idx}...")
 
             # Generate samples for each class

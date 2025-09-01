@@ -118,34 +118,38 @@ class ConditionalResidualBlock(nn.Module):
             h = h + mx.expand_dims(mx.expand_dims(class_emb_out, 1), 1)
 
         h = self.norm2(self.conv2(h))
-        
+
         # Apply lightweight cross-attention if enabled
-        if self.use_cross_attention and hasattr(self, 'cross_attn_q') and class_emb is not None:
+        if (
+            self.use_cross_attention
+            and hasattr(self, "cross_attn_q")
+            and class_emb is not None
+        ):
             b, height, width, c = h.shape
-            
+
             # Normalize and compute queries
             h_norm = self.cross_attn_norm(h)
             q = self.cross_attn_q(h_norm)
             q = mx.reshape(q, (b, height * width, c))
-            
+
             # Compute keys and values from class embeddings
             kv = self.cross_attn_kv(class_emb)
             k, v = mx.split(kv, 2, axis=-1)
             k = mx.expand_dims(k, 1)  # [b, 1, c]
             v = mx.expand_dims(v, 1)  # [b, 1, c]
-            
+
             # Scaled dot-product attention
             scale = 1.0 / mx.sqrt(mx.array(c, dtype=mx.float32))
             attn = mx.softmax(mx.matmul(q, mx.transpose(k, (0, 2, 1))) * scale, axis=-1)
             cross_out = mx.matmul(attn, v)
-            
+
             # Reshape and project back
             cross_out = mx.reshape(cross_out, (b, height, width, c))
             cross_out = self.cross_attn_proj(cross_out)
-            
+
             # Add with small weight
             h = h + 0.1 * cross_out
-        
+
         h = self.relu(h + self.residual_conv(x))
 
         return h
@@ -212,7 +216,7 @@ class ConditionalAttentionBlock(nn.Module):
             cross_out = mx.matmul(cross_attn, class_v)
 
             # Combine self and cross attention
-            out = out + 0.1 * cross_out  # Small weight for cross-attention initially
+            out = out + 0.3 * cross_out  # Small weight for cross-attention initially
 
         # Reshape back and project
         out = mx.reshape(out, (b, h, w, c))
@@ -292,8 +296,11 @@ class ConditionalDDPM_UNet(nn.Module):
                 use_block_cross_attn = use_cross_attention and (j % 2 == 1)
                 self.down_blocks.append(
                     ConditionalResidualBlock(
-                        now_channels, out_channels, time_emb_dim, class_emb_dim,
-                        use_cross_attention=use_block_cross_attn
+                        now_channels,
+                        out_channels,
+                        time_emb_dim,
+                        class_emb_dim,
+                        use_cross_attention=use_block_cross_attn,
                     )
                 )
                 now_channels = out_channels
@@ -321,15 +328,21 @@ class ConditionalDDPM_UNet(nn.Module):
 
         # Middle blocks with attention - add cross-attention to middle blocks too
         self.mid_block1 = ConditionalResidualBlock(
-            now_channels, now_channels, time_emb_dim, class_emb_dim,
-            use_cross_attention=use_cross_attention
+            now_channels,
+            now_channels,
+            time_emb_dim,
+            class_emb_dim,
+            use_cross_attention=use_cross_attention,
         )
         self.mid_attention = ConditionalAttentionBlock(
             now_channels, class_emb_dim=class_emb_dim if use_cross_attention else None
         )
         self.mid_block2 = ConditionalResidualBlock(
-            now_channels, now_channels, time_emb_dim, class_emb_dim,
-            use_cross_attention=use_cross_attention
+            now_channels,
+            now_channels,
+            time_emb_dim,
+            class_emb_dim,
+            use_cross_attention=use_cross_attention,
         )
 
         # Upsampling path
@@ -355,7 +368,7 @@ class ConditionalDDPM_UNet(nn.Module):
                         out_channels,
                         time_emb_dim,
                         class_emb_dim,
-                        use_cross_attention=use_block_cross_attn
+                        use_cross_attention=use_block_cross_attn,
                     )
                 )
                 now_channels = out_channels

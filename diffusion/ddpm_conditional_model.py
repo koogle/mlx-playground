@@ -446,28 +446,3 @@ class ConditionalDDPM_UNet(nn.Module):
         h = self.conv_out(h)
 
         return h
-    
-    def sample(self, x, t, class_labels=None, unconditional_prob=0.0):
-        """
-        Sampling/inference forward pass without gradient computation
-        
-        Args:
-            x: [batch_size, height, width, channels] - Input noisy images
-            t: [batch_size] - Timesteps
-            class_labels: [batch_size] - Class labels for conditioning
-            unconditional_prob: Set to 0.0 for deterministic sampling
-        
-        Returns:
-            Predicted noise without gradients
-        """
-        # Stop gradients on all inputs to ensure no gradient computation
-        x = mx.stop_gradient(x)
-        t = mx.stop_gradient(t)
-        if class_labels is not None:
-            class_labels = mx.stop_gradient(class_labels)
-        
-        # Forward pass with stopped gradients
-        output = self.__call__(x, t, class_labels, unconditional_prob)
-        
-        # Stop gradients on output as well
-        return mx.stop_gradient(output)

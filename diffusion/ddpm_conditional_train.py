@@ -512,11 +512,13 @@ def main():
         samples_list = []
         labels_list = []
 
-        for class_idx in range(1):
+        for _ in range(2):
+            # Pick a random class label (0-9 for CIFAR-10)
+            random_class = np.random.randint(0, 10)
             samples, labels = sample_images_conditional(
                 model,
                 scheduler,
-                class_labels=class_idx,
+                class_labels=random_class,
                 num_samples=1,
                 guidance_scale=config["guidance_scale"],
             )

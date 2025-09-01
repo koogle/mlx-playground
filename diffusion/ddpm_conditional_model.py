@@ -1,10 +1,6 @@
 """
 Conditional DDPM model with CLIP-style embeddings for class-conditional generation
 Supports both text and class label conditioning
-
-Usage:
-- For training: Use __call__() method which allows gradient computation
-- For sampling/inference: Use sample() method which stops all gradient computation
 """
 
 import mlx.core as mx

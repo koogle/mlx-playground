@@ -15,7 +15,7 @@ import time
 import mlx.core as mx
 import mlx.optimizers as optim
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend
@@ -220,16 +220,27 @@ def save_conditional_samples(samples, labels, epoch, save_dir="./samples"):
     # Create grid image with space for labels
     img_size = 32
     padding = 5
-    label_height = 15
-    cell_size = img_size + padding * 2
+    label_height = 20
+    cell_size = img_size + padding * 2 + label_height
 
-    grid_height = grid_size * cell_size + label_height
+    grid_height = grid_size * cell_size
     grid_width = grid_size * cell_size
 
     # Create white background
     grid_img = np.ones((grid_height, grid_width, 3), dtype=np.uint8) * 255
 
-    # Place images in grid
+    # We'll use PIL to add text labels
+    from PIL import ImageDraw, ImageFont
+    pil_img = Image.fromarray(grid_img)
+    draw = ImageDraw.Draw(pil_img)
+    
+    # Try to use a default font, fallback to basic if not available
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 12)
+    except:
+        font = ImageFont.load_default()
+
+    # Place images in grid with labels
     for idx, (sample, label) in enumerate(zip(samples_uint8, labels_np)):
         if idx >= grid_size * grid_size:
             break
@@ -239,11 +250,22 @@ def save_conditional_samples(samples, labels, epoch, save_dir="./samples"):
         y_start = row * cell_size + padding
         x_start = col * cell_size + padding
 
-        grid_img[y_start : y_start + img_size, x_start : x_start + img_size] = sample
+        # Place the image
+        pil_img.paste(Image.fromarray(sample), (x_start, y_start))
+        
+        # Add label text below the image
+        label_text = CIFAR10_CLASSES[label]
+        text_y = y_start + img_size + 2
+        text_x = x_start + img_size // 2
+        
+        # Draw text centered below image
+        bbox = draw.textbbox((0, 0), label_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        draw.text((text_x - text_width // 2, text_y), label_text, fill=(0, 0, 0), font=font)
 
     # Save grid
     grid_path = os.path.join(save_dir, f"conditional_samples_epoch_{epoch}.png")
-    Image.fromarray(grid_img).save(grid_path)
+    pil_img.save(grid_path)
 
     # Print info
     print(f"  Generated {num_samples} conditional samples")

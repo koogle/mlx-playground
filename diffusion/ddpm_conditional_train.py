@@ -293,7 +293,6 @@ def train_epoch(
         train_loader: DataLoader
         epoch: Current epoch number
         unconditional_prob: Dropout probability for CFG training
-        sample_every: Generate samples every N batches
         loss_history: Dictionary to track losses
     """
     total_loss = 0
@@ -353,7 +352,6 @@ def main():
         "num_timesteps": 1000,
         "unconditional_prob": 0.1,  # 10% dropout for CFG training
         "guidance_scale": 7.5,  # For sampling
-        "sample_every": 50,
         "save_every": 5,
         "resume_from": None,
     }
@@ -470,7 +468,6 @@ def main():
             train_loader,
             epoch,
             unconditional_prob=config["unconditional_prob"],
-            sample_every=config["sample_every"],
             loss_history=loss_history,
         )
 

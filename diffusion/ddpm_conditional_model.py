@@ -269,7 +269,6 @@ class ConditionalDDPM_UNet(nn.Module):
                             ),
                         )
                     )
-                    channels.append(now_channels)
 
             # Downsample (except for the last block)
             if i != len(channel_multipliers) - 1:
@@ -296,15 +295,15 @@ class ConditionalDDPM_UNet(nn.Module):
         for i, mult in reversed(list(enumerate(channel_multipliers))):
             out_channels = base_channels * mult
 
-            # Upsample first (except for the last block)
-            if i != len(channel_multipliers) - 1:
-                self.up_blocks.append(
-                    nn.ConvTranspose2d(
-                        now_channels, now_channels, kernel_size=2, stride=2
-                    )
-                )
-
             for j in range(num_res_blocks + 1):
+                # Upsample at the beginning of each resolution level (except the first)
+                if j == 0 and i != len(channel_multipliers) - 1:
+                    self.up_blocks.append(
+                        nn.ConvTranspose2d(
+                            now_channels, now_channels, kernel_size=2, stride=2
+                        )
+                    )
+
                 skip_channels = channels.pop()
                 self.up_blocks.append(
                     ConditionalResidualBlock(
@@ -373,10 +372,10 @@ class ConditionalDDPM_UNet(nn.Module):
                 hs.append(h)
             elif isinstance(layer, ConditionalAttentionBlock):
                 h = layer(h, class_emb)
-                hs.append(h)
+                # Don't append skip for attention blocks
             else:  # Conv2d downsampling
                 h = layer(h)
-                hs.append(h)
+                hs.append(h)  # Save skip after downsampling
 
         # Middle
         h = self.mid_block1(h, t_emb, class_emb)
@@ -384,12 +383,12 @@ class ConditionalDDPM_UNet(nn.Module):
         h = self.mid_block2(h, t_emb, class_emb)
 
         # Upsampling with skip connections
-        for layer in self.up_blocks:
+        for i, layer in enumerate(self.up_blocks):
             if isinstance(layer, nn.ConvTranspose2d):
                 # Upsample first
                 h = layer(h)
             elif isinstance(layer, ConditionalResidualBlock):
-                # Then concatenate with skip connection
+                # Pop skip connection and concatenate
                 skip = hs.pop()
                 h = mx.concatenate([h, skip], axis=-1)
                 h = layer(h, t_emb, class_emb)

@@ -281,7 +281,6 @@ def train_epoch(
     train_loader,
     epoch,
     unconditional_prob=0.1,
-    sample_every=500,
     loss_history=None,
 ):
     """
@@ -333,32 +332,6 @@ def train_epoch(
                         "avg_loss": avg_loss,
                     }
                 )
-
-        # Generate conditional samples periodically (skip first batch)
-        if batch_idx % sample_every == 0 and batch_idx > 0:
-            print(f"  Generating conditional samples at batch {batch_idx}...")
-
-            # Generate samples for each class
-            samples_list = []
-            labels_list = []
-
-            for class_idx in range(2):
-                class_samples, class_labels = sample_images_conditional(
-                    model,
-                    scheduler,
-                    class_labels=class_idx,
-                    num_samples=1,
-                    guidance_scale=7.5,
-                )
-                samples_list.append(class_samples)
-                labels_list.append(class_labels)
-
-            # Combine all samples
-            all_samples = mx.concatenate(samples_list, axis=0)
-            all_labels = mx.concatenate(labels_list, axis=0)
-
-            # Save samples
-            save_conditional_samples(all_samples, all_labels, epoch * 1000 + batch_idx)
 
     return total_loss / num_batches, batch_losses
 
@@ -540,7 +513,7 @@ def main():
         samples_list = []
         labels_list = []
 
-        for class_idx in range(10):
+        for class_idx in range(5):
             samples, labels = sample_images_conditional(
                 model,
                 scheduler,

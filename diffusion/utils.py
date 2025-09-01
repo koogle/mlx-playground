@@ -334,7 +334,7 @@ class InterruptHandler:
             self.first_interrupt_time = current_time
 
             print("\n\n========================================")
-            print("🛑 Interrupt received! Saving progress...")
+            print("Interrupt received! Saving progress...")
             print("Press Ctrl+C again to force quit (without saving)")
             print("========================================\n")
 
@@ -343,16 +343,16 @@ class InterruptHandler:
                 try:
                     self.save_callback()
                     self.save_completed = True
-                    print("\n✅ Progress saved successfully!")
+                    print("\nProgress saved successfully!")
                     print("Exiting gracefully...")
                 except Exception as e:
-                    print(f"\n⚠️ Error during save: {e}")
+                    print(f"\nError during save: {e}")
                     print("Press Ctrl+C again to force quit")
 
         # Second interrupt within patience window - force quit
-        elif current_time - self.first_interrupt_time < self.patience:
+        elif current_time - (self.first_interrupt_time or 0.0) < self.patience:
             print("\n\n========================================")
-            print("⚠️  FORCE QUIT - Exiting immediately!")
+            print("FORCE QUIT - Exiting immediately!")
             print("Warning: Progress may not be saved")
             print("========================================\n")
 
@@ -366,7 +366,7 @@ class InterruptHandler:
         else:
             self.first_interrupt_time = current_time
             print(
-                "\n🛑 Another interrupt received. Press Ctrl+C again quickly to force quit."
+                "\nAnother interrupt received. Press Ctrl+C again quickly to force quit."
             )
 
     def setup(self):

@@ -9,7 +9,6 @@ import json
 import mlx.core as mx
 import mlx.optimizers as optim
 import numpy as np
-from pathlib import Path
 from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib

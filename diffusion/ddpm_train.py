@@ -22,8 +22,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from diffusion.ddpm_model import DDPM_UNet
 from diffusion.scheduler import NoiseScheduler
 from diffusion.utils import (
-    save_checkpoint, load_checkpoint, find_latest_checkpoint_in_dir,
-    create_interrupt_handler
+    save_checkpoint,
+    load_checkpoint,
+    find_latest_checkpoint_in_dir,
+    create_interrupt_handler,
 )
 from data.cifar10 import load_train_data, CIFAR10DataLoader
 
@@ -211,28 +213,6 @@ def save_loss_plot(loss_history, save_dir="./samples/ddpm"):
     print(f"  Loss history saved to {json_path}")
 
 
-def find_latest_checkpoint_old(checkpoint_dir):
-    """Find the latest checkpoint in the directory"""
-    if not os.path.exists(checkpoint_dir):
-        return None
-    
-    # Look for checkpoint files
-    checkpoints = []
-    for file in os.listdir(checkpoint_dir):
-        if file.startswith("checkpoint_epoch_") and file.endswith(".npz"):
-            try:
-                epoch = int(file.split("_")[2].split(".")[0])
-                checkpoints.append((epoch, os.path.join(checkpoint_dir, file)))
-            except:
-                continue
-    
-    if checkpoints:
-        # Return the checkpoint with highest epoch
-        checkpoints.sort(key=lambda x: x[0])
-        return checkpoints[-1][1]
-    return None
-
-
 def main():
     print("=" * 60)
     print("DDPM Training for CIFAR-10")
@@ -298,20 +278,19 @@ def main():
     # Load checkpoint if resuming or auto-load latest
     start_epoch = 0
     checkpoint_to_load = config["resume_from"]
-    
+
     # If no specific checkpoint specified, try to find the latest one
     if not checkpoint_to_load:
         latest_checkpoint = find_latest_checkpoint_in_dir(config["checkpoint_dir"])
         if latest_checkpoint:
             print(f"\nFound existing checkpoint: {latest_checkpoint}")
             checkpoint_to_load = latest_checkpoint
-    
+
     if checkpoint_to_load:
         print(f"\nLoading checkpoint from {checkpoint_to_load}...")
         try:
             start_epoch = load_checkpoint(
-                model, optimizer, checkpoint_to_load,
-                expected_type="unconditional"
+                model, optimizer, checkpoint_to_load, expected_type="unconditional"
             )
             print(f"Resumed from epoch {start_epoch}")
         except Exception as e:
@@ -321,18 +300,23 @@ def main():
     # Set up interrupt handler for graceful shutdown
     current_epoch = start_epoch
     current_loss = float("inf")
-    
+
     # Create interrupt handler with save callback
     interrupt_handler = create_interrupt_handler(
-        model, optimizer,
+        model,
+        optimizer,
         epoch_getter=lambda: current_epoch + 1,
-        loss_getter=lambda: loss_history["epoch_losses"][-1] if loss_history["epoch_losses"] else current_loss,
+        loss_getter=lambda: (
+            loss_history["epoch_losses"][-1]
+            if loss_history["epoch_losses"]
+            else current_loss
+        ),
         checkpoint_dir=config["checkpoint_dir"],
         model_type="unconditional",
-        config=config
+        config=config,
     )
     interrupt_handler.setup()
-    
+
     # Training loop
     print(f"\nStarting training from epoch {start_epoch}...")
     print("Press Ctrl+C to save and exit gracefully")
@@ -370,20 +354,26 @@ def main():
         # Save checkpoint
         if (epoch + 1) % config["save_every"] == 0:
             save_checkpoint(
-                model, optimizer, epoch + 1, avg_loss, 
+                model,
+                optimizer,
+                epoch + 1,
+                avg_loss,
                 config["checkpoint_dir"],
                 model_type="unconditional",
-                config=config
+                config=config,
             )
 
         # Save best model
         if avg_loss < best_loss:
             best_loss = avg_loss
             save_checkpoint(
-                model, optimizer, epoch + 1, avg_loss,
+                model,
+                optimizer,
+                epoch + 1,
+                avg_loss,
                 os.path.join(config["checkpoint_dir"], "best"),
                 model_type="unconditional",
-                config=config
+                config=config,
             )
             print(f"New best model saved (loss: {best_loss:.4f})")
 
@@ -394,18 +384,18 @@ def main():
 
         # Save loss plots every epoch
         save_loss_plot(loss_history, config["sample_dir"])
-        
+
         # Check if interrupted
         if interrupt_handler.should_stop:
             break
-    
+
     # Final message
     if interrupt_handler.interrupted:
         print("\nTraining interrupted but progress saved!")
     else:
         print("\n" + "=" * 60)
         print("Training completed!")
-    
+
     print(f"Best loss: {best_loss:.4f}")
     print(f"Checkpoints saved to: {config['checkpoint_dir']}")
     print(f"Samples saved to: {config['sample_dir']}")

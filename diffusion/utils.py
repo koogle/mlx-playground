@@ -9,11 +9,11 @@ import mlx.core as mx
 def get_checkpoint_name(epoch, model_type="unconditional"):
     """
     Generate consistent checkpoint naming across save and load operations
-    
+
     Args:
         epoch: Epoch number
         model_type: "unconditional" or "conditional"
-    
+
     Returns:
         Base checkpoint name (without extension)
     """
@@ -24,10 +24,10 @@ def get_checkpoint_name(epoch, model_type="unconditional"):
 def parse_checkpoint_name(checkpoint_name):
     """
     Parse checkpoint name to extract epoch and model type
-    
+
     Args:
         checkpoint_name: Checkpoint filename (with or without extension)
-    
+
     Returns:
         Tuple of (epoch, model_type) or (None, None) if parsing fails
     """
@@ -38,14 +38,14 @@ def parse_checkpoint_name(checkpoint_name):
         checkpoint_name = checkpoint_name[:-14]
     if checkpoint_name.endswith("_optimizer.npz"):
         checkpoint_name = checkpoint_name[:-14]
-    
+
     # Try to parse the checkpoint name
     if "_checkpoint_epoch_" in checkpoint_name:
         try:
             parts = checkpoint_name.split("_checkpoint_epoch_")
             prefix = parts[0]
             epoch = int(parts[1].split("_")[0])  # Handle any suffix
-            
+
             # Determine model type from prefix
             if prefix == "conditional":
                 model_type = "conditional"
@@ -53,11 +53,11 @@ def parse_checkpoint_name(checkpoint_name):
                 model_type = "unconditional"
             else:
                 model_type = "unknown"
-            
+
             return epoch, model_type
         except:
             pass
-    
+
     # Try old format
     if checkpoint_name.startswith("checkpoint_epoch_"):
         try:
@@ -65,7 +65,7 @@ def parse_checkpoint_name(checkpoint_name):
             return epoch, "unconditional"  # Assume old format is unconditional
         except:
             pass
-    
+
     return None, None
 
 
@@ -180,11 +180,19 @@ def load_checkpoint(model, optimizer, checkpoint_path, expected_type=None):
         model_path = f"{checkpoint_path}.npz"
 
         # Try to extract epoch and model type from filename
-        parsed_epoch, parsed_type = parse_checkpoint_name(os.path.basename(checkpoint_path))
+        parsed_epoch, parsed_type = parse_checkpoint_name(
+            os.path.basename(checkpoint_path)
+        )
         if parsed_epoch is not None:
             epoch = parsed_epoch
-            if expected_type and parsed_type != expected_type and parsed_type != "unknown":
-                print(f"Warning: Loading {parsed_type} checkpoint but expected {expected_type}")
+            if (
+                expected_type
+                and parsed_type != expected_type
+                and parsed_type != "unknown"
+            ):
+                print(
+                    f"Warning: Loading {parsed_type} checkpoint but expected {expected_type}"
+                )
         else:
             epoch = 0
             print(f"Warning: Could not extract epoch from {checkpoint_path}")

@@ -18,6 +18,7 @@ import mlx.optimizers as optim
 import numpy as np
 from PIL import Image
 import matplotlib
+
 matplotlib.use("Agg")
 
 # Add parent directory to path for imports
@@ -34,15 +35,23 @@ from data.cifar10 import load_train_data, CIFAR10DataLoader
 
 # CIFAR-10 class names
 CIFAR10_CLASSES = [
-    "airplane", "automobile", "bird", "cat", "deer",
-    "dog", "frog", "horse", "ship", "truck"
+    "airplane",
+    "automobile",
+    "bird",
+    "cat",
+    "deer",
+    "dog",
+    "frog",
+    "horse",
+    "ship",
+    "truck",
 ]
 
 
 def flow_matching_loss(model, x_0, x_1, t):
     """
     Compute Flow Matching loss: ||v(x_t, t) - (x_1 - x_0)||^2
-    
+
     Args:
         model: Flow matching model
         x_0: Source samples (noise for generation)
@@ -52,23 +61,25 @@ def flow_matching_loss(model, x_0, x_1, t):
     # Interpolate between x_0 and x_1
     t_expanded = t[:, None, None, None]  # Expand for broadcasting
     x_t = t_expanded * x_1 + (1 - t_expanded) * x_0
-    
+
     # Target velocity is the straight path
     v_target = x_1 - x_0
-    
+
     # Predict velocity
     v_pred = model(x_t, t)
-    
+
     # MSE loss
     loss = mx.mean((v_pred - v_target) ** 2)
-    
+
     return loss
 
 
-def train_step(model, optimizer, images, overfit_mode=False, num_time_steps=1, iteration=0):
+def train_step(
+    model, optimizer, images, overfit_mode=False, num_time_steps=1, iteration=0
+):
     """
     Single Flow Matching training step
-    
+
     Args:
         model: Flow matching model
         optimizer: Optimizer
@@ -79,28 +90,26 @@ def train_step(model, optimizer, images, overfit_mode=False, num_time_steps=1, i
     """
     # Images come in CHW format, convert to HWC for MLX
     images = mx.transpose(images, (0, 2, 3, 1))
-    
+
     # Normalize to [-1, 1]
     x_1 = images * 2.0 - 1.0
-    
+
     batch_size = x_1.shape[0]
-    
+
     # Sample x_0 (noise)
     if overfit_mode:
-        # In overfit mode: use multiple fixed noise patterns to learn the full field
-        # This ensures we learn multiple trajectories to the same target
-        noise_seed = 42 + (iteration % 10)  # Cycle through 10 different noise patterns
-        mx.random.seed(noise_seed)
+        # Use fixed seed for reproducibility in overfit mode
+        mx.random.seed(42)
         x_0 = mx.random.normal(x_1.shape)
     else:
         # Random noise for regular training
         x_0 = mx.random.normal(x_1.shape)
-    
+
     @mx.compile
     def loss_fn(params):
         model.update(params)
         total_loss = 0
-        
+
         # Compute loss at multiple time points
         for step in range(num_time_steps):
             if overfit_mode and num_time_steps > 1:
@@ -108,34 +117,39 @@ def train_step(model, optimizer, images, overfit_mode=False, num_time_steps=1, i
                 # This ensures we cover the full trajectory
                 if step == 0:
                     # Always include t near 1 for good reconstruction
-                    t = mx.full((batch_size,), 0.95 + 0.05 * mx.random.uniform(shape=(1,)).item())
+                    t = mx.full(
+                        (batch_size,),
+                        0.95 + 0.05 * mx.random.uniform(shape=(1,)).item(),
+                    )
                 elif step == 1:
                     # Always include t near 0 for good starting point
-                    t = mx.full((batch_size,), 0.05 * mx.random.uniform(shape=(1,)).item())
+                    t = mx.full(
+                        (batch_size,), 0.05 * mx.random.uniform(shape=(1,)).item()
+                    )
                 else:
                     # Random times for the rest
                     t = mx.random.uniform(shape=(batch_size,))
             else:
                 # Sample random time t ~ Uniform(0, 1)
                 t = mx.random.uniform(shape=(batch_size,))
-            
+
             # Optional: Add importance weighting for endpoints
             # Weight endpoints more heavily to ensure good reconstruction
             weight = mx.ones_like(t)
             if overfit_mode:
                 # In overfit mode, emphasize t close to 1 (final image)
                 weight = weight + 2.0 * t  # Higher weight for t close to 1
-            
+
             # Compute weighted loss
             loss = flow_matching_loss(model, x_0, x_1, t)
             total_loss = total_loss + loss * mx.mean(weight)
-        
+
         return total_loss / num_time_steps
-    
+
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters())
     optimizer.update(model, grads)
     mx.eval(loss)
-    
+
     return loss
 
 
@@ -147,34 +161,34 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
     # Start from random noise
     x_0 = mx.random.normal(x_1.shape)
     x = x_0
-    
+
     # Solve ODE from t=0 to t=1
     dt = 1.0 / num_steps
-    
+
     for i in range(num_steps):
         # Current time - important: this should match training interpolation
         t_curr = i / num_steps
         t = mx.full((x.shape[0],), t_curr)
-        
+
         # Get velocity at current position and time
         v = model(x, t)
-        
+
         # Euler step
         x = x + v * dt
-    
+
     # Compute reconstruction error
     mse = mx.mean((x - x_1) ** 2)
-    
+
     if verbose:
         print(f"  Reconstruction MSE: {mse.item():.6f}")
-    
+
     return x, mse
 
 
 def sample_images(model, num_samples=4, num_steps=100, seed=None, method="euler"):
     """
     Generate images using the learned flow
-    
+
     Args:
         model: Trained flow matching model
         num_samples: Number of samples to generate
@@ -184,13 +198,13 @@ def sample_images(model, num_samples=4, num_steps=100, seed=None, method="euler"
     """
     if seed is not None:
         mx.random.seed(seed)
-    
+
     # Start from noise x_0 ~ N(0, I)
     x = mx.random.normal((num_samples, 32, 32, 3))
-    
+
     # Solve ODE from t=0 to t=1
     dt = 1.0 / num_steps
-    
+
     if method == "euler":
         # Standard Euler method
         for i in range(num_steps):
@@ -204,81 +218,88 @@ def sample_images(model, num_samples=4, num_steps=100, seed=None, method="euler"
             t_curr = i / num_steps
             t = mx.full((num_samples,), t_curr)
             v1 = model(x, t)
-            
+
             # Midpoint
             x_mid = x + v1 * (dt / 2)
             t_mid_val = (i + 0.5) / num_steps
             t_mid = mx.full((num_samples,), t_mid_val)
             v_mid = model(x_mid, t_mid)
-            
+
             # Update using midpoint velocity
             x = x + v_mid * dt
-    
+
     # Denormalize from [-1, 1] to [0, 1]
     x = (x + 1.0) / 2.0
     x = mx.clip(x, 0.0, 1.0)
-    
+
     return x
 
 
 def save_samples(samples, epoch, save_dir="./samples"):
     """Save generated samples as grid image"""
     os.makedirs(save_dir, exist_ok=True)
-    
+
     # Convert to numpy and uint8
     samples_np = np.array(samples)
     samples_uint8 = (samples_np * 255).astype(np.uint8)
-    
+
     # Create grid
     num_samples = len(samples_uint8)
     grid_size = int(np.sqrt(num_samples))
     if grid_size * grid_size < num_samples:
         grid_size += 1
-    
+
     # Create grid image
     img_size = 32
     padding = 2
-    grid_img = np.zeros((
-        grid_size * (img_size + padding) + padding,
-        grid_size * (img_size + padding) + padding,
-        3
-    ), dtype=np.uint8)
-    
+    grid_img = np.zeros(
+        (
+            grid_size * (img_size + padding) + padding,
+            grid_size * (img_size + padding) + padding,
+            3,
+        ),
+        dtype=np.uint8,
+    )
+
     for idx, sample in enumerate(samples_uint8):
         if idx >= grid_size * grid_size:
             break
         row = idx // grid_size
         col = idx % grid_size
-        
+
         y_start = row * (img_size + padding) + padding
         x_start = col * (img_size + padding) + padding
-        
-        grid_img[y_start:y_start+img_size, x_start:x_start+img_size] = sample
-    
+
+        grid_img[y_start : y_start + img_size, x_start : x_start + img_size] = sample
+
     # Save
     grid_path = os.path.join(save_dir, f"flow_samples_epoch_{epoch}.png")
     Image.fromarray(grid_img).save(grid_path)
     print(f"  Saved samples to {grid_path}")
 
 
-def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False, num_time_steps=None):
+def train_epoch(
+    model, optimizer, train_loader, epoch, overfit_mode=False, num_time_steps=None
+):
     """Train for one epoch"""
     total_loss = 0
     num_batches = 0
     batch_start_time = time.time()
-    
+
     # Use more time steps in overfit mode for better trajectory learning
     if num_time_steps is None:
         num_time_steps = 5 if overfit_mode else 1
-    
+
     for batch_idx, (images, labels) in enumerate(train_loader):
         # We don't use labels for unconditional generation
         iteration = epoch * len(train_loader) + batch_idx
-        loss = train_step(model, optimizer, images, overfit_mode, num_time_steps, iteration)
+        loss = train_step(
+            model, optimizer, images, overfit_mode, num_time_steps, iteration
+        )
         loss_val = loss.item()
         total_loss += loss_val
         num_batches += 1
-        
+
         # Print progress
         if batch_idx % 100 == 0 or overfit_mode:
             batch_time = time.time() - batch_start_time
@@ -289,7 +310,7 @@ def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False, num_t
                 f"Time = {batch_time:.2f}s"
             )
             batch_start_time = time.time()
-    
+
     return total_loss / num_batches
 
 
@@ -298,25 +319,44 @@ def main():
     print("Flow Matching Training for CIFAR-10")
     print("(Rectified Flow Implementation)")
     print("=" * 60)
-    
+
     # Parse command line arguments
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--overfit", action="store_true", 
-                       help="Overfit mode: train on single image")
-    parser.add_argument("--overfit_idx", type=int, default=None,
-                       help="Specific image index to use for overfitting (random if not specified)")
-    parser.add_argument("--debug", action="store_true",
-                       help="Debug mode: use small dataset")
-    parser.add_argument("--num_steps", type=int, default=250,
-                       help="Number of ODE steps for sampling (more steps = better quality, try 250-1000)")
-    parser.add_argument("--ode_method", type=str, default="euler",
-                       choices=["euler", "midpoint"],
-                       help="ODE integration method (midpoint is more accurate but slower)")
-    parser.add_argument("--loss_time_steps", type=int, default=None,
-                       help="Number of time points to compute loss over (default: 5 for overfit, 1 for normal)")
+    parser.add_argument(
+        "--overfit", action="store_true", help="Overfit mode: train on single image"
+    )
+    parser.add_argument(
+        "--overfit_idx",
+        type=int,
+        default=None,
+        help="Specific image index to use for overfitting (random if not specified)",
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Debug mode: use small dataset"
+    )
+    parser.add_argument(
+        "--num_steps",
+        type=int,
+        default=250,
+        help="Number of ODE steps for sampling (more steps = better quality, try 250-1000)",
+    )
+    parser.add_argument(
+        "--ode_method",
+        type=str,
+        default="euler",
+        choices=["euler", "midpoint"],
+        help="ODE integration method (midpoint is more accurate but slower)",
+    )
+    parser.add_argument(
+        "--loss_time_steps",
+        type=int,
+        default=None,
+        help="Number of time points to compute loss over (default: 5 for overfit, 1 for normal)",
+    )
     args = parser.parse_args()
-    
+
     # Configuration
     config = {
         "data_dir": "./cifar-10",
@@ -332,19 +372,19 @@ def main():
         "overfit_mode": args.overfit,
         "resume_from": None,
     }
-    
+
     # Adjust paths for overfit mode
     if args.overfit:
         config["checkpoint_dir"] = "./checkpoints/flow_matching_overfit"
         config["sample_dir"] = "./samples/flow_matching_overfit"
         print("\n*** OVERFIT MODE: Training on single image ***\n")
-    
+
     # Load data
     print("\nLoading CIFAR-10...")
     train_images, train_labels = load_train_data(
         data_dir=config["data_dir"], download=True, normalize=True
     )
-    
+
     # Handle different modes
     if args.overfit:
         # Overfit mode: pick a random image or use specified index
@@ -354,17 +394,20 @@ def main():
         else:
             random_idx = np.random.randint(0, len(train_images))
             print(f"Using random image at index {random_idx} for overfitting test")
-        single_image = train_images[random_idx:random_idx+1]
-        single_label = train_labels[random_idx:random_idx+1]
-        
+        single_image = train_images[random_idx : random_idx + 1]
+        single_label = train_labels[random_idx : random_idx + 1]
+
         # Save the original image for comparison
         os.makedirs(config["sample_dir"], exist_ok=True)
         original_img = (single_image[0].transpose(1, 2, 0) * 255).astype(np.uint8)
-        original_path = os.path.join(config["sample_dir"], f"original_image_idx{random_idx}_class{single_label[0]}.png")
+        original_path = os.path.join(
+            config["sample_dir"],
+            f"original_image_idx{random_idx}_class{single_label[0]}.png",
+        )
         Image.fromarray(original_img).save(original_path)
         print(f"Saved original image to {original_path}")
         print(f"Class: {CIFAR10_CLASSES[single_label[0]]}")
-        
+
         # Repeat the single image to fill batch
         train_images = np.repeat(single_image, config["batch_size"], axis=0)
         train_labels = np.repeat(single_label, config["batch_size"], axis=0)
@@ -375,18 +418,19 @@ def main():
         train_labels = train_labels[:100]
         config["num_epochs"] = 5
         config["batch_size"] = 16
-    
+
     # Create dataloader
     train_loader = CIFAR10DataLoader(
-        train_images, train_labels, 
-        batch_size=config["batch_size"], 
-        shuffle=not args.overfit  # Don't shuffle in overfit mode
+        train_images,
+        train_labels,
+        batch_size=config["batch_size"],
+        shuffle=not args.overfit,  # Don't shuffle in overfit mode
     )
-    
+
     print(f"Dataset: {len(train_images)} images")
     print(f"Batch size: {config['batch_size']}")
     print(f"Batches per epoch: {len(train_loader)}")
-    
+
     # Create model
     print("\nInitializing Flow Matching model...")
     model = FlowMatchModel(
@@ -398,26 +442,27 @@ def main():
         num_heads=4,
         time_emb_dim=256,
     )
-    
+
     # Count parameters
     from mlx.utils import tree_flatten
+
     num_params = sum(p.size for _, p in tree_flatten(model.parameters()))
     print(f"Model parameters: {num_params:,}")
-    
+
     # Create optimizer
     optimizer = optim.Adam(learning_rate=config["learning_rate"])
-    
+
     # Auto-load latest checkpoint (skip in overfit mode)
     start_epoch = 0
     checkpoint_to_load = config["resume_from"]
-    
+
     if not args.overfit:
         if not checkpoint_to_load:
             latest_checkpoint = find_latest_checkpoint_in_dir(config["checkpoint_dir"])
             if latest_checkpoint:
                 print(f"\nFound existing checkpoint: {latest_checkpoint}")
                 checkpoint_to_load = latest_checkpoint
-        
+
         if checkpoint_to_load:
             print(f"\nLoading checkpoint from {checkpoint_to_load}...")
             try:
@@ -430,12 +475,12 @@ def main():
                 print("Starting from scratch...")
     else:
         print("\nOverfit mode: Starting from scratch (no checkpoint loading)")
-    
+
     # Set up interrupt handler
     current_epoch = start_epoch
     current_loss = float("inf")
     loss_history = {"epoch_losses": [], "config": config}
-    
+
     interrupt_handler = create_interrupt_handler(
         model,
         optimizer,
@@ -446,63 +491,76 @@ def main():
         config=config,
     )
     interrupt_handler.setup()
-    
+
     # Training loop
     print(f"\nStarting training from epoch {start_epoch}...")
-    print(f"ODE solver: {config['ode_method']} method with {config['num_ode_steps']} steps")
+    print(
+        f"ODE solver: {config['ode_method']} method with {config['num_ode_steps']} steps"
+    )
     print("Press Ctrl+C to save and exit gracefully")
     print("-" * 40)
-    
+
     best_loss = float("inf")
-    
+
     for epoch in range(start_epoch, config["num_epochs"]):
         current_epoch = epoch
         if interrupt_handler.should_stop:
             break
-        
+
         print(f"\nEpoch {epoch + 1}/{config['num_epochs']}")
         start_time = time.time()
-        
+
         # Train one epoch
         avg_loss = train_epoch(
-            model, optimizer, train_loader, epoch, 
+            model,
+            optimizer,
+            train_loader,
+            epoch,
             overfit_mode=args.overfit,
-            num_time_steps=args.loss_time_steps
+            num_time_steps=args.loss_time_steps,
         )
-        
+
         # Track loss
         loss_history["epoch_losses"].append(avg_loss)
         current_loss = avg_loss
-        
+
         epoch_time = time.time() - start_time
         print(f"Epoch {epoch + 1} completed in {epoch_time:.1f}s")
         print(f"Average loss: {avg_loss:.6f}")
-        
+
         # Save checkpoint (skip in overfit mode)
         if not args.overfit:
             if (epoch + 1) % config["save_every"] == 0:
                 save_checkpoint(
-                    model, optimizer, epoch + 1, avg_loss,
+                    model,
+                    optimizer,
+                    epoch + 1,
+                    avg_loss,
                     config["checkpoint_dir"],
                     model_type="flow_matching",
                     config=config,
                 )
-            
+
             # Save best model
             if avg_loss < best_loss:
                 best_loss = avg_loss
                 save_checkpoint(
-                    model, optimizer, epoch + 1, avg_loss,
+                    model,
+                    optimizer,
+                    epoch + 1,
+                    avg_loss,
                     os.path.join(config["checkpoint_dir"], "best"),
                     model_type="flow_matching",
                     config=config,
                 )
                 print(f"New best model saved (loss: {best_loss:.6f})")
-        
+
         # Generate samples
         if (epoch + 1) % config["sample_every"] == 0:
-            print(f"\nGenerating samples with {config['num_ode_steps']} ODE steps ({config['ode_method']} method)...")
-            
+            print(
+                f"\nGenerating samples with {config['num_ode_steps']} ODE steps ({config['ode_method']} method)..."
+            )
+
             # In overfit mode, also test reconstruction of the training image
             if args.overfit:
                 # Get the normalized training image
@@ -510,38 +568,33 @@ def main():
                 test_img = mx.array(test_img)
                 test_img = mx.transpose(test_img, (0, 2, 3, 1))
                 test_img = test_img * 2.0 - 1.0
-                
+
                 # Test reconstruction
-                recon, mse = evaluate_reconstruction(model, test_img, num_steps=config["num_ode_steps"], verbose=True)
-                
+                recon, mse = evaluate_reconstruction(
+                    model, test_img, num_steps=config["num_ode_steps"], verbose=True
+                )
+
                 # Save reconstruction alongside samples
                 recon_denorm = (recon + 1.0) / 2.0
                 recon_denorm = mx.clip(recon_denorm, 0.0, 1.0)
                 recon_np = np.array(recon_denorm)[0]
                 recon_uint8 = (recon_np * 255).astype(np.uint8)
-                recon_path = os.path.join(config["sample_dir"], f"reconstruction_epoch_{epoch + 1}.png")
+                recon_path = os.path.join(
+                    config["sample_dir"], f"reconstruction_epoch_{epoch + 1}.png"
+                )
                 Image.fromarray(recon_uint8).save(recon_path)
                 print(f"  Saved reconstruction to {recon_path}")
-            
-            samples = sample_images(
-                model, 
-                num_samples=16 if not args.overfit else 4,
-                num_steps=config["num_ode_steps"],
-                seed=42,  # Fixed seed for consistent comparison
-                method=config["ode_method"]
-            )
-            save_samples(samples, epoch + 1, config["sample_dir"])
-        
+
         if interrupt_handler.should_stop:
             break
-    
+
     # Final message
     if interrupt_handler.interrupted:
         print("\nTraining interrupted but progress saved!")
     else:
         print("\n" + "=" * 60)
         print("Training completed!")
-    
+
     print(f"Best loss: {best_loss:.6f}")
     print(f"Checkpoints saved to: {config['checkpoint_dir']}")
     print(f"Samples saved to: {config['sample_dir']}")

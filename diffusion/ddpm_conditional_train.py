@@ -47,7 +47,7 @@ CIFAR10_CLASSES = [
 ]
 
 
-def train_step(model, scheduler, optimizer, images, labels, unconditional_prob=0.1):
+def train_step(model, scheduler, optimizer, images, labels):
     """
     Single conditional DDPM training step
 
@@ -57,7 +57,6 @@ def train_step(model, scheduler, optimizer, images, labels, unconditional_prob=0
         optimizer: Optimizer
         images: Batch of images [batch, channels, height, width]
         labels: Class labels [batch]
-        unconditional_prob: Probability of dropping class info for CFG training
     """
     # Images come in CHW format, convert to HWC for MLX
     images = mx.transpose(images, (0, 2, 3, 1))
@@ -80,7 +79,7 @@ def train_step(model, scheduler, optimizer, images, labels, unconditional_prob=0
     def loss_fn(params):
         model.update(params)
         # Predict the noise with class conditioning
-        predicted_noise = model(noisy_images, t, labels, unconditional_prob)
+        predicted_noise = model(noisy_images, t, labels)
         # L2 loss between predicted and actual noise
         loss = mx.mean((predicted_noise - noise) ** 2)
         return loss
@@ -140,11 +139,11 @@ def sample_images_conditional(
         # Get predictions with and without class conditioning (for CFG)
         if guidance_scale > 1.0:
             # Conditional prediction
-            noise_pred_cond = model(img_hwc, t, class_labels, unconditional_prob=0.0)
+            noise_pred_cond = model(img_hwc, t, class_labels)
 
             # Unconditional prediction (using unconditional token)
             uncond_labels = mx.ones_like(class_labels) * model.num_classes
-            noise_pred_uncond = model(img_hwc, t, uncond_labels, unconditional_prob=0.0)
+            noise_pred_uncond = model(img_hwc, t, uncond_labels)
 
             # Classifier-free guidance
             noise_pred = noise_pred_uncond + guidance_scale * (
@@ -152,7 +151,7 @@ def sample_images_conditional(
             )
         else:
             # Just use conditional prediction
-            noise_pred = model(img_hwc, t, class_labels, unconditional_prob=0.0)
+            noise_pred = model(img_hwc, t, class_labels)
 
         # Convert back to CHW for scheduler
         noise_pred = mx.transpose(noise_pred, (0, 3, 1, 2))
@@ -301,9 +300,7 @@ def train_epoch(
 
     for batch_idx, (images, labels) in enumerate(train_loader):
         # Training step with class labels
-        loss = train_step(
-            model, scheduler, optimizer, images, labels, unconditional_prob
-        )
+        loss = train_step(model, scheduler, optimizer, images, labels)
         loss_val = loss.item()
         total_loss += loss_val
         num_batches += 1
@@ -465,7 +462,6 @@ def main():
             optimizer,
             train_loader,
             epoch,
-            unconditional_prob=config["unconditional_prob"],
             loss_history=loss_history,
         )
 

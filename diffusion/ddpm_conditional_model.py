@@ -387,7 +387,7 @@ class ConditionalDDPM_UNet(nn.Module):
         self.norm_out = nn.GroupNorm(8, base_channels)
         self.conv_out = nn.Conv2d(base_channels, 3, kernel_size=3, padding=1)
 
-    def __call__(self, x, t, class_labels=None, unconditional_prob=0.1):
+    def __call__(self, x, t, class_labels=None):
         """
         Forward pass with class conditioning
 
@@ -395,7 +395,6 @@ class ConditionalDDPM_UNet(nn.Module):
             x: [batch_size, height, width, channels] - Input images (HWC format)
             t: [batch_size] - Timesteps
             class_labels: [batch_size] - Class labels (None for unconditional)
-            unconditional_prob: Probability of dropping class info (for classifier-free guidance)
         """
         batch_size = x.shape[0]
 
@@ -403,16 +402,6 @@ class ConditionalDDPM_UNet(nn.Module):
         if class_labels is None:
             # Use unconditional token (last index)
             class_labels = mx.ones(batch_size, dtype=mx.int32) * self.num_classes
-        else:
-            # Randomly drop class labels for classifier-free guidance training
-            if unconditional_prob > 0:
-                mask = mx.random.uniform(shape=(batch_size,)) < unconditional_prob
-                class_labels = mx.where(
-                    mask,
-                    mx.ones_like(class_labels)
-                    * self.num_classes,  # Unconditional token
-                    class_labels,
-                )
 
         class_emb = self.class_embedding(class_labels)
         t_emb = self.time_mlp(t)

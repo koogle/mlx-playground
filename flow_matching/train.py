@@ -86,12 +86,15 @@ def train_step(model, optimizer, images, overfit_mode=False, num_time_steps=1, i
     batch_size = x_1.shape[0]
     
     # Sample x_0 (noise)
-    # In overfit mode, we want to explore different noise samples
-    # but in a controlled way
     if overfit_mode:
-        # Use different noise samples but cycle through them
-        mx.random.seed(42 + (iteration % 1000))
-    x_0 = mx.random.normal(x_1.shape)
+        # In overfit mode: use multiple fixed noise patterns to learn the full field
+        # This ensures we learn multiple trajectories to the same target
+        noise_seed = 42 + (iteration % 10)  # Cycle through 10 different noise patterns
+        mx.random.seed(noise_seed)
+        x_0 = mx.random.normal(x_1.shape)
+    else:
+        # Random noise for regular training
+        x_0 = mx.random.normal(x_1.shape)
     
     @mx.compile
     def loss_fn(params):
@@ -99,9 +102,22 @@ def train_step(model, optimizer, images, overfit_mode=False, num_time_steps=1, i
         total_loss = 0
         
         # Compute loss at multiple time points
-        for _ in range(num_time_steps):
-            # Sample random time t ~ Uniform(0, 1)
-            t = mx.random.uniform(shape=(batch_size,))
+        for step in range(num_time_steps):
+            if overfit_mode and num_time_steps > 1:
+                # In overfit mode with multiple steps: use both random and deterministic times
+                # This ensures we cover the full trajectory
+                if step == 0:
+                    # Always include t near 1 for good reconstruction
+                    t = mx.full((batch_size,), 0.95 + 0.05 * mx.random.uniform(shape=(1,)).item())
+                elif step == 1:
+                    # Always include t near 0 for good starting point
+                    t = mx.full((batch_size,), 0.05 * mx.random.uniform(shape=(1,)).item())
+                else:
+                    # Random times for the rest
+                    t = mx.random.uniform(shape=(batch_size,))
+            else:
+                # Sample random time t ~ Uniform(0, 1)
+                t = mx.random.uniform(shape=(batch_size,))
             
             # Optional: Add importance weighting for endpoints
             # Weight endpoints more heavily to ensure good reconstruction
@@ -391,26 +407,29 @@ def main():
     # Create optimizer
     optimizer = optim.Adam(learning_rate=config["learning_rate"])
     
-    # Auto-load latest checkpoint
+    # Auto-load latest checkpoint (skip in overfit mode)
     start_epoch = 0
     checkpoint_to_load = config["resume_from"]
     
-    if not checkpoint_to_load:
-        latest_checkpoint = find_latest_checkpoint_in_dir(config["checkpoint_dir"])
-        if latest_checkpoint:
-            print(f"\nFound existing checkpoint: {latest_checkpoint}")
-            checkpoint_to_load = latest_checkpoint
-    
-    if checkpoint_to_load:
-        print(f"\nLoading checkpoint from {checkpoint_to_load}...")
-        try:
-            start_epoch = load_checkpoint(
-                model, optimizer, checkpoint_to_load, expected_type="flow_matching"
-            )
-            print(f"Resumed from epoch {start_epoch}")
-        except Exception as e:
-            print(f"Failed to load checkpoint: {e}")
-            print("Starting from scratch...")
+    if not args.overfit:
+        if not checkpoint_to_load:
+            latest_checkpoint = find_latest_checkpoint_in_dir(config["checkpoint_dir"])
+            if latest_checkpoint:
+                print(f"\nFound existing checkpoint: {latest_checkpoint}")
+                checkpoint_to_load = latest_checkpoint
+        
+        if checkpoint_to_load:
+            print(f"\nLoading checkpoint from {checkpoint_to_load}...")
+            try:
+                start_epoch = load_checkpoint(
+                    model, optimizer, checkpoint_to_load, expected_type="flow_matching"
+                )
+                print(f"Resumed from epoch {start_epoch}")
+            except Exception as e:
+                print(f"Failed to load checkpoint: {e}")
+                print("Starting from scratch...")
+    else:
+        print("\nOverfit mode: Starting from scratch (no checkpoint loading)")
     
     # Set up interrupt handler
     current_epoch = start_epoch
@@ -481,7 +500,7 @@ def main():
                 print(f"New best model saved (loss: {best_loss:.6f})")
         
         # Generate samples
-        if (epoch + 1) % config["sample_every"] == 0 or epoch == 0:
+        if (epoch + 1) % config["sample_every"] == 0:
             print(f"\nGenerating samples with {config['num_ode_steps']} ODE steps ({config['ode_method']} method)...")
             
             # In overfit mode, also test reconstruction of the training image

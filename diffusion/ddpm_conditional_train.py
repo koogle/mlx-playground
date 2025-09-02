@@ -3,7 +3,6 @@ Conditional DDPM Training Script for CIFAR-10
 Trains a class-conditional diffusion model using CLIP-style embeddings
 
 This script implements:
-- Class-conditional training with dropout for classifier-free guidance
 - Conditional sampling with guidance scale
 - Auto-resume from checkpoints
 - Graceful interruption handling
@@ -282,7 +281,6 @@ def train_epoch(
     optimizer,
     train_loader,
     epoch,
-    unconditional_prob=0.1,
     loss_history=None,
 ):
     """
@@ -294,7 +292,6 @@ def train_epoch(
         optimizer: Optimizer
         train_loader: DataLoader
         epoch: Current epoch number
-        unconditional_prob: Dropout probability for CFG training
         loss_history: Dictionary to track losses
     """
     total_loss = 0
@@ -352,7 +349,6 @@ def main():
         "learning_rate": 2e-4,
         "num_epochs": 100,
         "num_timesteps": 1000,
-        "unconditional_prob": 0.1,  # 10% dropout for CFG training
         "guidance_scale": 7.5,  # For sampling
         "save_every": 5,
         "resume_from": None,

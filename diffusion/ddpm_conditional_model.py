@@ -256,7 +256,6 @@ class ConditionalDDPM_UNet(nn.Module):
         channel_multipliers=(1, 2, 2, 2),
         num_res_blocks=2,
         attention_resolutions=(8,),
-        dropout=0.1,
         num_classes=10,  # Number of classes for conditioning
         class_emb_dim=128,  # Dimension of class embeddings
         use_cross_attention=True,  # Whether to use cross-attention to class (default True for better conditioning)
@@ -415,11 +414,9 @@ class ConditionalDDPM_UNet(nn.Module):
                     class_labels,
                 )
 
-        # Get embeddings
         class_emb = self.class_embedding(class_labels)
         t_emb = self.time_mlp(t)
 
-        # Initial conv
         h = self.conv_in(x)
 
         # Downsampling with skip connections
@@ -443,7 +440,6 @@ class ConditionalDDPM_UNet(nn.Module):
         # Upsampling with skip connections
         for i, layer in enumerate(self.up_blocks):
             if isinstance(layer, nn.ConvTranspose2d):
-                # Upsample first
                 h = layer(h)
             elif isinstance(layer, ConditionalResidualBlock):
                 # Pop skip connection and concatenate

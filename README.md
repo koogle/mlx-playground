@@ -211,14 +211,39 @@ yolo/
 ```
 
 
-## Diffusion [not done]
+## Diffusion
 
-Created an outline but haven't looked at it much.
+A implementation of diffusion models using MLX, including both unconditional and conditional DDPM (Denoising Diffusion Probabilistic Models, ie you can prompt it or not) for image generation.
+
+### Features
+- Unconditional DDPM for general image generation
+- Conditional DDPM with class conditioning
+- U-Net architecture with attention mechanisms
+- Trainig on CIFAR-10 datasets
+
+### Model Architectures
+
+#### DDPM (Denoising Diffusion Probabilistic Model)
+- U-Net backbone with residual blocks and attention layers
+- Time embedding for denoising at different timesteps
+- Optional class conditioning for controlled generation
+- Configurable model depth and channel dimensions
+
+### Diffusion Usage
+
+1. Train unconditional DDPM on MNIST:
+```bash
+uv run diffusion/ddpm_train.py
+```
+
+2. Train conditional DDPM with class labels:
+```bash
+uv run diffusion/ddpm_conditional_train.py
+```
 
 ## Contributing
 
 Contributions are welcome! Key areas for improvement:
-- MCTS memory management
 - Evaluation function
 - Performance optimizations
 - Documentation improvements

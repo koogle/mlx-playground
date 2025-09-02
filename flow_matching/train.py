@@ -112,48 +112,25 @@ def train_step(
 
         # Compute loss at multiple time points
         for step in range(num_time_steps):
-            if overfit_mode and num_time_steps > 1:
-                # In overfit mode: systematically cover the trajectory
-                # Mix deterministic coverage with random sampling
-                if num_time_steps >= 5:
-                    # With enough steps, ensure we hit critical points
-                    if step == 0:
-                        # Start point - very close to t=0
-                        t = mx.full((batch_size,), 0.01 + 0.04 * mx.random.uniform(shape=(1,)).item())
-                    elif step == 1:
-                        # Early trajectory - around t=0.25
-                        t = mx.full((batch_size,), 0.2 + 0.1 * mx.random.uniform(shape=(1,)).item())
-                    elif step == 2:
-                        # Midpoint - around t=0.5
-                        t = mx.full((batch_size,), 0.45 + 0.1 * mx.random.uniform(shape=(1,)).item())
-                    elif step == 3:
-                        # Late trajectory - around t=0.75
-                        t = mx.full((batch_size,), 0.7 + 0.1 * mx.random.uniform(shape=(1,)).item())
-                    elif step == 4:
-                        # End point - very close to t=1
-                        t = mx.full((batch_size,), 0.95 + 0.04 * mx.random.uniform(shape=(1,)).item())
-                    else:
-                        # Additional random samples
-                        t = mx.random.uniform(shape=(batch_size,))
-                else:
-                    # With fewer steps, spread them evenly
-                    t_base = step / num_time_steps
-                    t_noise = 0.1 * (mx.random.uniform(shape=(batch_size,)) - 0.5)
-                    t = mx.clip(t_base + t_noise, 0.0, 1.0)
+            if num_time_steps >= 3:
+                # With multiple steps, ensure good coverage of [0,1]
+                # Use stratified sampling: divide [0,1] into bins and sample from each
+                bin_size = 1.0 / num_time_steps
+                t_min = step * bin_size
+                t_max = (step + 1) * bin_size
+                
+                # Sample uniformly within this bin for each element in batch
+                t = mx.random.uniform(shape=(batch_size,)) * (t_max - t_min) + t_min
+                
+                # Ensure we don't exceed bounds due to numerical issues
+                t = mx.clip(t, 0.0, 1.0)
             else:
-                # Sample random time t ~ Uniform(0, 1)
+                # With very few steps, just sample randomly
                 t = mx.random.uniform(shape=(batch_size,))
 
-            # Optional: Add importance weighting for endpoints
-            # Weight endpoints more heavily to ensure good reconstruction
-            weight = mx.ones_like(t)
-            if overfit_mode:
-                # In overfit mode, emphasize t close to 1 (final image)
-                weight = weight + 2.0 * t  # Higher weight for t close to 1
-
-            # Compute weighted loss
+            # Compute loss (unweighted - let the model learn the full trajectory equally)
             loss = flow_matching_loss(model, x_0, x_1, t)
-            total_loss = total_loss + loss * mx.mean(weight)
+            total_loss = total_loss + loss
 
         return total_loss / num_time_steps
 

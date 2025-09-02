@@ -113,22 +113,33 @@ def train_step(
         # Compute loss at multiple time points
         for step in range(num_time_steps):
             if overfit_mode and num_time_steps > 1:
-                # In overfit mode with multiple steps: use both random and deterministic times
-                # This ensures we cover the full trajectory
-                if step == 0:
-                    # Always include t near 1 for good reconstruction
-                    t = mx.full(
-                        (batch_size,),
-                        0.95 + 0.05 * mx.random.uniform(shape=(1,)).item(),
-                    )
-                elif step == 1:
-                    # Always include t near 0 for good starting point
-                    t = mx.full(
-                        (batch_size,), 0.05 * mx.random.uniform(shape=(1,)).item()
-                    )
+                # In overfit mode: systematically cover the trajectory
+                # Mix deterministic coverage with random sampling
+                if num_time_steps >= 5:
+                    # With enough steps, ensure we hit critical points
+                    if step == 0:
+                        # Start point - very close to t=0
+                        t = mx.full((batch_size,), 0.01 + 0.04 * mx.random.uniform(shape=(1,)).item())
+                    elif step == 1:
+                        # Early trajectory - around t=0.25
+                        t = mx.full((batch_size,), 0.2 + 0.1 * mx.random.uniform(shape=(1,)).item())
+                    elif step == 2:
+                        # Midpoint - around t=0.5
+                        t = mx.full((batch_size,), 0.45 + 0.1 * mx.random.uniform(shape=(1,)).item())
+                    elif step == 3:
+                        # Late trajectory - around t=0.75
+                        t = mx.full((batch_size,), 0.7 + 0.1 * mx.random.uniform(shape=(1,)).item())
+                    elif step == 4:
+                        # End point - very close to t=1
+                        t = mx.full((batch_size,), 0.95 + 0.04 * mx.random.uniform(shape=(1,)).item())
+                    else:
+                        # Additional random samples
+                        t = mx.random.uniform(shape=(batch_size,))
                 else:
-                    # Random times for the rest
-                    t = mx.random.uniform(shape=(batch_size,))
+                    # With fewer steps, spread them evenly
+                    t_base = step / num_time_steps
+                    t_noise = 0.1 * (mx.random.uniform(shape=(batch_size,)) - 0.5)
+                    t = mx.clip(t_base + t_noise, 0.0, 1.0)
             else:
                 # Sample random time t ~ Uniform(0, 1)
                 t = mx.random.uniform(shape=(batch_size,))
@@ -158,29 +169,44 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
     Evaluate how well the model reconstructs x_1 starting from noise.
     This is a diagnostic to check if the model learned the correct flow.
     """
-    # Start from random noise
+    # Start from same fixed noise used in training for overfit mode
+    mx.random.seed(42)
     x_0 = mx.random.normal(x_1.shape)
     x = x_0
 
     # Solve ODE from t=0 to t=1
     dt = 1.0 / num_steps
+    
+    # Track velocity magnitudes to debug
+    velocity_norms = []
 
     for i in range(num_steps):
-        # Current time - important: this should match training interpolation
+        # Current time for this step
+        # We're at time t = i/num_steps and will integrate to (i+1)/num_steps
         t_curr = i / num_steps
         t = mx.full((x.shape[0],), t_curr)
 
         # Get velocity at current position and time
         v = model(x, t)
+        
+        # Track velocity magnitude
+        v_norm = mx.sqrt(mx.mean(v ** 2))
+        velocity_norms.append(v_norm.item())
 
         # Euler step
         x = x + v * dt
-
+        
     # Compute reconstruction error
     mse = mx.mean((x - x_1) ** 2)
 
     if verbose:
         print(f"  Reconstruction MSE: {mse.item():.6f}")
+        # Check if velocities are dying out
+        avg_early_v = np.mean(velocity_norms[:num_steps//4])
+        avg_late_v = np.mean(velocity_norms[-num_steps//4:])
+        print(f"  Avg velocity norm - early: {avg_early_v:.4f}, late: {avg_late_v:.4f}")
+        if avg_late_v < avg_early_v * 0.1:
+            print("  WARNING: Velocity appears to be dying out near t=1")
 
     return x, mse
 
@@ -301,7 +327,8 @@ def train_epoch(
         num_batches += 1
 
         # Print progress
-        if batch_idx % 100 == 0 or overfit_mode:
+        print_freq = 10 if overfit_mode else 100
+        if batch_idx % print_freq == 0:
             batch_time = time.time() - batch_start_time
             avg_loss = total_loss / num_batches
             print(
@@ -355,14 +382,21 @@ def main():
         default=None,
         help="Number of time points to compute loss over (default: 5 for overfit, 1 for normal)",
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=None,
+        help="Batch size (default: 32 for overfit, 128 for normal)",
+    )
     args = parser.parse_args()
 
     # Configuration
+    default_batch_size = 32 if args.overfit else 128
     config = {
         "data_dir": "./cifar-10",
         "checkpoint_dir": "./checkpoints/flow_matching",
         "sample_dir": "./samples/flow_matching",
-        "batch_size": 1 if args.overfit else 128,
+        "batch_size": args.batch_size if args.batch_size is not None else default_batch_size,
         "learning_rate": 1e-4 if args.overfit else 2e-4,
         "num_epochs": 1000 if args.overfit else 100,
         "save_every": 100 if args.overfit else 5,
@@ -408,9 +442,11 @@ def main():
         print(f"Saved original image to {original_path}")
         print(f"Class: {CIFAR10_CLASSES[single_label[0]]}")
 
-        # Repeat the single image to fill batch
-        train_images = np.repeat(single_image, config["batch_size"], axis=0)
-        train_labels = np.repeat(single_label, config["batch_size"], axis=0)
+        # Repeat the single image to create a reasonable dataset size
+        # We want multiple batches for better training dynamics
+        num_repeats = max(config["batch_size"] * 10, 320)  # At least 10 batches worth
+        train_images = np.repeat(single_image, num_repeats, axis=0)
+        train_labels = np.repeat(single_label, num_repeats, axis=0)
     elif args.debug:
         # Debug mode: use subset
         print("Debug mode: Using only 100 images")

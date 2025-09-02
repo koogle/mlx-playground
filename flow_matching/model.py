@@ -42,7 +42,7 @@ class ResidualBlock(nn.Module):
 
         if self.time_mlp is not None and t is not None:
             time_emb = self.time_mlp(t)
-            h = h + time_emb[:, :, None, None]
+            h = h + time_emb[:, None, None, :]
 
         h = nn.relu(h)
         h = self.conv2(h)
@@ -199,7 +199,7 @@ class FlowMatchModel(nn.Module):
         # Upsampling
         for block in self.up_blocks:
             if isinstance(block, ResidualBlock):
-                h = mx.concatenate([h, hs.pop()], axis=1)
+                h = mx.concatenate([h, hs.pop()], axis=-1)
                 h = block(h, t_emb)
             else:
                 h = block(h)

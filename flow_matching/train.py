@@ -513,9 +513,9 @@ def main():
             args.batch_size if args.batch_size is not None else default_batch_size
         ),
         "learning_rate": 1e-4 if args.overfit else 2e-4,
-        "num_epochs": 250,
+        "num_epochs": 1000 if args.overfit else 100,
         "save_every": 100,
-        "sample_every": 10,
+        "sample_every": 50 if args.overfit else 5,
         "num_ode_steps": args.num_steps,
         "overfit_mode": args.overfit,
         "resume_from": None,

@@ -20,7 +20,7 @@ from PIL import Image
 import matplotlib
 import matplotlib.pyplot as plt
 
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # Use non-interactive backend
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -237,6 +237,101 @@ def save_samples(samples, epoch, save_dir="./samples"):
     print(f"  Saved samples to {grid_path}")
 
 
+class LiveTrainingVisualizer:
+    """Simple training visualizer that updates a single image file"""
+    
+    def __init__(self, config, overfit_mode=False, original_image=None):
+        self.config = config
+        self.overfit_mode = overfit_mode
+        self.original_image = original_image
+        
+        # Training data
+        self.epoch_losses = []
+        self.current_batch_losses = []
+        self.current_epoch = 0
+        
+        # Single plot file that gets updated
+        self.plot_path = os.path.join(config.get("sample_dir", "./samples"), "live_training.png")
+        print(f"Live training plot will be updated at: {self.plot_path}")
+        
+    def update_batch_loss(self, loss, batch_idx, total_batches, epoch):
+        """Update with new batch loss and refresh the plot"""
+        self.current_batch_losses.append(loss)
+        self.current_epoch = epoch
+        
+        # Update plot every 5 batches to see progress
+        if (batch_idx + 1) % 5 == 0 or batch_idx == total_batches - 1:
+            self.update_plot()
+        
+    def update_epoch_complete(self, avg_loss, model):
+        """Update when epoch completes"""
+        self.epoch_losses.append(avg_loss)
+        self.current_batch_losses = []  # Clear for next epoch
+        self.update_plot(model)
+        
+    def update_plot(self, model=None):
+        """Update the single training plot"""
+        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        fig.suptitle(f"Flow Matching Training - Epoch {self.current_epoch + 1}", fontsize=14)
+        
+        # Epoch losses (top-left)
+        if self.epoch_losses:
+            axes[0,0].plot(range(1, len(self.epoch_losses) + 1), self.epoch_losses, 'b-', linewidth=2)
+            axes[0,0].set_xlabel("Epoch")
+            axes[0,0].set_ylabel("Loss")
+            axes[0,0].set_title("Epoch Loss")
+            axes[0,0].grid(True, alpha=0.3)
+            if len(self.epoch_losses) > 1:
+                axes[0,0].set_yscale("log")
+        else:
+            axes[0,0].text(0.5, 0.5, "No epoch data yet", ha="center", va="center", transform=axes[0,0].transAxes)
+            
+        # Current batch losses (top-right)
+        if self.current_batch_losses:
+            axes[0,1].plot(range(1, len(self.current_batch_losses) + 1), self.current_batch_losses, 'r-', alpha=0.7)
+            axes[0,1].set_xlabel("Batch")
+            axes[0,1].set_ylabel("Loss")
+            axes[0,1].set_title(f"Current Epoch Batches ({len(self.current_batch_losses)})")
+            axes[0,1].grid(True, alpha=0.3)
+        else:
+            axes[0,1].text(0.5, 0.5, "No batch data", ha="center", va="center", transform=axes[0,1].transAxes)
+            
+        # Original image (bottom-left)
+        if self.overfit_mode and self.original_image is not None:
+            axes[1,0].imshow(self.original_image)
+            axes[1,0].set_title("Original Image")
+            axes[1,0].axis("off")
+        else:
+            axes[1,0].text(0.5, 0.5, "Not in overfit mode", ha="center", va="center", transform=axes[1,0].transAxes)
+            axes[1,0].axis("off")
+            
+        # Generated sample (bottom-right) - only if model provided
+        if model is not None:
+            if model.num_classes is not None:
+                sample_class = mx.random.randint(0, model.num_classes, shape=(1,))
+                sample_class_name = CIFAR10_CLASSES[sample_class.item()]
+            else:
+                sample_class = None
+                sample_class_name = "Unconditional"
+                
+            sample = sample_images(model, num_samples=1, num_steps=self.config["num_ode_steps"], class_labels=sample_class)
+            sample_uint8 = (np.array(sample)[0] * 255).astype(np.uint8)
+            
+            axes[1,1].imshow(sample_uint8)
+            axes[1,1].set_title(f"Sample\n{sample_class_name}")
+            axes[1,1].axis("off")
+        else:
+            axes[1,1].text(0.5, 0.5, "Sample at epoch end", ha="center", va="center", transform=axes[1,1].transAxes)
+            axes[1,1].axis("off")
+        
+        plt.tight_layout()
+        plt.savefig(self.plot_path, dpi=100, bbox_inches="tight")
+        plt.close(fig)
+        
+    def close(self):
+        pass
+
+
 def visualize_training_progress(
     model,
     loss_history,
@@ -339,7 +434,7 @@ def visualize_training_progress(
         if model.num_classes is not None:
             # Show 4 different classes
             grid_classes = mx.array([0, 1, 2, 3])  # airplane, automobile, bird, cat
-            grid_class_names = [CIFAR10_CLASSES[i] for i in grid_classes]
+            grid_class_names = [CIFAR10_CLASSES[i] for i in grid_classes.tolist()]
         else:
             grid_classes = None
             grid_class_names = ["Unconditional"] * 4
@@ -388,7 +483,7 @@ def visualize_training_progress(
     return sample
 
 
-def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False):
+def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False, visualizer=None):
     """Train for one epoch"""
     total_loss = 0
     num_batches = 0
@@ -400,6 +495,10 @@ def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False):
         loss_val = loss.item()
         total_loss += loss_val
         num_batches += 1
+
+        # Update live visualizer
+        if visualizer is not None:
+            visualizer.update_batch_loss(loss_val, batch_idx, len(train_loader), epoch)
 
         # Print progress after every batch
         batch_time = time.time() - batch_start_time
@@ -422,6 +521,7 @@ def train_and_visualize(
     start_epoch=0,
     overfit_mode=False,
     original_image=None,
+    live_visualizer=None,
 ):
     """
     Comprehensive training function with visualization and tracking
@@ -434,6 +534,7 @@ def train_and_visualize(
         start_epoch: Starting epoch number
         overfit_mode: Whether in overfit mode
         original_image: Original image for comparison (in overfit mode)
+        live_visualizer: Live visualization window (optional)
 
     Returns:
         loss_history: List of average losses per epoch
@@ -445,9 +546,13 @@ def train_and_visualize(
         print(f"\nEpoch {epoch + 1}/{config['num_epochs']}")
         start_time = time.time()
 
-        # Train one epoch
-        avg_loss = train_epoch(model, optimizer, train_loader, epoch, overfit_mode)
+        # Train one epoch with live visualization
+        avg_loss = train_epoch(model, optimizer, train_loader, epoch, overfit_mode, live_visualizer)
         loss_history.append(avg_loss)
+
+        # Update live visualizer at end of epoch
+        if live_visualizer is not None:
+            live_visualizer.update_epoch_complete(avg_loss, model)
 
         epoch_time = time.time() - start_time
         print(f"Epoch {epoch + 1} completed in {epoch_time:.1f}s")
@@ -480,7 +585,7 @@ def train_and_visualize(
             )
             print(f"New best model saved (loss: {best_loss:.6f})")
 
-        # Visualize at intervals
+        # Visualize at intervals (only save static plots, live view is already updating)
         if (epoch + 1) % config.get("sample_every", 10) == 0 or epoch == start_epoch:
             print(f"Generating samples with {config['num_ode_steps']} ODE steps...")
             sample = visualize_training_progress(
@@ -532,6 +637,12 @@ def main():
         action="store_true",
         help="Enable class-conditional generation (default: True)",
         default=True,
+    )
+    parser.add_argument(
+        "--live_view",
+        action="store_true",
+        help="Enable live visualization window during training",
+        default=False,
     )
     args = parser.parse_args()
 
@@ -680,16 +791,38 @@ def main():
         # Get the original image for display
         original_img_uint8 = (single_image[0].transpose(1, 2, 0) * 255).astype(np.uint8)
 
-    # Use the comprehensive training function
-    loss_history_list = train_and_visualize(
-        model=model,
-        optimizer=optimizer,
-        train_loader=train_loader,
-        config=config,
-        start_epoch=start_epoch,
-        overfit_mode=args.overfit,
-        original_image=original_img_uint8,
-    )
+    # Initialize live visualizer if requested
+    live_visualizer = None
+    if args.live_view:
+        print("Initializing live visualization window...")
+        try:
+            live_visualizer = LiveTrainingVisualizer(
+                config=config,
+                overfit_mode=args.overfit,
+                original_image=original_img_uint8
+            )
+            print("Live visualization window opened!")
+        except Exception as e:
+            print(f"Failed to initialize live visualization: {e}")
+            print("Continuing without live visualization...")
+            live_visualizer = None
+
+    try:
+        # Use the comprehensive training function
+        loss_history_list = train_and_visualize(
+            model=model,
+            optimizer=optimizer,
+            train_loader=train_loader,
+            config=config,
+            start_epoch=start_epoch,
+            overfit_mode=args.overfit,
+            original_image=original_img_uint8,
+            live_visualizer=live_visualizer,
+        )
+    finally:
+        # Clean up live visualizer
+        if live_visualizer is not None:
+            live_visualizer.close()
 
     # Update loss history for interrupt handler
     loss_history["epoch_losses"] = loss_history_list

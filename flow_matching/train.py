@@ -89,12 +89,12 @@ def train_step(model, optimizer, images, overfit_mode=False, iteration=0):
     # Images come in CHW format, convert to HWC for MLX
     images = mx.transpose(images, (0, 2, 3, 1))
 
-    # Normalize to [-1, 1]
+    # Normalize to [-1, 1] so that center is at 0
     x_1 = images * 2.0 - 1.0
 
     batch_size = x_1.shape[0]
 
-    # Sample noise
+    # Sample noise from [-1, 1] range
     x_0 = mx.random.normal(x_1.shape)
 
     @mx.compile

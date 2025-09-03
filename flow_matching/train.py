@@ -161,45 +161,28 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
     return x, mse
 
 
-def sample_images(model, num_samples=4, num_steps=100, method="euler"):
+def sample_images(model, num_samples=4, num_steps=100):
     """
     Generate images using the learned flow
+    Following the Rectified Flow paper, we use Euler method for ODE solving.
 
     Args:
         model: Trained flow matching model
         num_samples: Number of samples to generate
         num_steps: Number of ODE solver steps (more steps = better quality)
-        method: Integration method ("euler" or "midpoint")
     """
 
     # Start from noise x_0 ~ N(0, I)
     x = mx.random.normal((num_samples, 32, 32, 3))
 
-    # Solve ODE from t=0 to t=1
+    # Solve ODE from t=0 to t=1 using Euler method
     dt = 1.0 / num_steps
 
-    if method == "euler":
-        # Standard Euler method
-        for i in range(num_steps):
-            t_curr = i / num_steps
-            t = mx.full((num_samples,), t_curr)
-            v = model(x, t)
-            x = x + v * dt
-    elif method == "midpoint":
-        # Midpoint method (2nd order Runge-Kutta) - more accurate
-        for i in range(num_steps):
-            t_curr = i / num_steps
-            t = mx.full((num_samples,), t_curr)
-            v1 = model(x, t)
-
-            # Midpoint
-            x_mid = x + v1 * (dt / 2)
-            t_mid_val = (i + 0.5) / num_steps
-            t_mid = mx.full((num_samples,), t_mid_val)
-            v_mid = model(x_mid, t_mid)
-
-            # Update using midpoint velocity
-            x = x + v_mid * dt
+    for i in range(num_steps):
+        t_curr = i / num_steps
+        t = mx.full((num_samples,), t_curr)
+        v = model(x, t)
+        x = x + v * dt
 
     # Denormalize from [-1, 1] to [0, 1]
     x = (x + 1.0) / 2.0
@@ -316,7 +299,6 @@ def visualize_training_progress(
         model,
         num_samples=1,
         num_steps=config["num_ode_steps"],
-        method=config.get("ode_method", "euler"),
     )
 
     sample_np = np.array(sample)[0]
@@ -332,7 +314,6 @@ def visualize_training_progress(
             model,
             num_samples=1,
             num_steps=config["num_ode_steps"],
-            method=config.get("ode_method", "euler"),
         )
 
         recon_np = np.array(reconstruction)[0]
@@ -347,7 +328,6 @@ def visualize_training_progress(
             model,
             num_samples=4,
             num_steps=config["num_ode_steps"],
-            method=config.get("ode_method", "euler"),
         )
 
         # Create 2x2 grid
@@ -395,17 +375,15 @@ def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False):
         total_loss += loss_val
         num_batches += 1
 
-        # Print progress
-        print_freq = 10 if overfit_mode else 100
-        if batch_idx % print_freq == 0:
-            batch_time = time.time() - batch_start_time
-            avg_loss = total_loss / num_batches
-            print(
-                f"  Batch {batch_idx}/{len(train_loader)}: "
-                f"Loss = {loss_val:.4f}, Avg = {avg_loss:.4f}, "
-                f"Time = {batch_time:.2f}s"
-            )
-            batch_start_time = time.time()
+        # Print progress after every batch
+        batch_time = time.time() - batch_start_time
+        avg_loss = total_loss / num_batches
+        print(
+            f"  Batch {batch_idx + 1}/{len(train_loader)}: "
+            f"Loss = {loss_val:.4f}, Avg = {avg_loss:.4f}, "
+            f"Time = {batch_time:.2f}s"
+        )
+        batch_start_time = time.time()
 
     return total_loss / num_batches
 
@@ -518,13 +496,6 @@ def main():
         help="Number of ODE steps for sampling (more steps = better quality, try 250-1000)",
     )
     parser.add_argument(
-        "--ode_method",
-        type=str,
-        default="euler",
-        choices=["euler", "midpoint"],
-        help="ODE integration method (midpoint is more accurate but slower)",
-    )
-    parser.add_argument(
         "--batch_size",
         type=int,
         default=None,
@@ -542,11 +513,10 @@ def main():
             args.batch_size if args.batch_size is not None else default_batch_size
         ),
         "learning_rate": 1e-4 if args.overfit else 2e-4,
-        "num_epochs": 1000 if args.overfit else 100,
-        "save_every": 100 if args.overfit else 5,
-        "sample_every": 50 if args.overfit else 5,
+        "num_epochs": 250,
+        "save_every": 100,
+        "sample_every": 10,
         "num_ode_steps": args.num_steps,
-        "ode_method": args.ode_method,
         "overfit_mode": args.overfit,
         "resume_from": None,
     }
@@ -670,9 +640,7 @@ def main():
 
     # Training loop
     print(f"\nStarting training from epoch {start_epoch}...")
-    print(
-        f"ODE solver: {config['ode_method']} method with {config['num_ode_steps']} steps"
-    )
+    print(f"ODE solver: Euler method with {config['num_ode_steps']} steps")
     print("Press Ctrl+C to save and exit gracefully")
     print("-" * 40)
 

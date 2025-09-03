@@ -94,6 +94,8 @@ class FlowMatchModel(nn.Module):
         channel_mult=[1, 2, 4, 8],
         num_heads=4,
         time_emb_dim=256,
+        num_classes=None,
+        class_emb_dim=None,
     ):
         super().__init__()
 
@@ -103,6 +105,21 @@ class FlowMatchModel(nn.Module):
         self.attention_resolutions = attention_resolutions
         self.channel_mult = channel_mult
         self.num_heads = num_heads
+        self.num_classes = num_classes
+        
+        # Class embedding (if using class conditioning)
+        if num_classes is not None:
+            if class_emb_dim is None:
+                class_emb_dim = time_emb_dim
+            self.class_emb = nn.Embedding(num_classes, class_emb_dim)
+            self.class_mlp = nn.Sequential(
+                nn.Linear(class_emb_dim, time_emb_dim),
+                nn.GELU(),
+                nn.Linear(time_emb_dim, time_emb_dim),
+            )
+        else:
+            self.class_emb = None
+            self.class_mlp = None
 
         # Time embedding
         self.time_mlp = nn.Sequential(
@@ -173,9 +190,16 @@ class FlowMatchModel(nn.Module):
             now_channels, input_channels, kernel_size=3, padding=1
         )
 
-    def __call__(self, x, t):
+    def __call__(self, x, t, class_labels=None):
         # Time embedding
         t_emb = self.time_mlp(t)
+        
+        # Class embedding (if provided)
+        if self.class_emb is not None and class_labels is not None:
+            class_emb = self.class_emb(class_labels)
+            class_emb = self.class_mlp(class_emb)
+            # Combine time and class embeddings
+            t_emb = t_emb + class_emb
 
         # Initial conv
         h = self.conv_in(x)

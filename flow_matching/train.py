@@ -13,7 +13,7 @@ import os
 import sys
 import time
 import mlx.core as mx
-import mlx.nn as nn
+from mlx.utils import tree_flatten
 import mlx.optimizers as optim
 import numpy as np
 from PIL import Image
@@ -565,7 +565,6 @@ def main():
         config["num_epochs"] = 5
         config["batch_size"] = 16
 
-    # Create dataloader
     train_loader = CIFAR10DataLoader(
         train_images,
         train_labels,
@@ -577,7 +576,6 @@ def main():
     print(f"Batch size: {config['batch_size']}")
     print(f"Batches per epoch: {len(train_loader)}")
 
-    # Create model
     print("\nInitializing Flow Matching model...")
     model = FlowMatchModel(
         input_channels=3,
@@ -588,9 +586,6 @@ def main():
         num_heads=4,
         time_emb_dim=256,
     )
-
-    # Count parameters
-    from mlx.utils import tree_flatten
 
     num_params = sum(p.size for _, p in tree_flatten(model.parameters()))
     print(f"Model parameters: {num_params:,}")
@@ -640,7 +635,6 @@ def main():
 
     # Training loop
     print(f"\nStarting training from epoch {start_epoch}...")
-    print(f"ODE solver: Euler method with {config['num_ode_steps']} steps")
     print("Press Ctrl+C to save and exit gracefully")
     print("-" * 40)
 

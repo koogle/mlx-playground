@@ -74,9 +74,7 @@ def flow_matching_loss(model, x_0, x_1, t):
     return loss
 
 
-def train_step(
-    model, optimizer, images, overfit_mode=False, num_time_steps=1, iteration=0
-):
+def train_step(model, optimizer, images, overfit_mode=False, iteration=0):
     """
     Single Flow Matching training step
 
@@ -85,8 +83,7 @@ def train_step(
         optimizer: Optimizer
         images: Batch of real images [batch, channels, height, width]
         overfit_mode: If True, use controlled noise sampling
-        num_time_steps: Number of different time points to compute loss over
-        iteration: Current iteration number for varying noise in overfit mode
+        iteration: Current iteration number (unused now, kept for compatibility)
     """
     # Images come in CHW format, convert to HWC for MLX
     images = mx.transpose(images, (0, 2, 3, 1))
@@ -96,43 +93,19 @@ def train_step(
 
     batch_size = x_1.shape[0]
 
-    # Sample x_0 (noise)
-    if overfit_mode:
-        # Use fixed seed for reproducibility in overfit mode
-        mx.random.seed(42)
-        x_0 = mx.random.normal(x_1.shape)
-    else:
-        # Random noise for regular training
-        x_0 = mx.random.normal(x_1.shape)
+    # Sample noise
+    x_0 = mx.random.normal(x_1.shape)
 
     @mx.compile
     def loss_fn(params):
         model.update(params)
-        total_loss = 0
 
-        # Compute loss at multiple time points
-        for step in range(num_time_steps):
-            if num_time_steps >= 3:
-                # With multiple steps, ensure good coverage of [0,1]
-                # Use stratified sampling: divide [0,1] into bins and sample from each
-                bin_size = 1.0 / num_time_steps
-                t_min = step * bin_size
-                t_max = (step + 1) * bin_size
-                
-                # Sample uniformly within this bin for each element in batch
-                t = mx.random.uniform(shape=(batch_size,)) * (t_max - t_min) + t_min
-                
-                # Ensure we don't exceed bounds due to numerical issues
-                t = mx.clip(t, 0.0, 1.0)
-            else:
-                # With very few steps, just sample randomly
-                t = mx.random.uniform(shape=(batch_size,))
+        t = mx.random.uniform(shape=(batch_size,))
 
-            # Compute loss (unweighted - let the model learn the full trajectory equally)
-            loss = flow_matching_loss(model, x_0, x_1, t)
-            total_loss = total_loss + loss
+        # Compute loss
+        loss = flow_matching_loss(model, x_0, x_1, t)
 
-        return total_loss / num_time_steps
+        return loss
 
     loss, grads = mx.value_and_grad(loss_fn)(model.parameters())
     optimizer.update(model, grads)
@@ -146,14 +119,13 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
     Evaluate how well the model reconstructs x_1 starting from noise.
     This is a diagnostic to check if the model learned the correct flow.
     """
-    # Start from same fixed noise used in training for overfit mode
-    mx.random.seed(42)
+    # Start from random noise
     x_0 = mx.random.normal(x_1.shape)
     x = x_0
 
     # Solve ODE from t=0 to t=1
     dt = 1.0 / num_steps
-    
+
     # Track velocity magnitudes to debug
     velocity_norms = []
 
@@ -165,22 +137,22 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
 
         # Get velocity at current position and time
         v = model(x, t)
-        
+
         # Track velocity magnitude
-        v_norm = mx.sqrt(mx.mean(v ** 2))
+        v_norm = mx.sqrt(mx.mean(v**2))
         velocity_norms.append(v_norm.item())
 
         # Euler step
         x = x + v * dt
-        
+
     # Compute reconstruction error
     mse = mx.mean((x - x_1) ** 2)
 
     if verbose:
         print(f"  Reconstruction MSE: {mse.item():.6f}")
         # Check if velocities are dying out
-        avg_early_v = np.mean(velocity_norms[:num_steps//4])
-        avg_late_v = np.mean(velocity_norms[-num_steps//4:])
+        avg_early_v = np.mean(velocity_norms[: num_steps // 4])
+        avg_late_v = np.mean(velocity_norms[-num_steps // 4 :])
         print(f"  Avg velocity norm - early: {avg_early_v:.4f}, late: {avg_late_v:.4f}")
         if avg_late_v < avg_early_v * 0.1:
             print("  WARNING: Velocity appears to be dying out near t=1")
@@ -281,24 +253,16 @@ def save_samples(samples, epoch, save_dir="./samples"):
     print(f"  Saved samples to {grid_path}")
 
 
-def train_epoch(
-    model, optimizer, train_loader, epoch, overfit_mode=False, num_time_steps=None
-):
+def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False):
     """Train for one epoch"""
     total_loss = 0
     num_batches = 0
     batch_start_time = time.time()
 
-    # Use more time steps in overfit mode for better trajectory learning
-    if num_time_steps is None:
-        num_time_steps = 5 if overfit_mode else 1
-
     for batch_idx, (images, labels) in enumerate(train_loader):
         # We don't use labels for unconditional generation
         iteration = epoch * len(train_loader) + batch_idx
-        loss = train_step(
-            model, optimizer, images, overfit_mode, num_time_steps, iteration
-        )
+        loss = train_step(model, optimizer, images, overfit_mode, iteration)
         loss_val = loss.item()
         total_loss += loss_val
         num_batches += 1
@@ -354,12 +318,6 @@ def main():
         help="ODE integration method (midpoint is more accurate but slower)",
     )
     parser.add_argument(
-        "--loss_time_steps",
-        type=int,
-        default=None,
-        help="Number of time points to compute loss over (default: 5 for overfit, 1 for normal)",
-    )
-    parser.add_argument(
         "--batch_size",
         type=int,
         default=None,
@@ -373,7 +331,9 @@ def main():
         "data_dir": "./cifar-10",
         "checkpoint_dir": "./checkpoints/flow_matching",
         "sample_dir": "./samples/flow_matching",
-        "batch_size": args.batch_size if args.batch_size is not None else default_batch_size,
+        "batch_size": (
+            args.batch_size if args.batch_size is not None else default_batch_size
+        ),
         "learning_rate": 1e-4 if args.overfit else 2e-4,
         "num_epochs": 1000 if args.overfit else 100,
         "save_every": 100 if args.overfit else 5,
@@ -389,6 +349,9 @@ def main():
         config["checkpoint_dir"] = "./checkpoints/flow_matching_overfit"
         config["sample_dir"] = "./samples/flow_matching_overfit"
         print("\n*** OVERFIT MODE: Training on single image ***\n")
+        # Set seed once for reproducibility in overfit mode
+        mx.random.seed(42)
+        print("Random seed set to 42 for reproducibility")
 
     # Load data
     print("\nLoading CIFAR-10...")
@@ -530,7 +493,6 @@ def main():
             train_loader,
             epoch,
             overfit_mode=args.overfit,
-            num_time_steps=args.loss_time_steps,
         )
 
         # Track loss

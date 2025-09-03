@@ -160,7 +160,7 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
     return x, mse
 
 
-def sample_images(model, num_samples=4, num_steps=100, seed=None, method="euler"):
+def sample_images(model, num_samples=4, num_steps=100, method="euler"):
     """
     Generate images using the learned flow
 
@@ -168,11 +168,8 @@ def sample_images(model, num_samples=4, num_steps=100, seed=None, method="euler"
         model: Trained flow matching model
         num_samples: Number of samples to generate
         num_steps: Number of ODE solver steps (more steps = better quality)
-        seed: Random seed for reproducibility
         method: Integration method ("euler" or "midpoint")
     """
-    if seed is not None:
-        mx.random.seed(seed)
 
     # Start from noise x_0 ~ N(0, I)
     x = mx.random.normal((num_samples, 32, 32, 3))
@@ -349,9 +346,7 @@ def main():
         config["checkpoint_dir"] = "./checkpoints/flow_matching_overfit"
         config["sample_dir"] = "./samples/flow_matching_overfit"
         print("\n*** OVERFIT MODE: Training on single image ***\n")
-        # Set seed once for reproducibility in overfit mode
         mx.random.seed(42)
-        print("Random seed set to 42 for reproducibility")
 
     # Load data
     print("\nLoading CIFAR-10...")
@@ -529,36 +524,6 @@ def main():
                     config=config,
                 )
                 print(f"New best model saved (loss: {best_loss:.6f})")
-
-        # Generate samples
-        if (epoch + 1) % config["sample_every"] == 0:
-            print(
-                f"\nGenerating samples with {config['num_ode_steps']} ODE steps ({config['ode_method']} method)..."
-            )
-
-            # In overfit mode, also test reconstruction of the training image
-            if args.overfit:
-                # Get the normalized training image
-                test_img = train_images[0:1]
-                test_img = mx.array(test_img)
-                test_img = mx.transpose(test_img, (0, 2, 3, 1))
-                test_img = test_img * 2.0 - 1.0
-
-                # Test reconstruction
-                recon, mse = evaluate_reconstruction(
-                    model, test_img, num_steps=config["num_ode_steps"], verbose=True
-                )
-
-                # Save reconstruction alongside samples
-                recon_denorm = (recon + 1.0) / 2.0
-                recon_denorm = mx.clip(recon_denorm, 0.0, 1.0)
-                recon_np = np.array(recon_denorm)[0]
-                recon_uint8 = (recon_np * 255).astype(np.uint8)
-                recon_path = os.path.join(
-                    config["sample_dir"], f"reconstruction_epoch_{epoch + 1}.png"
-                )
-                Image.fromarray(recon_uint8).save(recon_path)
-                print(f"  Saved reconstruction to {recon_path}")
 
         if interrupt_handler.should_stop:
             break

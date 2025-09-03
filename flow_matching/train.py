@@ -515,7 +515,7 @@ def main():
         "learning_rate": 1e-4 if args.overfit else 2e-4,
         "num_epochs": 1000 if args.overfit else 100,
         "save_every": 100,
-        "sample_every": 50 if args.overfit else 5,
+        "sample_every": 50 if args.overfit else 1,
         "num_ode_steps": args.num_steps,
         "overfit_mode": args.overfit,
         "resume_from": None,
@@ -581,7 +581,7 @@ def main():
     print("\nInitializing Flow Matching model...")
     model = FlowMatchModel(
         input_channels=3,
-        hidden_channels=64 if args.overfit else 128,
+        hidden_channels=64,
         num_res_blocks=2,
         attention_resolutions=[16, 8],
         channel_mult=[1, 2, 2, 2],

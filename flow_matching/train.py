@@ -18,6 +18,7 @@ import mlx.optimizers as optim
 import numpy as np
 from PIL import Image
 import matplotlib
+import matplotlib.pyplot as plt
 
 matplotlib.use("Agg")
 
@@ -250,6 +251,136 @@ def save_samples(samples, epoch, save_dir="./samples"):
     print(f"  Saved samples to {grid_path}")
 
 
+def visualize_training_progress(
+    model,
+    loss_history,
+    epoch,
+    config,
+    overfit_mode=False,
+    original_image=None,
+    save_dir=None,
+):
+    """
+    Create and save visualization of training progress
+
+    Args:
+        model: Current model
+        loss_history: List of losses up to current epoch
+        epoch: Current epoch number
+        config: Configuration dict
+        overfit_mode: Whether in overfit mode
+        original_image: Original image for comparison (in overfit mode)
+        save_dir: Directory to save visualization
+
+    Returns:
+        sample: The generated sample
+    """
+    # Set up plotting
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig.suptitle(f"Flow Matching Training Progress - Epoch {epoch}", fontsize=16)
+
+    # Axes setup
+    ax_loss = axes[0, 0]
+    ax_sample = axes[0, 1]
+    ax_original = axes[1, 0]
+    ax_reconstruction = axes[1, 1]
+
+    # Plot loss history
+    if loss_history:
+        ax_loss.plot(range(1, len(loss_history) + 1), loss_history, "b-", linewidth=2)
+        ax_loss.set_xlabel("Epoch")
+        ax_loss.set_ylabel("Loss")
+        ax_loss.set_title("Training Loss")
+        ax_loss.grid(True, alpha=0.3)
+        if len(loss_history) > 1:
+            ax_loss.set_yscale("log")
+
+    # Show original image if in overfit mode
+    if overfit_mode and original_image is not None:
+        ax_original.imshow(original_image)
+        ax_original.set_title("Original Image")
+        ax_original.axis("off")
+    else:
+        ax_original.axis("off")
+        ax_original.text(
+            0.5,
+            0.5,
+            "Not in overfit mode",
+            ha="center",
+            va="center",
+            transform=ax_original.transAxes,
+        )
+
+    # Generate and display sample
+    sample = sample_images(
+        model,
+        num_samples=1,
+        num_steps=config["num_ode_steps"],
+        method=config.get("ode_method", "euler"),
+    )
+
+    sample_np = np.array(sample)[0]
+    sample_uint8 = (sample_np * 255).astype(np.uint8)
+
+    ax_sample.imshow(sample_uint8)
+    ax_sample.set_title(f"Generated Sample (Epoch {epoch})")
+    ax_sample.axis("off")
+
+    # Show reconstruction or sample grid
+    if overfit_mode and original_image is not None:
+        reconstruction = sample_images(
+            model,
+            num_samples=1,
+            num_steps=config["num_ode_steps"],
+            method=config.get("ode_method", "euler"),
+        )
+
+        recon_np = np.array(reconstruction)[0]
+        recon_uint8 = (recon_np * 255).astype(np.uint8)
+
+        ax_reconstruction.imshow(recon_uint8)
+        ax_reconstruction.set_title(f"Reconstruction (Epoch {epoch})")
+        ax_reconstruction.axis("off")
+    else:
+        # Generate multiple samples for grid
+        samples = sample_images(
+            model,
+            num_samples=4,
+            num_steps=config["num_ode_steps"],
+            method=config.get("ode_method", "euler"),
+        )
+
+        # Create 2x2 grid
+        samples_np = np.array(samples)
+        grid = np.zeros((66, 66, 3))
+        for i in range(2):
+            for j in range(2):
+                idx = i * 2 + j
+                if idx < len(samples_np):
+                    y_start = i * 33
+                    x_start = j * 33
+                    grid[y_start : y_start + 32, x_start : x_start + 32] = samples_np[
+                        idx
+                    ]
+
+        grid_uint8 = (grid * 255).astype(np.uint8)
+        ax_reconstruction.imshow(grid_uint8)
+        ax_reconstruction.set_title(f"Sample Grid (Epoch {epoch})")
+        ax_reconstruction.axis("off")
+
+    # Save the figure
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        plot_path = os.path.join(save_dir, f"training_progress_epoch_{epoch}.png")
+        plt.tight_layout()
+        plt.savefig(plot_path, dpi=100, bbox_inches="tight")
+        print(f"  Saved training progress plot to {plot_path}")
+
+    plt.close(fig)
+
+    return sample
+
+
 def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False):
     """Train for one epoch"""
     total_loss = 0
@@ -279,6 +410,91 @@ def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False):
     return total_loss / num_batches
 
 
+def train_and_visualize(
+    model,
+    optimizer,
+    train_loader,
+    config,
+    start_epoch=0,
+    overfit_mode=False,
+    original_image=None,
+):
+    """
+    Comprehensive training function with visualization and tracking
+
+    Args:
+        model: Flow matching model
+        optimizer: Optimizer
+        train_loader: Data loader
+        config: Configuration dict
+        start_epoch: Starting epoch number
+        overfit_mode: Whether in overfit mode
+        original_image: Original image for comparison (in overfit mode)
+
+    Returns:
+        loss_history: List of average losses per epoch
+    """
+    loss_history = []
+    best_loss = float("inf")
+
+    for epoch in range(start_epoch, config["num_epochs"]):
+        print(f"\nEpoch {epoch + 1}/{config['num_epochs']}")
+        start_time = time.time()
+
+        # Train one epoch
+        avg_loss = train_epoch(model, optimizer, train_loader, epoch, overfit_mode)
+        loss_history.append(avg_loss)
+
+        epoch_time = time.time() - start_time
+        print(f"Epoch {epoch + 1} completed in {epoch_time:.1f}s")
+        print(f"Average loss: {avg_loss:.6f}")
+
+        # Save checkpoint at intervals
+        if not overfit_mode and (epoch + 1) % config["save_every"] == 0:
+            save_checkpoint(
+                model,
+                optimizer,
+                epoch + 1,
+                avg_loss,
+                config["checkpoint_dir"],
+                model_type="flow_matching",
+                config=config,
+            )
+            print(f"Checkpoint saved at epoch {epoch + 1}")
+
+        # Save best model
+        if not overfit_mode and avg_loss < best_loss:
+            best_loss = avg_loss
+            save_checkpoint(
+                model,
+                optimizer,
+                epoch + 1,
+                avg_loss,
+                os.path.join(config["checkpoint_dir"], "best"),
+                model_type="flow_matching",
+                config=config,
+            )
+            print(f"New best model saved (loss: {best_loss:.6f})")
+
+        # Visualize at intervals
+        if (epoch + 1) % config.get("sample_every", 10) == 0 or epoch == start_epoch:
+            print(f"Generating samples with {config['num_ode_steps']} ODE steps...")
+            sample = visualize_training_progress(
+                model=model,
+                loss_history=loss_history,
+                epoch=epoch + 1,
+                config=config,
+                overfit_mode=overfit_mode,
+                original_image=original_image,
+                save_dir=config["sample_dir"],
+            )
+
+            # Also save individual samples
+            save_samples(sample[None, ...], epoch + 1, config["sample_dir"])
+
+    return loss_history
+
+
 def main():
     print("=" * 60)
     print("Flow Matching Training for CIFAR-10")
@@ -291,12 +507,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--overfit", action="store_true", help="Overfit mode: train on single image"
-    )
-    parser.add_argument(
-        "--overfit_idx",
-        type=int,
-        default=None,
-        help="Specific image index to use for overfitting (random if not specified)",
     )
     parser.add_argument(
         "--debug", action="store_true", help="Debug mode: use small dataset"
@@ -356,13 +566,8 @@ def main():
 
     # Handle different modes
     if args.overfit:
-        # Overfit mode: pick a random image or use specified index
-        if args.overfit_idx is not None:
-            random_idx = args.overfit_idx
-            print(f"Using specified image at index {random_idx} for overfitting test")
-        else:
-            random_idx = np.random.randint(0, len(train_images))
-            print(f"Using random image at index {random_idx} for overfitting test")
+        random_idx = np.random.randint(0, len(train_images))
+        print(f"Using random image at index {random_idx} for overfitting test")
         single_image = train_images[random_idx : random_idx + 1]
         single_label = train_labels[random_idx : random_idx + 1]
 
@@ -471,62 +676,27 @@ def main():
     print("Press Ctrl+C to save and exit gracefully")
     print("-" * 40)
 
-    best_loss = float("inf")
+    # Prepare original image for overfit mode visualization
+    original_img_uint8 = None
+    if args.overfit:
+        # Get the original image for display
+        original_img_uint8 = (single_image[0].transpose(1, 2, 0) * 255).astype(np.uint8)
 
-    for epoch in range(start_epoch, config["num_epochs"]):
-        current_epoch = epoch
-        if interrupt_handler.should_stop:
-            break
+    # Use the comprehensive training function
+    loss_history_list = train_and_visualize(
+        model=model,
+        optimizer=optimizer,
+        train_loader=train_loader,
+        config=config,
+        start_epoch=start_epoch,
+        overfit_mode=args.overfit,
+        original_image=original_img_uint8,
+    )
 
-        print(f"\nEpoch {epoch + 1}/{config['num_epochs']}")
-        start_time = time.time()
-
-        # Train one epoch
-        avg_loss = train_epoch(
-            model,
-            optimizer,
-            train_loader,
-            epoch,
-            overfit_mode=args.overfit,
-        )
-
-        # Track loss
-        loss_history["epoch_losses"].append(avg_loss)
-        current_loss = avg_loss
-
-        epoch_time = time.time() - start_time
-        print(f"Epoch {epoch + 1} completed in {epoch_time:.1f}s")
-        print(f"Average loss: {avg_loss:.6f}")
-
-        # Save checkpoint (skip in overfit mode)
-        if not args.overfit:
-            if (epoch + 1) % config["save_every"] == 0:
-                save_checkpoint(
-                    model,
-                    optimizer,
-                    epoch + 1,
-                    avg_loss,
-                    config["checkpoint_dir"],
-                    model_type="flow_matching",
-                    config=config,
-                )
-
-            # Save best model
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                save_checkpoint(
-                    model,
-                    optimizer,
-                    epoch + 1,
-                    avg_loss,
-                    os.path.join(config["checkpoint_dir"], "best"),
-                    model_type="flow_matching",
-                    config=config,
-                )
-                print(f"New best model saved (loss: {best_loss:.6f})")
-
-        if interrupt_handler.should_stop:
-            break
+    # Update loss history for interrupt handler
+    loss_history["epoch_losses"] = loss_history_list
+    if loss_history_list:
+        current_loss = loss_history_list[-1]
 
     # Final message
     if interrupt_handler.interrupted:
@@ -535,7 +705,9 @@ def main():
         print("\n" + "=" * 60)
         print("Training completed!")
 
-    print(f"Best loss: {best_loss:.6f}")
+    if loss_history_list:
+        best_loss = min(loss_history_list)
+        print(f"Best loss: {best_loss:.6f}")
     print(f"Checkpoints saved to: {config['checkpoint_dir']}")
     print(f"Samples saved to: {config['sample_dir']}")
     print("=" * 60)

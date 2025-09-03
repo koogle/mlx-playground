@@ -26,7 +26,7 @@ matplotlib.use("Agg")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flow_matching.model import FlowMatchModel
-from diffusion.utils import (
+from utils.checkpoints import (
     save_checkpoint,
     load_checkpoint,
     find_latest_checkpoint_in_dir,
@@ -49,7 +49,7 @@ CIFAR10_CLASSES = [
 ]
 
 
-def flow_matching_loss(model, x_0, x_1, t):
+def flow_matching_loss(model, x_0, x_1, t, class_labels=None):
     """
     Compute Flow Matching loss: ||v(x_t, t) - (x_1 - x_0)||^2
 
@@ -58,6 +58,7 @@ def flow_matching_loss(model, x_0, x_1, t):
         x_0: Source samples (noise for generation)
         x_1: Target samples (real images)
         t: Time values in [0, 1]
+        class_labels: Class labels for conditional generation (optional)
     """
     # Interpolate between x_0 and x_1
     t_expanded = t[:, None, None, None]  # Expand for broadcasting
@@ -67,7 +68,7 @@ def flow_matching_loss(model, x_0, x_1, t):
     v_target = x_1 - x_0
 
     # Predict velocity
-    v_pred = model(x_t, t)
+    v_pred = model(x_t, t, class_labels)
 
     # MSE loss
     loss = mx.mean((v_pred - v_target) ** 2)
@@ -75,7 +76,7 @@ def flow_matching_loss(model, x_0, x_1, t):
     return loss
 
 
-def train_step(model, optimizer, images, overfit_mode=False, iteration=0):
+def train_step(model, optimizer, images, labels=None, overfit_mode=False, iteration=0):
     """
     Single Flow Matching training step
 
@@ -83,6 +84,7 @@ def train_step(model, optimizer, images, overfit_mode=False, iteration=0):
         model: Flow matching model
         optimizer: Optimizer
         images: Batch of real images [batch, channels, height, width]
+        labels: Batch of class labels (optional, for class-conditional generation)
         overfit_mode: If True, use controlled noise sampling
         iteration: Current iteration number (unused now, kept for compatibility)
     """
@@ -104,7 +106,7 @@ def train_step(model, optimizer, images, overfit_mode=False, iteration=0):
         t = mx.random.uniform(shape=(batch_size,))
 
         # Compute loss
-        loss = flow_matching_loss(model, x_0, x_1, t)
+        loss = flow_matching_loss(model, x_0, x_1, t, labels)
 
         return loss
 
@@ -137,7 +139,7 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
         t = mx.full((x.shape[0],), t_curr)
 
         # Get velocity at current position and time
-        v = model(x, t)
+        v = model(x, t, None)  # No class conditioning for reconstruction evaluation
 
         # Track velocity magnitude
         v_norm = mx.sqrt(mx.mean(v**2))
@@ -161,7 +163,7 @@ def evaluate_reconstruction(model, x_1, num_steps=100, verbose=False):
     return x, mse
 
 
-def sample_images(model, num_samples=4, num_steps=100):
+def sample_images(model, num_samples=4, num_steps=100, class_labels=None):
     """
     Generate images using the learned flow
     Following the Rectified Flow paper, we use Euler method for ODE solving.
@@ -170,6 +172,7 @@ def sample_images(model, num_samples=4, num_steps=100):
         model: Trained flow matching model
         num_samples: Number of samples to generate
         num_steps: Number of ODE solver steps (more steps = better quality)
+        class_labels: Class labels for conditional generation (array of shape [num_samples])
     """
 
     # Start from noise x_0 ~ N(0, I)
@@ -181,7 +184,7 @@ def sample_images(model, num_samples=4, num_steps=100):
     for i in range(num_steps):
         t_curr = i / num_steps
         t = mx.full((num_samples,), t_curr)
-        v = model(x, t)
+        v = model(x, t, class_labels)
         x = x + v * dt
 
     # Denormalize from [-1, 1] to [0, 1]
@@ -294,18 +297,26 @@ def visualize_training_progress(
             transform=ax_original.transAxes,
         )
 
-    # Generate and display sample
+    # Generate and display sample (randomly pick a class for conditional generation)
+    if model.num_classes is not None:
+        sample_class = mx.random.randint(0, model.num_classes, shape=(1,))
+        sample_class_name = CIFAR10_CLASSES[sample_class.item()]
+    else:
+        sample_class = None
+        sample_class_name = "Unconditional"
+
     sample = sample_images(
         model,
         num_samples=1,
         num_steps=config["num_ode_steps"],
+        class_labels=sample_class,
     )
 
     sample_np = np.array(sample)[0]
     sample_uint8 = (sample_np * 255).astype(np.uint8)
 
     ax_sample.imshow(sample_uint8)
-    ax_sample.set_title(f"Generated Sample (Epoch {epoch})")
+    ax_sample.set_title(f"Generated Sample (Epoch {epoch})\nClass: {sample_class_name}")
     ax_sample.axis("off")
 
     # Show reconstruction or sample grid
@@ -314,6 +325,7 @@ def visualize_training_progress(
             model,
             num_samples=1,
             num_steps=config["num_ode_steps"],
+            class_labels=sample_class,
         )
 
         recon_np = np.array(reconstruction)[0]
@@ -323,11 +335,20 @@ def visualize_training_progress(
         ax_reconstruction.set_title(f"Reconstruction (Epoch {epoch})")
         ax_reconstruction.axis("off")
     else:
-        # Generate multiple samples for grid
+        # Generate multiple samples for grid (show different classes if conditional)
+        if model.num_classes is not None:
+            # Show 4 different classes
+            grid_classes = mx.array([0, 1, 2, 3])  # airplane, automobile, bird, cat
+            grid_class_names = [CIFAR10_CLASSES[i] for i in grid_classes]
+        else:
+            grid_classes = None
+            grid_class_names = ["Unconditional"] * 4
+
         samples = sample_images(
             model,
             num_samples=4,
             num_steps=config["num_ode_steps"],
+            class_labels=grid_classes,
         )
 
         # Create 2x2 grid
@@ -345,7 +366,13 @@ def visualize_training_progress(
 
         grid_uint8 = (grid * 255).astype(np.uint8)
         ax_reconstruction.imshow(grid_uint8)
-        ax_reconstruction.set_title(f"Sample Grid (Epoch {epoch})")
+        if model.num_classes is not None:
+            grid_title = (
+                f"Sample Grid (Epoch {epoch})\nClasses: {', '.join(grid_class_names)}"
+            )
+        else:
+            grid_title = f"Sample Grid (Epoch {epoch})"
+        ax_reconstruction.set_title(grid_title)
         ax_reconstruction.axis("off")
 
     # Save the figure
@@ -368,9 +395,8 @@ def train_epoch(model, optimizer, train_loader, epoch, overfit_mode=False):
     batch_start_time = time.time()
 
     for batch_idx, (images, labels) in enumerate(train_loader):
-        # We don't use labels for unconditional generation
         iteration = epoch * len(train_loader) + batch_idx
-        loss = train_step(model, optimizer, images, overfit_mode, iteration)
+        loss = train_step(model, optimizer, images, labels, overfit_mode, iteration)
         loss_val = loss.item()
         total_loss += loss_val
         num_batches += 1
@@ -501,6 +527,12 @@ def main():
         default=None,
         help="Batch size (default: 32 for overfit, 128 for normal)",
     )
+    parser.add_argument(
+        "--conditional",
+        action="store_true",
+        help="Enable class-conditional generation (default: True)",
+        default=True,
+    )
     args = parser.parse_args()
 
     # Configuration
@@ -576,7 +608,9 @@ def main():
     print(f"Batch size: {config['batch_size']}")
     print(f"Batches per epoch: {len(train_loader)}")
 
-    print("\nInitializing Flow Matching model...")
+    use_conditioning = args.conditional
+
+    print(f"\nInitializing Flow Matching model (conditional: {use_conditioning})...")
     model = FlowMatchModel(
         input_channels=3,
         hidden_channels=64,
@@ -585,6 +619,8 @@ def main():
         channel_mult=[1, 2, 2, 2],
         num_heads=4,
         time_emb_dim=256,
+        num_classes=10 if use_conditioning else None,  # CIFAR-10 has 10 classes
+        class_emb_dim=256 if use_conditioning else None,
     )
 
     num_params = sum(p.size for _, p in tree_flatten(model.parameters()))

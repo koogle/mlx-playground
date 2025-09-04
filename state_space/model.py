@@ -1,6 +1,7 @@
 import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
+from typing import T
 
 
 class StateSpace(nn.Module):
@@ -14,18 +15,18 @@ class StateSpace(nn.Module):
     We discretize it for sequence modeling using zero-order hold.
     """
 
-    def __init__(self, d_input, d_state, d_output, dt_min=0.001, dt_max=0.1):
+    def __init__(self, dim_input, dim_state, dim_output, dt_min=0.001, dt_max=0.1):
         super(StateSpace, self).__init__()
 
-        self.d_input = d_input
-        self.d_state = d_state
-        self.d_output = d_output
+        self.dim_input = dim_input
+        self.dim_state = dim_state
+        self.dim_output = dim_output
 
         # Initialize continuous SSM parameters
-        self.A = nn.Linear(d_state, d_state, bias=False)
-        self.B = nn.Linear(d_input, d_state, bias=False)
-        self.C = nn.Linear(d_state, d_output, bias=False)
-        self.D = nn.Linear(d_input, d_output, bias=False)
+        self.A = nn.Linear(dim_state, dim_state, bias=False)
+        self.B = nn.Linear(dim_input, dim_state, bias=False)
+        self.C = nn.Linear(dim_state, dim_output, bias=False)
+        self.D = nn.Linear(dim_input, dim_output, bias=False)
 
         # Learnable discretization timestep
         self.log_dt = mx.zeros((1,))
@@ -36,29 +37,39 @@ class StateSpace(nn.Module):
     def _initialize_parameters(self):
         """Initialize SSM parameters with sensible defaults"""
         # Initialize A as slightly negative diagonal (stable system)
-        A_init = -0.5 * mx.eye(self.d_state) + 0.1 * mx.random.normal(
-            (self.d_state, self.d_state)
+        A_init = -0.5 * mx.eye(self.dim_state) + 0.1 * mx.random.normal(
+            (self.dim_state, self.dim_state)
         )
         self.A.weight = A_init
 
         # Initialize B and C with small random values
-        self.B.weight = 0.1 * mx.random.normal((self.d_state, self.d_input))
-        self.C.weight = 0.1 * mx.random.normal((self.d_output, self.d_state))
+        self.B.weight = 0.1 * mx.random.normal((self.dim_state, self.dim_input))
+        self.C.weight = 0.1 * mx.random.normal((self.dim_output, self.dim_state))
 
         # Initialize D near zero (no direct feedthrough)
-        self.D.weight = 0.01 * mx.random.normal((self.d_output, self.d_input))
+        self.D.weight = 0.01 * mx.random.normal((self.dim_output, self.dim_input))
 
     def discretize(self):
-        """Discretize continuous SSM using zero-order hold"""
+        """Discretize continuous SSM using zero-order hold
+
+        The model is defined over a continous function via A and B matrixes
+        but at every inference and training step we need to perform
+        it at a given point in time.
+
+        We approximate the slope of the function in the point t for a small delta dt
+        and based on that can compute the discrete values for A & B.
+        This enables us to perform inference and computation at a point in time by knowing
+        the slope without having to solving the whole equation.
+        """
         dt = mx.exp(self.log_dt)
 
         # Get matrices
         A = self.A.weight
         B = self.B.weight
 
-        # Zero-order hold discretization
+        # Assume dt is small we can figure out discrete A
         # A_d = exp(A * dt) ≈ I + A*dt for small dt
-        A_discrete = mx.eye(self.d_state) + dt * A
+        A_discrete = mx.eye(self.dim_state) + dt * A
 
         # B_d = (exp(A*dt) - I) * A^{-1} * B ≈ dt * B for small dt
         B_discrete = dt * B
@@ -70,11 +81,11 @@ class StateSpace(nn.Module):
         Forward pass of the SSM.
 
         Args:
-            u: Input sequence of shape (batch_size, seq_len, d_input)
-            initial_state: Initial hidden state (batch_size, d_state)
+            u: Input sequence of shape (batch_size, seq_len, dim_input)
+            initial_state: Initial hidden state (batch_size, dim_state)
 
         Returns:
-            y: Output sequence of shape (batch_size, seq_len, d_output)
+            y: Output sequence of shape (batch_size, seq_len, dim_output)
         """
         batch_size, seq_len, _ = u.shape
 
@@ -85,20 +96,23 @@ class StateSpace(nn.Module):
 
         # Initialize state
         if initial_state is None:
-            x = mx.zeros((batch_size, self.d_state))
+            internal_state = mx.zeros((batch_size, self.dim_state))
         else:
-            x = initial_state
+            internal_state = initial_state
 
         # Run recurrence
         outputs = []
         for t in range(seq_len):
-            u_t = u[:, t, :]
+            # u_t
+            input_signal = u[:, t, :]
 
             # State update: x_{t+1} = A_d @ x_t + B_d @ u_t
-            x = mx.matmul(x, A_d.T) + mx.matmul(u_t, B_d.T)
+            internal_state = mx.matmul(internal_state, A_d.T) + mx.matmul(
+                input_signal, B_d.T
+            )
 
             # Output: y_t = C @ x_t + D @ u_t
-            y_t = mx.matmul(x, C.T) + mx.matmul(u_t, D.T)
+            y_t = mx.matmul(internal_state, C.T) + mx.matmul(input_signal, D.T)
             outputs.append(y_t)
 
         # Stack outputs
@@ -122,15 +136,15 @@ class S4Model(nn.Module):
     Uses HiPPO initialization for better long-range modeling.
     """
 
-    def __init__(self, d_input, d_state, d_output, n_layers=2):
+    def __init__(self, dim_input, dim_state, dim_output, n_layers=2):
         super(S4Model, self).__init__()
 
         self.layers = []
         for i in range(n_layers):
-            layer_input = d_input if i == 0 else d_output
-            self.layers.append(StateSpace(layer_input, d_state, d_output))
+            layer_input = dim_input if i == 0 else dim_output
+            self.layers.append(StateSpace(layer_input, dim_state, dim_output))
 
-        self.norm = nn.LayerNorm(d_output)
+        self.norm = nn.LayerNorm(dim_output)
 
     def forward(self, x):
         for layer in self.layers:

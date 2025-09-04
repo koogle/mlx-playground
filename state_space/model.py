@@ -1,7 +1,5 @@
 import mlx.core as mx
 import mlx.nn as nn
-import numpy as np
-from typing import T
 
 
 class StateSpace(nn.Module):

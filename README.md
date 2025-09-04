@@ -211,6 +211,30 @@ yolo/
 ```
 
 
+## State Space Models [*]
+
+State space model implementation for sequence modeling, currently being developed with speech recognition as the initial application.
+
+### Features
+- Basic State Space Model (SSM) with learnable discretization
+- S4-inspired architecture with multiple layers
+- Speech Commands v2 dataset loader with mel spectrogram preprocessing
+- Training pipeline for speech recognition tasks
+
+### Current Status
+- ✅ Basic SSM implementation with continuous-to-discrete conversion
+- ✅ Data loader for Google Speech Commands dataset
+- 🚧 Training and evaluation pipeline (in progress)
+
+## Flow Matching
+
+Flow matching implementation for continuous normalizing flows, providing an alternative to diffusion models for generative modeling.
+
+### Features
+- Continuous normalizing flow implementation
+- Flow matching training objective
+- Integration with existing diffusion U-Net architectures
+
 ## Diffusion
 
 A implementation of diffusion models using MLX, including both unconditional and conditional DDPM (Denoising Diffusion Probabilistic Models, ie you can prompt it or not) for image generation.

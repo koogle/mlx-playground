@@ -222,9 +222,9 @@ State space model implementation for sequence modeling, currently being develope
 - Training pipeline for speech recognition tasks
 
 ### Current Status
-- ✅ Basic SSM implementation with continuous-to-discrete conversion
-- ✅ Data loader for Google Speech Commands dataset
-- 🚧 Training and evaluation pipeline (in progress)
+- Dasic SSM implementation with continuous-to-discrete conversion
+- [*] Data loader for Google Speech Commands dataset
+- [*] Training and evaluation pipeline
 
 ## Flow Matching
 

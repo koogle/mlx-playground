@@ -178,5 +178,7 @@ chesszero/checkpoints
 # Data
 data/*.tag.gz
 data/cifar-10
+data/speech_commands_v2
+data/speech-commands-v2.zip
 
 cifar-10/*

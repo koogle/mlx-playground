@@ -137,15 +137,17 @@ class S4Model(nn.Module):
     def __init__(self, dim_input, dim_state, dim_output, n_layers=2):
         super(S4Model, self).__init__()
 
-        self.layers = []
+        # Register layers as module attributes for MLX
+        self.n_layers = n_layers
         for i in range(n_layers):
             layer_input = dim_input if i == 0 else dim_output
-            self.layers.append(StateSpace(layer_input, dim_state, dim_output))
-
+            setattr(self, f'layer_{i}', StateSpace(layer_input, dim_state, dim_output))
+        
         self.norm = nn.LayerNorm(dim_output)
 
-    def forward(self, x):
-        for layer in self.layers:
+    def __call__(self, x):
+        for i in range(self.n_layers):
+            layer = getattr(self, f'layer_{i}')
             x = layer(x)
             x = mx.maximum(x, 0)  # ReLU activation
 

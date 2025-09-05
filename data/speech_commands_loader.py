@@ -31,6 +31,8 @@ class SpeechCommandsDataset:
         hop_length: int = 256,
         background_noise_prob: float = 0.1,
         background_noise_volume: float = 0.1,
+        overfit_mode: bool = False,
+        overfit_samples: int = 3,
     ):
         """
         Args:
@@ -45,6 +47,8 @@ class SpeechCommandsDataset:
             hop_length: Hop length for STFT
             background_noise_prob: Probability of adding background noise
             background_noise_volume: Volume of background noise to add
+            overfit_mode: If True, only load a small subset of files for overfitting
+            overfit_samples: Number of samples to use in overfit mode
         """
         self.data_dir = Path(data_dir)
         self.split = split
@@ -57,13 +61,22 @@ class SpeechCommandsDataset:
         self.hop_length = hop_length
         self.background_noise_prob = background_noise_prob
         self.background_noise_volume = background_noise_volume
+        self.overfit_mode = overfit_mode
+        self.overfit_samples = overfit_samples
         
         # Load class labels and file paths
         self.classes, self.class_to_idx = self._load_classes()
         self.file_paths, self.labels = self._load_file_list()
         self.background_noise_files = self._load_background_noise_files()
         
-        print(f"Loaded {len(self.file_paths)} files for {split} split")
+        # Apply overfit mode if enabled
+        if self.overfit_mode:
+            self.file_paths = self.file_paths[:self.overfit_samples]
+            self.labels = self.labels[:self.overfit_samples]
+            print(f"Overfit mode: Limited to {len(self.file_paths)} files for {split} split")
+        else:
+            print(f"Loaded {len(self.file_paths)} files for {split} split")
+        
         print(f"Classes: {self.classes}")
         
     def _load_classes(self) -> Tuple[List[str], Dict[str, int]]:
@@ -242,8 +255,22 @@ class SpeechCommandsDataset:
                 batch_features.append(features)
                 batch_labels.append(label)
             
+            # Pad sequences to same length
+            max_seq_len = max(f.shape[0] for f in batch_features)
+            feature_dim = batch_features[0].shape[1]
+            
+            padded_features = []
+            for features in batch_features:
+                seq_len = features.shape[0]
+                if seq_len < max_seq_len:
+                    # Pad with zeros
+                    padding = mx.zeros((max_seq_len - seq_len, feature_dim))
+                    padded_features.append(mx.concatenate([features, padding], axis=0))
+                else:
+                    padded_features.append(features)
+            
             # Stack into batches
-            features_batch = mx.stack(batch_features)
+            features_batch = mx.stack(padded_features)
             labels_batch = mx.stack(batch_labels).squeeze(-1)
             
             yield features_batch, labels_batch

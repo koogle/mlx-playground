@@ -9,13 +9,19 @@ from data.speech_commands_loader import create_speech_commands_loaders
 from model import StateSpace, S4Model
 
 
-def train_speech_recognition():
+def train_speech_recognition(overfit_mode=False):
     """Train state space model on Google Speech Commands dataset"""
     
     # Hyperparameters
-    batch_size = 32
-    learning_rate = 1e-3
-    num_epochs = 10
+    if overfit_mode:
+        batch_size = 3  # Small batch for overfitting
+        learning_rate = 1e-2  # Higher learning rate for overfitting
+        num_epochs = 100  # More epochs to see clear overfitting
+        print("Running in overfit mode - using only 3 samples")
+    else:
+        batch_size = 32
+        learning_rate = 1e-3
+        num_epochs = 10
     
     # Model parameters  
     dim_state = 64
@@ -34,7 +40,9 @@ def train_speech_recognition():
         use_spectrogram=use_spectrogram,
         n_mels=n_mels,
         background_noise_prob=0.1,
-        background_noise_volume=0.1
+        background_noise_volume=0.1,
+        overfit_mode=overfit_mode,
+        overfit_samples=3
     )
     
     # Get dimensions from a sample batch
@@ -112,7 +120,9 @@ def train_speech_recognition():
             total_loss += loss.item()
             num_batches += 1
             
-            if num_batches % 50 == 0:
+            # More frequent logging in overfit mode
+            log_freq = 1 if overfit_mode else 50
+            if num_batches % log_freq == 0:
                 print(f"Epoch {epoch+1}, Batch {num_batches}, Loss: {loss.item():.4f}")
         
         # Validation
@@ -134,4 +144,11 @@ def train_speech_recognition():
 
 
 if __name__ == "__main__":
-    model, train_loader, val_loader, test_loader = train_speech_recognition()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Train state space model on speech commands')
+    parser.add_argument('--overfit', action='store_true', help='Run in overfit mode with 3 samples')
+    
+    args = parser.parse_args()
+    
+    model, train_loader, val_loader, test_loader = train_speech_recognition(overfit_mode=args.overfit)

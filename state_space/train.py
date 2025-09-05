@@ -15,8 +15,8 @@ def train_speech_recognition(overfit_mode=False):
     # Hyperparameters
     if overfit_mode:
         batch_size = 3  # Small batch for overfitting
-        learning_rate = 1e-2  # Higher learning rate for overfitting
-        num_epochs = 100  # More epochs to see clear overfitting
+        learning_rate = 1e-3  # Same learning rate to avoid NaN
+        num_epochs = 50  # Enough epochs to see clear overfitting
         print("Running in overfit mode - using only 3 samples")
     else:
         batch_size = 32
@@ -78,8 +78,7 @@ def train_speech_recognition(overfit_mode=False):
         pooled_logits = mx.mean(logits, axis=1)  # Shape: (batch, num_classes)
         
         # Cross-entropy loss
-        loss = nn.losses.cross_entropy(pooled_logits, y)
-        return mx.mean(loss)  # Ensure scalar loss
+        return nn.losses.cross_entropy(pooled_logits, y)
     
     def evaluate(model, data_loader):
         """Evaluate model accuracy"""
@@ -94,7 +93,7 @@ def train_speech_recognition(overfit_mode=False):
             
             # Loss
             loss = nn.losses.cross_entropy(pooled_logits, labels)
-            total_loss += mx.mean(loss).item()
+            total_loss += loss.item()
             
             # Accuracy
             predicted = mx.argmax(pooled_logits, axis=1)

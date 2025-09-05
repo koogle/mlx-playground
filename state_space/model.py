@@ -74,7 +74,7 @@ class StateSpace(nn.Module):
 
         return A_discrete, B_discrete
 
-    def forward(self, u, initial_state=None):
+    def __call__(self, u, initial_state=None):
         """
         Forward pass of the SSM.
 
@@ -125,7 +125,7 @@ class StateSpace(nn.Module):
         """
         # For now, just use the sequential version
         # A full implementation would use parallel prefix sum
-        return self.forward(u)
+        return self(u)
 
 
 class S4Model(nn.Module):
@@ -135,20 +135,33 @@ class S4Model(nn.Module):
     """
 
     def __init__(self, dim_input, dim_state, dim_output, n_layers=2):
-        super(S4Model, self).__init__()
+        super().__init__()
 
-        # Register layers as module attributes for MLX
-        self.n_layers = n_layers
-        for i in range(n_layers):
-            layer_input = dim_input if i == 0 else dim_output
-            setattr(self, f'layer_{i}', StateSpace(layer_input, dim_state, dim_output))
+        # Create layers directly as attributes (following pattern from other models)
+        if n_layers >= 1:
+            self.layer_0 = StateSpace(dim_input, dim_state, dim_output)
+        if n_layers >= 2:
+            self.layer_1 = StateSpace(dim_output, dim_state, dim_output)
+        if n_layers >= 3:
+            self.layer_2 = StateSpace(dim_output, dim_state, dim_output)
+        if n_layers >= 4:
+            self.layer_3 = StateSpace(dim_output, dim_state, dim_output)
         
+        self.n_layers = n_layers
         self.norm = nn.LayerNorm(dim_output)
 
     def __call__(self, x):
-        for i in range(self.n_layers):
-            layer = getattr(self, f'layer_{i}')
-            x = layer(x)
+        if self.n_layers >= 1:
+            x = self.layer_0(x)
+            x = mx.maximum(x, 0)  # ReLU activation
+        if self.n_layers >= 2:
+            x = self.layer_1(x)
+            x = mx.maximum(x, 0)  # ReLU activation
+        if self.n_layers >= 3:
+            x = self.layer_2(x)
+            x = mx.maximum(x, 0)  # ReLU activation
+        if self.n_layers >= 4:
+            x = self.layer_3(x)
             x = mx.maximum(x, 0)  # ReLU activation
 
         return self.norm(x)

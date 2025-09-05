@@ -62,11 +62,15 @@ def train_speech_recognition(overfit_mode=False):
         n_layers=n_layers
     )
     
+    
     # Optimizer
     optimizer = optim.Adam(learning_rate=learning_rate)
     
-    def loss_fn(model, x, y):
+    def loss_fn(params, x, y):
         """Cross-entropy loss for classification"""
+        # Set model parameters
+        model.update(params)
+        
         # Forward pass through state space model
         logits = model(x)  # Shape: (batch, seq_len, num_classes)
         
@@ -74,7 +78,8 @@ def train_speech_recognition(overfit_mode=False):
         pooled_logits = mx.mean(logits, axis=1)  # Shape: (batch, num_classes)
         
         # Cross-entropy loss
-        return nn.losses.cross_entropy(pooled_logits, y)
+        loss = nn.losses.cross_entropy(pooled_logits, y)
+        return mx.mean(loss)  # Ensure scalar loss
     
     def evaluate(model, data_loader):
         """Evaluate model accuracy"""
@@ -89,7 +94,7 @@ def train_speech_recognition(overfit_mode=False):
             
             # Loss
             loss = nn.losses.cross_entropy(pooled_logits, labels)
-            total_loss += loss.item()
+            total_loss += mx.mean(loss).item()
             
             # Accuracy
             predicted = mx.argmax(pooled_logits, axis=1)
@@ -111,7 +116,7 @@ def train_speech_recognition(overfit_mode=False):
         # Training
         for features, labels in train_loader.create_batches(batch_size=batch_size, shuffle=True):
             # Forward and backward pass
-            loss, grads = mx.value_and_grad(loss_fn)(model, features, labels)
+            loss, grads = mx.value_and_grad(loss_fn)(model.parameters(), features, labels)
             
             # Update parameters
             optimizer.update(model, grads)

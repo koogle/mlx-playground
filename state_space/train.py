@@ -78,7 +78,9 @@ def train_speech_recognition(overfit_mode=False):
         pooled_logits = mx.mean(logits, axis=1)  # Shape: (batch, num_classes)
         
         # Cross-entropy loss
-        return nn.losses.cross_entropy(pooled_logits, y)
+        loss = nn.losses.cross_entropy(pooled_logits, y)
+        # Return mean loss across batch for gradient computation
+        return mx.mean(loss)
     
     def evaluate(model, data_loader):
         """Evaluate model accuracy"""
@@ -93,7 +95,7 @@ def train_speech_recognition(overfit_mode=False):
             
             # Loss
             loss = nn.losses.cross_entropy(pooled_logits, labels)
-            total_loss += loss.item()
+            total_loss += mx.mean(loss).item()
             
             # Accuracy
             predicted = mx.argmax(pooled_logits, axis=1)

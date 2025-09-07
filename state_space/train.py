@@ -73,11 +73,11 @@ def train_speech_recognition(overfit_mode=False):
         logits = model(x)  # Shape: (batch, seq_len, num_classes)
 
         # Take last timestep for classification (most informative)
-        pooled_logits = logits[:, -1, :]  # Shape: (batch, num_classes)
+        final_logits = logits[:, -1, :]  # Shape: (batch, num_classes)
 
         # Cross-entropy loss
-        loss = nn.losses.cross_entropy(pooled_logits, y)
-        # Return mean loss across batch for gradient computation
+        loss = nn.losses.cross_entropy(final_logits, y)
+
         return mx.mean(loss)
 
     def evaluate(model, data_loader):
@@ -141,41 +141,27 @@ def train_speech_recognition(overfit_mode=False):
             total_loss += loss.item()
             num_batches += 1
 
+            # Update progress bar with current batch loss (not averaged)
+            current_loss = loss.item() if "loss" in locals() else 0.0
+            progress_bar.set_postfix({"Loss": f"{current_loss:.4f}"})
+
         # Show detailed logging for overfit mode
         if overfit_mode:
             print(f"Epoch {epoch+1}")
-
-            # Get the same batch again for prediction display
-            for features, labels in train_loader.create_batches(
-                batch_size=batch_size, shuffle=not overfit_mode
-            ):
-                logits = model(features)
-                pooled_logits = logits[:, -1, :]
-                predicted = mx.argmax(pooled_logits, axis=1)
-
-                print("Model vs Label comparison:")
-                for i in range(len(labels)):
+            for x, labels in train_loader.create_batches(batch_size=10, shuffle=True):
+                logits = model(x)
+                final_logits = logits[:, -1, :]  # S
+                predicted = mx.argmax(final_logits, axis=1)
+                for i in range(10):
                     true_label = labels[i].item()
                     pred_label = predicted[i].item()
                     true_class = train_loader.classes[true_label]
                     pred_class = train_loader.classes[pred_label]
-                    confidence = mx.softmax(pooled_logits[i])[pred_label].item()
-
+                    confidence = mx.softmax(final_logits[i])[pred_label].item()
                     status = "✓" if true_label == pred_label else "✗"
                     print(
                         f"  Sample {i+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
                     )
-                print()
-                break  # Only need the first batch
-
-        # Update progress bar with current batch loss (not averaged)
-        current_loss = loss.item() if "loss" in locals() else 0.0
-        progress_bar.set_postfix({"Loss": f"{current_loss:.4f}"})
-
-        # Check for overfitting success in overfit mode
-        if overfit_mode and current_loss < 0.01:
-            print(f"  🎉 Successfully overfitted! Train loss: {current_loss:.6f}")
-            break
 
     # Final test evaluation
     test_loss, test_accuracy = evaluate(model, test_loader)

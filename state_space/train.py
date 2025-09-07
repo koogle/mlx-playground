@@ -125,40 +125,21 @@ def train_speech_recognition(overfit_mode=False):
                 optimizer.learning_rate = new_lr
                 print(f"  Reduced learning rate to {new_lr:.6f}")
 
-        # Training - for overfit mode, don't shuffle and train on all 3 samples as one batch
-        if overfit_mode:
-            # Get all 3 samples as one batch, no shuffling
-            for features, labels in train_loader.create_batches(
-                batch_size=3, shuffle=False
-            ):
-                # Forward and backward pass
-                loss, grads = mx.value_and_grad(loss_fn)(
-                    model.parameters(), features, labels
-                )
+        # Normal training with shuffling
+        for features, labels in train_loader.create_batches(
+            batch_size=batch_size, shuffle=not overfit_mode
+        ):
+            # Forward and backward pass
+            loss, grads = mx.value_and_grad(loss_fn)(
+                model.parameters(), features, labels
+            )
 
-                # Update parameters
-                optimizer.update(model, grads)
-                mx.eval(model.parameters())
+            # Update parameters
+            optimizer.update(model, grads)
+            mx.eval(model.parameters())
 
-                total_loss += loss.item()
-                num_batches += 1
-                break  # Only train on this one batch containing all 3 samples
-        else:
-            # Normal training with shuffling
-            for features, labels in train_loader.create_batches(
-                batch_size=batch_size, shuffle=True
-            ):
-                # Forward and backward pass
-                loss, grads = mx.value_and_grad(loss_fn)(
-                    model.parameters(), features, labels
-                )
-
-                # Update parameters
-                optimizer.update(model, grads)
-                mx.eval(model.parameters())
-
-                total_loss += loss.item()
-                num_batches += 1
+            total_loss += loss.item()
+            num_batches += 1
 
         # Show detailed logging for overfit mode
         if overfit_mode:
@@ -166,7 +147,7 @@ def train_speech_recognition(overfit_mode=False):
 
             # Get the same batch again for prediction display
             for features, labels in train_loader.create_batches(
-                batch_size=3, shuffle=False
+                batch_size=batch_size, shuffle=not overfit_mode
             ):
                 logits = model(features)
                 pooled_logits = logits[:, -1, :]
@@ -187,14 +168,13 @@ def train_speech_recognition(overfit_mode=False):
                 print()
                 break  # Only need the first batch
 
-        avg_train_loss = total_loss / num_batches
-
-        # Update progress bar with loss info
-        progress_bar.set_postfix({"Loss": f"{avg_train_loss:.4f}"})
+        # Update progress bar with current batch loss (not averaged)
+        current_loss = loss.item() if "loss" in locals() else 0.0
+        progress_bar.set_postfix({"Loss": f"{current_loss:.4f}"})
 
         # Check for overfitting success in overfit mode
-        if overfit_mode and avg_train_loss < 0.01:
-            print(f"  🎉 Successfully overfitted! Train loss: {avg_train_loss:.6f}")
+        if overfit_mode and current_loss < 0.01:
+            print(f"  🎉 Successfully overfitted! Train loss: {current_loss:.6f}")
             break
 
     # Final test evaluation

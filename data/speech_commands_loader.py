@@ -71,9 +71,36 @@ class SpeechCommandsDataset:
         
         # Apply overfit mode if enabled
         if self.overfit_mode:
-            self.file_paths = self.file_paths[:self.overfit_samples]
-            self.labels = self.labels[:self.overfit_samples]
-            print(f"Overfit mode: Limited to {len(self.file_paths)} files for {split} split")
+            # Group all samples by class
+            samples_by_class = {}
+            for i, (path, label) in enumerate(zip(self.file_paths, self.labels)):
+                if label not in samples_by_class:
+                    samples_by_class[label] = []
+                samples_by_class[label].append((path, label))
+            
+            # Select one sample from each of 3 different classes
+            available_classes = list(samples_by_class.keys())
+            if len(available_classes) >= self.overfit_samples:
+                # Pick one sample from each of the first overfit_samples different classes
+                selected_samples = []
+                selected_labels = []
+                
+                for i in range(self.overfit_samples):
+                    class_label = available_classes[i]
+                    path, label = samples_by_class[class_label][0]  # Take first sample from this class
+                    selected_samples.append(path)
+                    selected_labels.append(label)
+                
+                self.file_paths = selected_samples
+                self.labels = selected_labels
+                selected_classes = [self.classes[label] for label in self.labels]
+                print(f"Overfit mode: Selected {len(self.file_paths)} samples from different classes: {selected_classes}")
+            else:
+                # Fallback to original behavior if not enough classes
+                self.file_paths = self.file_paths[:self.overfit_samples]
+                self.labels = self.labels[:self.overfit_samples]
+                selected_classes = [self.classes[label] for label in self.labels]
+                print(f"Overfit mode: Limited to {len(self.file_paths)} files: {selected_classes}")
         else:
             print(f"Loaded {len(self.file_paths)} files for {split} split")
         

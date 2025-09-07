@@ -21,7 +21,6 @@ def train_speech_recognition(overfit_mode=False):
         print("Running in overfit mode - using only 3 samples")
     else:
         batch_size = 32
-
         num_epochs = 10
 
     learning_rate = 1e-3
@@ -148,20 +147,25 @@ def train_speech_recognition(overfit_mode=False):
         # Show detailed logging for overfit mode
         if overfit_mode:
             print(f"Epoch {epoch+1}")
-            for x, labels in train_loader.create_batches(batch_size=10, shuffle=True):
-                logits = model(x)
-                final_logits = logits[:, -1, :]  # S
-                predicted = mx.argmax(final_logits, axis=1)
-                for i in range(10):
-                    true_label = labels[i].item()
-                    pred_label = predicted[i].item()
-                    true_class = train_loader.classes[true_label]
-                    pred_class = train_loader.classes[pred_label]
-                    confidence = mx.softmax(final_logits[i])[pred_label].item()
-                    status = "✓" if true_label == pred_label else "✗"
-                    print(
-                        f"  Sample {i+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
-                    )
+            for y in range(10):
+                for x, labels in train_loader.create_batches(
+                    batch_size=1, shuffle=True
+                ):
+                    logits = model(x)
+                    final_logits = logits[:, -1, :]  # Shape: (batch, num_classes)
+                    predicted = mx.argmax(final_logits, axis=1)
+
+                    for i in range(len(labels)):
+                        true_label = labels[i].item()
+                        pred_label = predicted[i].item()
+                        true_class = train_loader.classes[true_label]
+                        pred_class = train_loader.classes[pred_label]
+                        confidence = mx.softmax(final_logits[i])[pred_label].item()
+                        status = "✓" if true_label == pred_label else "✗"
+                        print(
+                            f"Sample {y+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
+                        )
+                    break
 
     # Final test evaluation
     test_loss, test_accuracy = evaluate(model, test_loader)

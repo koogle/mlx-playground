@@ -54,18 +54,13 @@ class StateSpace(nn.Module):
         self.D.weight = 0.01 * mx.random.normal((self.dim_output, self.dim_input))
 
     def _hippo_initialization(self):
-        """HiPPO initialization for the A matrix"""
-        # Simplified HiPPO matrix (LegT basis)
+        """Stable initialization for the A matrix"""
         n = self.dim_state
-        A = mx.zeros((n, n))
-        
-        for i in range(n):
-            for j in range(n):
-                if i > j:
-                    A = mx.put(A, [i, j], mx.sqrt((2*i+1)*(2*j+1)))
-                elif i == j:
-                    A = mx.put(A, [i, j], -(i+1))
-                    
+        # Create a stable, learnable matrix
+        # Negative diagonal for stability + small random off-diagonals
+        A = -1.0 * mx.eye(n)  # Stable diagonal
+        # Add small random perturbations to break symmetry
+        A = A + 0.01 * mx.random.normal((n, n))
         return A
 
     def discretize(self):

@@ -13,12 +13,13 @@ class StateSpace(nn.Module):
     We discretize it for sequence modeling using zero-order hold.
     """
 
-    def __init__(self, dim_input, dim_state, dim_output, dt_min=0.001, dt_max=0.1):
+    def __init__(self, dim_input, dim_state, dim_output, dt_min=0.001, dt_max=0.1, use_hippo_init=False):
         super(StateSpace, self).__init__()
 
         self.dim_input = dim_input
         self.dim_state = dim_state
         self.dim_output = dim_output
+        self.use_hippo_init = use_hippo_init
 
         # Initialize continuous SSM parameters
         self.A = nn.Linear(dim_state, dim_state, bias=False)
@@ -34,10 +35,15 @@ class StateSpace(nn.Module):
 
     def _initialize_parameters(self):
         """Initialize SSM parameters with sensible defaults"""
-        # Initialize A as slightly negative diagonal (stable system)
-        A_init = -0.5 * mx.eye(self.dim_state) + 0.1 * mx.random.normal(
-            (self.dim_state, self.dim_state)
-        )
+        if self.use_hippo_init:
+            # HiPPO initialization for better long-range modeling
+            A_init = self._hippo_initialization()
+        else:
+            # Standard initialization - slightly negative diagonal (stable system)
+            A_init = -0.5 * mx.eye(self.dim_state) + 0.1 * mx.random.normal(
+                (self.dim_state, self.dim_state)
+            )
+        
         self.A.weight = A_init
 
         # Initialize B and C with small random values
@@ -46,6 +52,21 @@ class StateSpace(nn.Module):
 
         # Initialize D near zero (no direct feedthrough)
         self.D.weight = 0.01 * mx.random.normal((self.dim_output, self.dim_input))
+
+    def _hippo_initialization(self):
+        """HiPPO initialization for the A matrix"""
+        # Simplified HiPPO matrix (LegT basis)
+        n = self.dim_state
+        A = mx.zeros((n, n))
+        
+        for i in range(n):
+            for j in range(n):
+                if i > j:
+                    A = mx.put(A, [i, j], mx.sqrt((2*i+1)*(2*j+1)))
+                elif i == j:
+                    A = mx.put(A, [i, j], -(i+1))
+                    
+        return A
 
     def discretize(self):
         """Discretize continuous SSM using zero-order hold
@@ -134,34 +155,24 @@ class S4Model(nn.Module):
     Uses HiPPO initialization for better long-range modeling.
     """
 
-    def __init__(self, dim_input, dim_state, dim_output, n_layers=2):
+    def __init__(self, dim_input, dim_state, dim_output, n_layers=2, use_hippo_init=False):
         super().__init__()
 
-        # Create layers directly as attributes (following pattern from other models)
-        if n_layers >= 1:
-            self.layer_0 = StateSpace(dim_input, dim_state, dim_output)
-        if n_layers >= 2:
-            self.layer_1 = StateSpace(dim_output, dim_state, dim_output)
-        if n_layers >= 3:
-            self.layer_2 = StateSpace(dim_output, dim_state, dim_output)
-        if n_layers >= 4:
-            self.layer_3 = StateSpace(dim_output, dim_state, dim_output)
+        layers = []
         
-        self.n_layers = n_layers
+        # First layer
+        if n_layers > 0:
+            layers.append(StateSpace(dim_input, dim_state, dim_output, use_hippo_init=use_hippo_init))
+            layers.append(nn.ReLU())
+        
+        # Additional layers
+        for _ in range(n_layers - 1):
+            layers.append(StateSpace(dim_output, dim_state, dim_output, use_hippo_init=use_hippo_init))
+            layers.append(nn.ReLU())
+        
+        self.layers = nn.Sequential(*layers)
         self.norm = nn.LayerNorm(dim_output)
 
     def __call__(self, x):
-        if self.n_layers >= 1:
-            x = self.layer_0(x)
-            x = mx.maximum(x, 0)  # ReLU activation
-        if self.n_layers >= 2:
-            x = self.layer_1(x)
-            x = mx.maximum(x, 0)  # ReLU activation
-        if self.n_layers >= 3:
-            x = self.layer_2(x)
-            x = mx.maximum(x, 0)  # ReLU activation
-        if self.n_layers >= 4:
-            x = self.layer_3(x)
-            x = mx.maximum(x, 0)  # ReLU activation
-
+        x = self.layers(x)
         return self.norm(x)

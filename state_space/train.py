@@ -112,7 +112,8 @@ def train_speech_recognition(overfit_mode=False):
     # Training loop
     print("Starting training...")
 
-    for epoch in tqdm(range(num_epochs)):
+    progress_bar = tqdm(range(num_epochs), desc="Training", unit="epoch")
+    for epoch in progress_bar:
         total_loss = 0.0
         num_batches = 0
 
@@ -188,7 +189,8 @@ def train_speech_recognition(overfit_mode=False):
 
         avg_train_loss = total_loss / num_batches
 
-        print(f"  Train Loss: {avg_train_loss:.4f}")
+        # Update progress bar with loss info
+        progress_bar.set_postfix({"Loss": f"{avg_train_loss:.4f}"})
 
         # Check for overfitting success in overfit mode
         if overfit_mode and avg_train_loss < 0.01:

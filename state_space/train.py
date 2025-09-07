@@ -16,7 +16,7 @@ def train_speech_recognition(overfit_mode=False):
     if overfit_mode:
         batch_size = 3  # Small batch for overfitting
         learning_rate = 5e-4  # Lower learning rate for stable overfitting
-        num_epochs = 200  # More epochs to ensure overfitting
+        num_epochs = 300  # More epochs to ensure overfitting
         print("Running in overfit mode - using only 3 samples")
     else:
         batch_size = 32
@@ -25,8 +25,8 @@ def train_speech_recognition(overfit_mode=False):
     
     # Model parameters  
     if overfit_mode:
-        dim_state = 32  # Smaller state for easier overfitting
-        n_layers = 2   # Fewer layers for easier overfitting
+        dim_state = 64  # Bigger state for more capacity
+        n_layers = 3   # More layers for more capacity
     else:
         dim_state = 64
         n_layers = 3

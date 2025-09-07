@@ -27,8 +27,8 @@ class StateSpace(nn.Module):
         self.C = nn.Linear(dim_state, dim_output, bias=False)
         self.D = nn.Linear(dim_input, dim_output, bias=False)
 
-        # Learnable discretization timestep
-        self.log_dt = mx.zeros((1,))
+        # Fixed small discretization timestep (not learnable for stability)
+        self.dt = 0.01  # Small fixed timestep
 
         # Initialize parameters
         self._initialize_parameters()
@@ -46,9 +46,10 @@ class StateSpace(nn.Module):
         
         self.A.weight = A_init
 
-        # Initialize B and C with small random values
-        self.B.weight = 0.1 * mx.random.normal((self.dim_state, self.dim_input))
-        self.C.weight = 0.1 * mx.random.normal((self.dim_output, self.dim_state))
+        # Initialize B and C with small random values  
+        # Note: nn.Linear shapes are (output_dim, input_dim)
+        self.B.weight = 0.1 * mx.random.normal((self.dim_state, self.dim_input))  # (dim_state, dim_input)
+        self.C.weight = 0.1 * mx.random.normal((self.dim_output, self.dim_state))  # (dim_output, dim_state)
 
         # Initialize D near zero (no direct feedthrough)
         self.D.weight = 0.01 * mx.random.normal((self.dim_output, self.dim_input))
@@ -75,7 +76,7 @@ class StateSpace(nn.Module):
         This enables us to perform inference and computation at a point in time by knowing
         the slope without having to solving the whole equation.
         """
-        dt = mx.exp(self.log_dt)
+        dt = self.dt
 
         # Get matrices
         A = self.A.weight
@@ -121,12 +122,12 @@ class StateSpace(nn.Module):
             input_signal = u[:, t, :]
 
             # State update: x_{t+1} = A_d @ x_t + B_d @ u_t
-            internal_state = mx.matmul(internal_state, A_d.T) + mx.matmul(
-                input_signal, B_d.T
-            )
+            # Shapes: internal_state: (batch, dim_state), A_d: (dim_state, dim_state)
+            # Need: (batch, dim_state) = (dim_state, dim_state) @ (dim_state, batch).T -> (batch, dim_state)
+            internal_state = (A_d @ internal_state.T).T + (B_d @ input_signal.T).T
 
-            # Output: y_t = C @ x_t + D @ u_t
-            y_t = mx.matmul(internal_state, C.T) + mx.matmul(input_signal, D.T)
+            # Output: y_t = C @ x_t + D @ u_t  
+            y_t = (C @ internal_state.T).T + (D @ input_signal.T).T
             outputs.append(y_t)
 
         # Stack outputs

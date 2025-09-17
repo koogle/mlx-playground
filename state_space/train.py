@@ -179,10 +179,8 @@ def train_speech_recognition(overfit_mode=False, init_strategy="standard"):
     print("Starting training...")
 
     best_loss = float('inf')
-    patience_counter = 0
-    early_stop_patience = 50  # Stop if no improvement for 50 epochs
     early_stop_threshold = 0.01  # Stop if loss below this
-    high_loss_threshold = 1.0  # Cancel if loss still above this after 300 epochs
+    high_loss_threshold = 2.0  # Cancel if loss still above this after 300 epochs
 
     progress_bar = tqdm(range(num_epochs), desc="Training", unit="epoch")
     for epoch in progress_bar:
@@ -236,31 +234,19 @@ def train_speech_recognition(overfit_mode=False, init_strategy="standard"):
 
         # Early stopping logic for overfit mode
         if overfit_mode:
-            # Check for early stopping success (low loss)
-            if avg_loss < early_stop_threshold:
+            # Check for early stopping success using most recent training loss
+            if current_loss < early_stop_threshold:
                 print(f"\n✓ Early stopping: Loss {avg_loss:.4f} < {early_stop_threshold} at epoch {epoch+1}")
                 print("\nRunning final evaluation:")
                 run_sampling_evaluation(model, train_loader, num_samples=10, verbose=True)
                 break
 
-            # Check for failure to converge after 300 epochs
-            if epoch >= 300 and avg_loss > high_loss_threshold:
-                print(f"\n✗ Stopping: Loss {avg_loss:.4f} still > {high_loss_threshold} after {epoch+1} epochs")
+            # Check for failure to converge after 300 epochs using recent loss
+            if epoch >= 300 and current_loss > high_loss_threshold:
+                print(f"\n✗ Stopping: Loss {current_loss:.4f} still > {high_loss_threshold} after {epoch+1} epochs")
                 print("Model failed to converge. Try a different initialization or hyperparameters.")
                 break
-
-            # Track best loss for patience-based early stopping
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                patience_counter = 0
-            else:
-                patience_counter += 1
-
-            # Stop if no improvement for too long (but only after giving it a fair chance)
-            if epoch > 100 and patience_counter >= early_stop_patience:
-                print(f"\n→ Early stopping: No improvement for {early_stop_patience} epochs (best loss: {best_loss:.4f})")
-                break
-
+            
         # Show detailed logging for overfit mode at the last epoch
         if overfit_mode and epoch == num_epochs - 1:
             print("\nFinal evaluation:")

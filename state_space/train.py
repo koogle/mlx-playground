@@ -11,6 +11,66 @@ from data.speech_commands_loader import create_speech_commands_loaders
 from model import S4Model
 
 
+def run_sampling_evaluation(model, train_loader, num_samples=10, verbose=True):
+    """Run sampling evaluation on training data
+
+    Returns:
+        Dictionary with per-class accuracy and overall accuracy
+    """
+    class_correct = {}
+    class_total = {}
+
+    for y in range(num_samples):
+        for x, labels in train_loader.create_batches(
+            batch_size=1, shuffle=True
+        ):
+            logits = model(x)
+            final_logits = logits[:, -1, :]  # Shape: (batch, num_classes)
+            predicted = mx.argmax(final_logits, axis=1)
+
+            for i in range(len(labels)):
+                true_label = labels[i].item()
+                pred_label = predicted[i].item()
+                true_class = train_loader.classes[true_label]
+                pred_class = train_loader.classes[pred_label]
+                confidence = mx.softmax(final_logits[i])[pred_label].item()
+                status = "✓" if true_label == pred_label else "✗"
+
+                # Track class accuracy
+                if true_class not in class_total:
+                    class_total[true_class] = 0
+                    class_correct[true_class] = 0
+                class_total[true_class] += 1
+                if true_label == pred_label:
+                    class_correct[true_class] += 1
+
+                if verbose:
+                    print(
+                        f"Sample {y+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
+                    )
+            break
+
+    # Calculate overall accuracy
+    total_correct = sum(class_correct.values())
+    total_samples = sum(class_total.values())
+    overall_accuracy = total_correct / total_samples if total_samples > 0 else 0
+
+    results = {
+        'class_correct': class_correct,
+        'class_total': class_total,
+        'overall_accuracy': overall_accuracy
+    }
+
+    if verbose:
+        print("\nPer-class accuracy:")
+        for cls in sorted(class_total.keys()):
+            acc = class_correct.get(cls, 0) / class_total[cls]
+            print(f"  {cls}: {acc:.1%} ({class_correct.get(cls, 0)}/{class_total[cls]})")
+        print(f"\nOverall accuracy: {overall_accuracy:.1%} ({total_correct}/{total_samples})")
+
+    return results
+
+
 def train_speech_recognition(overfit_mode=False, init_strategy="standard"):
     """Train state space model on Google Speech Commands dataset
 
@@ -179,6 +239,8 @@ def train_speech_recognition(overfit_mode=False, init_strategy="standard"):
             # Check for early stopping success (low loss)
             if avg_loss < early_stop_threshold:
                 print(f"\n✓ Early stopping: Loss {avg_loss:.4f} < {early_stop_threshold} at epoch {epoch+1}")
+                print("\nRunning final evaluation:")
+                run_sampling_evaluation(model, train_loader, num_samples=10, verbose=True)
                 break
 
             # Check for failure to converge after 300 epochs
@@ -199,48 +261,10 @@ def train_speech_recognition(overfit_mode=False, init_strategy="standard"):
                 print(f"\n→ Early stopping: No improvement for {early_stop_patience} epochs (best loss: {best_loss:.4f})")
                 break
 
-        # Show detailed logging for overfit mode
-        if overfit_mode:
-            # Track per-class performance
-            class_correct = {}
-            class_total = {}
-
-            for y in range(10):
-                for x, labels in train_loader.create_batches(
-                    batch_size=1, shuffle=True
-                ):
-                    logits = model(x)
-                    final_logits = logits[:, -1, :]  # Shape: (batch, num_classes)
-                    predicted = mx.argmax(final_logits, axis=1)
-
-                    for i in range(len(labels)):
-                        true_label = labels[i].item()
-                        pred_label = predicted[i].item()
-                        true_class = train_loader.classes[true_label]
-                        pred_class = train_loader.classes[pred_label]
-                        confidence = mx.softmax(final_logits[i])[pred_label].item()
-                        status = "✓" if true_label == pred_label else "✗"
-
-                        # Track class accuracy
-                        if true_class not in class_total:
-                            class_total[true_class] = 0
-                            class_correct[true_class] = 0
-                        class_total[true_class] += 1
-                        if true_label == pred_label:
-                            class_correct[true_class] += 1
-
-                        if epoch == num_epochs - 1:
-                            print(
-                                f"Sample {y+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
-                            )
-                    break
-
-            # Print per-class accuracy at the end
-            if epoch == num_epochs - 1:
-                print("\nPer-class accuracy:")
-                for cls in sorted(class_total.keys()):
-                    acc = class_correct.get(cls, 0) / class_total[cls]
-                    print(f"  {cls}: {acc:.1%} ({class_correct.get(cls, 0)}/{class_total[cls]})")
+        # Show detailed logging for overfit mode at the last epoch
+        if overfit_mode and epoch == num_epochs - 1:
+            print("\nFinal evaluation:")
+            run_sampling_evaluation(model, train_loader, num_samples=10, verbose=True)
 
     # Final test evaluation
     test_loss, test_accuracy = evaluate(model, test_loader)

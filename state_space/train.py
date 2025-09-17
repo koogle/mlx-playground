@@ -120,9 +120,9 @@ def train_speech_recognition(overfit_mode=False):
         if overfit_mode and epoch > 0:
             # Reduce learning rate if loss hasn't improved much in the last few epochs
             if epoch % 50 == 0:
-                new_lr = optimizer.learning_rate * 0.8
+                new_lr = optimizer.learning_rate * 0.9
                 optimizer.learning_rate = new_lr
-                print(f"  Reduced learning rate to {new_lr:.6f}")
+            #    print(f"  Reduced learning rate to {new_lr:.6f}")
 
         # Normal training with shuffling
         for features, labels in train_loader.create_batches(

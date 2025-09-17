@@ -146,7 +146,7 @@ def train_speech_recognition(overfit_mode=False):
 
         # Show detailed logging for overfit mode
         if overfit_mode:
-            print(f"Epoch {epoch+1}")
+            # print(f"Epoch {epoch+1}")
             for y in range(10):
                 for x, labels in train_loader.create_batches(
                     batch_size=1, shuffle=True
@@ -162,9 +162,10 @@ def train_speech_recognition(overfit_mode=False):
                         pred_class = train_loader.classes[pred_label]
                         confidence = mx.softmax(final_logits[i])[pred_label].item()
                         status = "✓" if true_label == pred_label else "✗"
-                        print(
-                            f"Sample {y+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
-                        )
+                        if epoch == num_epochs - 1:
+                            print(
+                                f"Sample {y+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
+                            )
                     break
 
     # Final test evaluation

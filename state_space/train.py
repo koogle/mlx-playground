@@ -17,7 +17,7 @@ def train_speech_recognition(overfit_mode=False):
     # Hyperparameters
     if overfit_mode:
         batch_size = 3  # Small batch for overfitting
-        num_epochs = 300  # More epochs to ensure overfitting
+        num_epochs = 600  # More epochs to ensure overfitting
         print("Running in overfit mode - using only 3 samples")
     else:
         batch_size = 32

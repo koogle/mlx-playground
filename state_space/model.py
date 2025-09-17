@@ -13,13 +13,13 @@ class StateSpace(nn.Module):
     We discretize it for sequence modeling using zero-order hold.
     """
 
-    def __init__(self, dim_input, dim_state, dim_output, dt_min=0.001, dt_max=0.1, use_hippo_init=False):
+    def __init__(self, dim_input, dim_state, dim_output, dt_min=0.001, dt_max=0.1, init_strategy="standard"):
         super(StateSpace, self).__init__()
 
         self.dim_input = dim_input
         self.dim_state = dim_state
         self.dim_output = dim_output
-        self.use_hippo_init = use_hippo_init
+        self.init_strategy = init_strategy  # "standard", "improved", "hippo"
 
         # Initialize continuous SSM parameters
         self.A = nn.Linear(dim_state, dim_state, bias=False)
@@ -28,31 +28,51 @@ class StateSpace(nn.Module):
         self.D = nn.Linear(dim_input, dim_output, bias=False)
 
         # Fixed small discretization timestep (not learnable for stability)
-        self.dt = 0.01  # Small fixed timestep
+        # Use smaller dt for improved strategy
+        self.dt = 0.005 if self.init_strategy == "improved" else 0.01
 
         # Initialize parameters
         self._initialize_parameters()
 
     def _initialize_parameters(self):
-        """Initialize SSM parameters with sensible defaults"""
-        if self.use_hippo_init:
+        """Initialize SSM parameters with selected strategy"""
+        if self.init_strategy == "hippo":
             # HiPPO initialization for better long-range modeling
             A_init = self._hippo_initialization()
-        else:
+        elif self.init_strategy == "improved":
+            # Improved initialization - stronger negative diagonal for stability
+            # and smaller noise to reduce variance
+            A_init = -1.0 * mx.eye(self.dim_state) + 0.01 * mx.random.normal(
+                (self.dim_state, self.dim_state)
+            )
+        else:  # "standard"
             # Standard initialization - slightly negative diagonal (stable system)
             A_init = -0.5 * mx.eye(self.dim_state) + 0.1 * mx.random.normal(
                 (self.dim_state, self.dim_state)
             )
-        
+
         self.A.weight = A_init
 
-        # Initialize B and C with small random values  
-        # Note: nn.Linear shapes are (output_dim, input_dim)
-        self.B.weight = 0.1 * mx.random.normal((self.dim_state, self.dim_input))  # (dim_state, dim_input)
-        self.C.weight = 0.1 * mx.random.normal((self.dim_output, self.dim_state))  # (dim_output, dim_state)
+        # Initialize B and C based on strategy
+        if self.init_strategy == "improved":
+            # Xavier/Glorot initialization for better gradient flow
+            fan_in_b = self.dim_input
+            fan_out_b = self.dim_state
+            std_b = mx.sqrt(2.0 / (fan_in_b + fan_out_b))
+            self.B.weight = std_b * mx.random.normal((self.dim_state, self.dim_input))
 
-        # Initialize D near zero (no direct feedthrough)
-        self.D.weight = 0.01 * mx.random.normal((self.dim_output, self.dim_input))
+            fan_in_c = self.dim_state
+            fan_out_c = self.dim_output
+            std_c = mx.sqrt(2.0 / (fan_in_c + fan_out_c))
+            self.C.weight = std_c * mx.random.normal((self.dim_output, self.dim_state))
+
+            # Keep D very small for minimal direct feedthrough
+            self.D.weight = 0.001 * mx.random.normal((self.dim_output, self.dim_input))
+        else:
+            # Standard/HiPPO initialization for B, C, D
+            self.B.weight = 0.1 * mx.random.normal((self.dim_state, self.dim_input))
+            self.C.weight = 0.1 * mx.random.normal((self.dim_output, self.dim_state))
+            self.D.weight = 0.01 * mx.random.normal((self.dim_output, self.dim_input))
 
     def _hippo_initialization(self):
         """Stable initialization for the A matrix"""
@@ -151,19 +171,19 @@ class S4Model(nn.Module):
     Uses HiPPO initialization for better long-range modeling.
     """
 
-    def __init__(self, dim_input, dim_state, dim_output, n_layers=2, use_hippo_init=False):
+    def __init__(self, dim_input, dim_state, dim_output, n_layers=2, init_strategy="standard"):
         super().__init__()
 
         layers = []
-        
+
         # First layer
         if n_layers > 0:
-            layers.append(StateSpace(dim_input, dim_state, dim_output, use_hippo_init=use_hippo_init))
+            layers.append(StateSpace(dim_input, dim_state, dim_output, init_strategy=init_strategy))
             layers.append(nn.ReLU())
-        
+
         # Additional layers
         for _ in range(n_layers - 1):
-            layers.append(StateSpace(dim_output, dim_state, dim_output, use_hippo_init=use_hippo_init))
+            layers.append(StateSpace(dim_output, dim_state, dim_output, init_strategy=init_strategy))
             layers.append(nn.ReLU())
         
         self.layers = nn.Sequential(*layers)

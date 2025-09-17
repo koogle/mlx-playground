@@ -11,17 +11,23 @@ from data.speech_commands_loader import create_speech_commands_loaders
 from model import S4Model
 
 
-def train_speech_recognition(overfit_mode=False):
-    """Train state space model on Google Speech Commands dataset"""
+def train_speech_recognition(overfit_mode=False, init_strategy="standard"):
+    """Train state space model on Google Speech Commands dataset
+
+    Args:
+        overfit_mode: Whether to run in overfit mode with 3 samples
+        init_strategy: Initialization strategy - 'standard', 'improved', or 'hippo'
+    """
 
     # Hyperparameters
     if overfit_mode:
         batch_size = 3  # Small batch for overfitting
         num_epochs = 600  # More epochs to ensure overfitting
-        print("Running in overfit mode - using only 3 samples")
+        print(f"Running in overfit mode - using only 3 samples with {init_strategy} initialization")
     else:
         batch_size = 32
         num_epochs = 10
+        print(f"Using {init_strategy} initialization strategy")
 
     learning_rate = 1e-3
     dim_state = 64
@@ -58,6 +64,7 @@ def train_speech_recognition(overfit_mode=False):
         dim_state=dim_state,
         dim_output=num_classes,
         n_layers=n_layers,
+        init_strategy=init_strategy,
     )
 
     optimizer = optim.Adam(learning_rate=learning_rate)
@@ -111,6 +118,12 @@ def train_speech_recognition(overfit_mode=False):
     # Training loop
     print("Starting training...")
 
+    best_loss = float('inf')
+    patience_counter = 0
+    early_stop_patience = 50  # Stop if no improvement for 50 epochs
+    early_stop_threshold = 0.01  # Stop if loss below this
+    high_loss_threshold = 1.0  # Cancel if loss still above this after 300 epochs
+
     progress_bar = tqdm(range(num_epochs), desc="Training", unit="epoch")
     for epoch in progress_bar:
         total_loss = 0.0
@@ -133,6 +146,17 @@ def train_speech_recognition(overfit_mode=False):
                 model.parameters(), features, labels
             )
 
+            # Calculate gradient norm for monitoring
+            grad_norm = 0.0
+            for g in grads.values():
+                if isinstance(g, dict):
+                    for gg in g.values():
+                        if isinstance(gg, mx.array):
+                            grad_norm += mx.sum(gg * gg).item()
+                elif isinstance(g, mx.array):
+                    grad_norm += mx.sum(g * g).item()
+            grad_norm = grad_norm ** 0.5
+
             # Update parameters
             optimizer.update(model, grads)
             mx.eval(model.parameters())
@@ -140,13 +164,47 @@ def train_speech_recognition(overfit_mode=False):
             total_loss += loss.item()
             num_batches += 1
 
-            # Update progress bar with current batch loss (not averaged)
+            # Update progress bar with current batch loss and gradient norm
             current_loss = loss.item() if "loss" in locals() else 0.0
-            progress_bar.set_postfix({"Loss": f"{current_loss:.4f}"})
+            if overfit_mode and epoch % 100 == 0:
+                progress_bar.set_postfix({"Loss": f"{current_loss:.4f}", "GradNorm": f"{grad_norm:.3f}"})
+            else:
+                progress_bar.set_postfix({"Loss": f"{current_loss:.4f}"})
+
+        # Calculate average loss for epoch
+        avg_loss = total_loss / num_batches if num_batches > 0 else float('inf')
+
+        # Early stopping logic for overfit mode
+        if overfit_mode:
+            # Check for early stopping success (low loss)
+            if avg_loss < early_stop_threshold:
+                print(f"\n✓ Early stopping: Loss {avg_loss:.4f} < {early_stop_threshold} at epoch {epoch+1}")
+                break
+
+            # Check for failure to converge after 300 epochs
+            if epoch >= 300 and avg_loss > high_loss_threshold:
+                print(f"\n✗ Stopping: Loss {avg_loss:.4f} still > {high_loss_threshold} after {epoch+1} epochs")
+                print("Model failed to converge. Try a different initialization or hyperparameters.")
+                break
+
+            # Track best loss for patience-based early stopping
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+
+            # Stop if no improvement for too long (but only after giving it a fair chance)
+            if epoch > 100 and patience_counter >= early_stop_patience:
+                print(f"\n→ Early stopping: No improvement for {early_stop_patience} epochs (best loss: {best_loss:.4f})")
+                break
 
         # Show detailed logging for overfit mode
         if overfit_mode:
-            # print(f"Epoch {epoch+1}")
+            # Track per-class performance
+            class_correct = {}
+            class_total = {}
+
             for y in range(10):
                 for x, labels in train_loader.create_batches(
                     batch_size=1, shuffle=True
@@ -162,11 +220,27 @@ def train_speech_recognition(overfit_mode=False):
                         pred_class = train_loader.classes[pred_label]
                         confidence = mx.softmax(final_logits[i])[pred_label].item()
                         status = "✓" if true_label == pred_label else "✗"
+
+                        # Track class accuracy
+                        if true_class not in class_total:
+                            class_total[true_class] = 0
+                            class_correct[true_class] = 0
+                        class_total[true_class] += 1
+                        if true_label == pred_label:
+                            class_correct[true_class] += 1
+
                         if epoch == num_epochs - 1:
                             print(
                                 f"Sample {y+1}: {status} True: {true_class} | Pred: {pred_class} (conf: {confidence:.3f})"
                             )
                     break
+
+            # Print per-class accuracy at the end
+            if epoch == num_epochs - 1:
+                print("\nPer-class accuracy:")
+                for cls in sorted(class_total.keys()):
+                    acc = class_correct.get(cls, 0) / class_total[cls]
+                    print(f"  {cls}: {acc:.1%} ({class_correct.get(cls, 0)}/{class_total[cls]})")
 
     # Final test evaluation
     test_loss, test_accuracy = evaluate(model, test_loader)
@@ -186,9 +260,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--overfit", action="store_true", help="Run in overfit mode with 3 samples"
     )
+    parser.add_argument(
+        "--init",
+        type=str,
+        default="standard",
+        choices=["standard", "improved", "hippo"],
+        help="Initialization strategy: standard, improved, or hippo (default: standard)"
+    )
 
     args = parser.parse_args()
 
     model, train_loader, val_loader, test_loader = train_speech_recognition(
-        overfit_mode=args.overfit
+        overfit_mode=args.overfit,
+        init_strategy=args.init
     )

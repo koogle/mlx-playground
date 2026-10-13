@@ -1,4 +1,4 @@
-from chess_engine.cache import LRUCache
+from cachetools import LRUCache
 import numpy as np
 from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
@@ -41,11 +41,11 @@ class BitBoard:
     18: No-progress count (normalized by dividing by 50)
     """
 
-    _game_over_cache = LRUCache()
-    _pin_cache = LRUCache()
+    _game_over_cache = LRUCache(maxsize=10_000)
+    _pin_cache = LRUCache(maxsize=10_000)
     _attack_pattern_cache = {}  # New cache for attack patterns
     _ray_cache = {}  # New cache for ray calculations
-    _valid_moves_cache = LRUCache()
+    _valid_moves_cache = LRUCache(maxsize=10_000)
 
     def __init__(self):
         # Use contiguous memory layout

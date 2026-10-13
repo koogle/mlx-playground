@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
-from chess_engine.cache import LRUCache
+from cachetools import LRUCache
 from config.model_config import ModelConfig
 from model.move_encoding import MoveDestination, encode_move
 
@@ -74,7 +74,7 @@ class Node:
 
 class MCTS:
     # Rule-only results may be shared; each search owns its mutable Node tree.
-    _all_moves_cache = LRUCache()
+    _all_moves_cache = LRUCache(maxsize=10_000)
     _move_encoding_table = None  # Will be initialized in __init__
 
     def __init__(self, model, config: ModelConfig):

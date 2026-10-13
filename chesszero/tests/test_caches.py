@@ -6,14 +6,14 @@ from unittest.mock import patch
 import numpy as np
 
 from chess_engine.bitboard import BitBoard
-from chess_engine.cache import LRUCache
+from cachetools import LRUCache
 from config.model_config import ModelConfig
 from model.mcts import MCTS, Node
 
 
 class TestCaches(unittest.TestCase):
     def test_lru_bounds_reads_updates_and_overwrites(self):
-        cache = LRUCache(max_size=2)
+        cache = LRUCache(maxsize=2)
         cache.update(a=1, b=2)
         self.assertEqual(cache.get("a"), 1)
         cache["c"] = 3
@@ -47,8 +47,8 @@ class TestCaches(unittest.TestCase):
     def test_hash_collision_cannot_reuse_another_positions_legal_moves(self):
         with (
             patch("chess_engine.bitboard.hash", return_value=7, create=True),
-            patch.object(BitBoard, "_valid_moves_cache", LRUCache()),
-            patch.object(MCTS, "_all_moves_cache", LRUCache()),
+            patch.object(BitBoard, "_valid_moves_cache", LRUCache(maxsize=10_000)),
+            patch.object(MCTS, "_all_moves_cache", LRUCache(maxsize=10_000)),
         ):
             first = BitBoard()
             second = first.copy()
@@ -73,7 +73,7 @@ class TestCaches(unittest.TestCase):
         self.assertIsNone(reference())
 
     def test_rule_caches_stay_bounded_and_preserve_results(self):
-        caches = [LRUCache(max_size=2) for _ in range(4)]
+        caches = [LRUCache(maxsize=2) for _ in range(4)]
         with (
             patch.object(BitBoard, "_valid_moves_cache", caches[0]),
             patch.object(BitBoard, "_pin_cache", caches[1]),

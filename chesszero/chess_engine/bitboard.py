@@ -1,4 +1,4 @@
-from functools import lru_cache
+from chess_engine.cache import LRUCache
 import numpy as np
 from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
@@ -41,11 +41,11 @@ class BitBoard:
     18: No-progress count (normalized by dividing by 50)
     """
 
-    _game_over_cache = {}
-    _pin_cache = {}
+    _game_over_cache = LRUCache()
+    _pin_cache = LRUCache()
     _attack_pattern_cache = {}  # New cache for attack patterns
     _ray_cache = {}  # New cache for ray calculations
-    _valid_moves_cache = {}  # New cache for valid moves
+    _valid_moves_cache = LRUCache()
 
     def __init__(self):
         # Use contiguous memory layout
@@ -1150,7 +1150,6 @@ class BitBoard:
                     BitBoard._attack_pattern_cache[("king", pos)] = king_pattern
 
 
-@lru_cache(maxsize=100000)
 def hash_board_state(board_state_bytes: bytes) -> int:
-    """Hash the board state using numpy"""
+    """Hash without retaining a copy of every input byte string."""
     return hash(board_state_bytes)

@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from chess_engine.bitboard import BitBoard
+from chess_engine.bitboard import BitBoard, hash_board_state
 
 
 class TestRepetition(unittest.TestCase):
@@ -47,19 +47,24 @@ class TestRepetition(unittest.TestCase):
         self.assertEqual(history, board.position_history)
         self.assertFalse(board.is_draw())
 
-    def test_search_and_terminal_caches_distinguish_histories(self):
+    def test_repetition_draw_bypasses_board_only_terminal_cache(self):
         repeated = BitBoard()
         self.cycle_knights(repeated)
         self.cycle_knights(repeated)
         fresh = repeated.copy()
         fresh.position_history = {fresh.get_repetition_hash(): 1}
         np.testing.assert_array_equal(repeated.state, fresh.state)
-        self.assertNotEqual(repeated.get_hash(), fresh.get_hash())
+        self.assertEqual(repeated.get_hash(), fresh.get_hash())
         # Both lookup orders must work with the shared game-over cache.
         for boards in ((fresh, repeated), (repeated, fresh)):
             BitBoard._game_over_cache.clear()
             for board in boards:
                 self.assertEqual(board.is_game_over(), board is repeated)
+                if board is repeated:
+                    self.assertIsNot(
+                        BitBoard._game_over_cache.get(board.get_hash()), True
+                    )
+            self.assertFalse(BitBoard._game_over_cache[fresh.get_hash()])
 
     def test_copy_keeps_history_independent(self):
         board = BitBoard()
@@ -70,14 +75,16 @@ class TestRepetition(unittest.TestCase):
         self.assertFalse(board.is_draw())
         self.assertTrue(clone.is_draw())
 
-    def test_search_hash_includes_counts_of_other_positions(self):
+    def test_board_hash_preserves_original_identity_without_history(self):
         board = BitBoard()
         clone = board.copy()
         future = board.copy()
         self.assertTrue(future.make_move((0, 6), (2, 5)))
         clone.position_history[future.get_repetition_hash()] = 2
         self.assertEqual(board.get_repetition_hash(), clone.get_repetition_hash())
-        self.assertNotEqual(board.get_hash(), clone.get_hash())
+        self.assertEqual(board.get_hash(), clone.get_hash())
+        self.assertEqual(board.get_hash(), hash_board_state(board.state.tobytes()))
+        self.assertEqual(hash(board), hash(clone))
 
 
 if __name__ == "__main__":

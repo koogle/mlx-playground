@@ -715,6 +715,11 @@ class BitBoard:
 
     def is_game_over(self) -> bool:
         """Check if the game is over (checkmate or draw)"""
+        # Draws can depend on history, which is deliberately not in the board
+        # hash. Check them before lookup and never store them in this cache.
+        if self.is_draw():
+            return True
+
         cache_key = self.get_hash()
 
         if cache_key in BitBoard._game_over_cache:
@@ -729,11 +734,6 @@ class BitBoard:
 
         # Check for stalemate
         elif self.is_stalemate(current_turn):
-            BitBoard._game_over_cache[cache_key] = True
-            return True
-
-        # Check for draw
-        elif self.is_draw():
             BitBoard._game_over_cache[cache_key] = True
             return True
 
@@ -847,17 +847,9 @@ class BitBoard:
         return board_str
 
     def get_hash(self) -> int:
-        """Hash the full search state, including counters and repetition history.
-
-        Identical board layouts reached through different histories can have
-        different draw outcomes, including in their descendants.
-        """
-        return hash(
-            (
-                hash_board_state(self.state.tobytes()),
-                frozenset(self.position_history.items()),
-            )
-        )
+        """Fast board hashing using numpy"""
+        # Use numpy's built-in hashing for arrays
+        return hash_board_state(self.state.tobytes())
 
     def get_repetition_hash(self) -> int:
         """Hash pieces, side to move, and castling rights, excluding counters.

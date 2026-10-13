@@ -66,7 +66,8 @@ class BitBoard:
         # Pre-compute attack patterns for all squares
         self._init_attack_patterns()
 
-        self.position_history = {}  # Track position repetitions
+        # Count the initial position as its first occurrence.
+        self.position_history = {self.get_repetition_hash(): 1}
 
     def initialize_board(self):
         """Set up the initial chess position"""
@@ -141,12 +142,6 @@ class BitBoard:
     ) -> bool:
         """Make a move on the board. Returns True if successful.
         For pawn promotion, to_pos should be (row, col, promotion_piece_type)"""
-        # Update position history before making the move
-        current_hash = self.get_hash()
-        self.position_history[current_hash] = (
-            self.position_history.get(current_hash, 0) + 1
-        )
-
         # First validate current board state
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
@@ -253,6 +248,12 @@ class BitBoard:
 
         # Update turn
         self.state[12] = 1 - self.state[12]
+
+        # Record the resulting position only after a successful move.
+        repetition_hash = self.get_repetition_hash()
+        self.position_history[repetition_hash] = (
+            self.position_history.get(repetition_hash, 0) + 1
+        )
 
         # Clear caches that depend on board state
         # self._valid_moves_cache.clear()
@@ -632,12 +633,9 @@ class BitBoard:
         if self.get_moves_without_progress() >= 50:
             return True
 
-        # Check for threefold repetition using the position history
-        # The position hash includes piece positions, castling rights, en passant squares, and side to move
-        current_hash = self.get_hash()
-        if current_hash in self.position_history:
-            if self.position_history[current_hash] >= 3:
-                return True
+        # Move counters do not affect repetition identity.
+        if self.position_history.get(self.get_repetition_hash(), 0) >= 3:
+            return True
 
         # Get all pieces for insufficient material check
         white_pieces = self.get_all_pieces(0)
@@ -849,9 +847,25 @@ class BitBoard:
         return board_str
 
     def get_hash(self) -> int:
-        """Fast board hashing using numpy"""
-        # Use numpy's built-in hashing for arrays
-        return hash_board_state(self.state.tobytes())
+        """Hash the full search state, including counters and repetition history.
+
+        Identical board layouts reached through different histories can have
+        different draw outcomes, including in their descendants.
+        """
+        return hash(
+            (
+                hash_board_state(self.state.tobytes()),
+                frozenset(self.position_history.items()),
+            )
+        )
+
+    def get_repetition_hash(self) -> int:
+        """Hash pieces, side to move, and castling rights, excluding counters.
+
+        The engine does not yet represent en passant. Legal en-passant rights
+        must also be included here if that rule is implemented.
+        """
+        return hash(self.state[:17].tobytes())
 
     def __hash__(self) -> int:
         """Hash the board"""

@@ -63,6 +63,7 @@ class RecordingModel:
     def __init__(self, fail_on_call=None):
         self.inputs = []
         self.fail_on_call = fail_on_call
+        self.training = True
 
     def __call__(self, states):
         self.inputs.append(np.array(states))
@@ -70,8 +71,11 @@ class RecordingModel:
             raise RuntimeError("inference failure")
         return mx.ones((len(states), 4672)) / 4672, mx.full((len(states), 1), 0.25)
 
-    def train(self):
-        pass
+    def train(self, mode=True):
+        self.training = mode
+
+    def eval(self):
+        self.train(False)
 
 
 class TestMCTSBatching(unittest.TestCase):

@@ -43,6 +43,8 @@ def run(
     training_seconds: int = 39600,
     limit_seconds: int = 42900,
     resume_generation: int = 10,
+    workers: int = 16,
+    games_per_generation: int = 16,
 ):
     import json
     import signal
@@ -71,9 +73,9 @@ def run(
         "--generations",
         "500",
         "--games-per-generation",
-        "12",
+        str(games_per_generation),
         "--workers",
-        "8",
+        str(workers),
         "--simulations",
         "32",
     ]
@@ -145,9 +147,12 @@ def main(
     training_seconds: int = 39600,
     limit_seconds: int = 42900,
     resume_generation: int = 10,
+    workers: int = 16,
+    games_per_generation: int = 16,
 ):
     result = run.remote(
-        run_id, resume_run, training_seconds, limit_seconds, resume_generation
+        run_id, resume_run, training_seconds, limit_seconds, resume_generation,
+        workers, games_per_generation
     )
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)

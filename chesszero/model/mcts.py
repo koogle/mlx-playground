@@ -72,21 +72,66 @@ class Node:
         return moves[selected_idx], children[selected_idx]
 
 
+class GameSearchCache:
+    """Bounded reuse for one game's fixed model snapshot; never stores Nodes.
+
+    Clear the cache or advance model_version before changing model weights.
+    Self-play workers create a new owner for each game and never train mid-game.
+    """
+
+    def __init__(self, model, maxsize=10_000, model_version=0):
+        self.model = model
+        self.model_version = model_version
+        self.all_moves = LRUCache(maxsize=maxsize)
+        self.boards = LRUCache(maxsize=maxsize)
+        self.positions = LRUCache(maxsize=maxsize)
+        self.board_states = LRUCache(maxsize=maxsize)
+        self.move_lists = LRUCache(maxsize=maxsize)
+        self.evaluations = LRUCache(maxsize=maxsize)
+        self.rules = tuple(LRUCache(maxsize=maxsize) for _ in range(3))
+
+    def bind(self, model, model_version=None):
+        if model is not self.model:
+            raise ValueError("A game cache belongs to one model snapshot")
+        if model_version is not None and model_version != self.model_version:
+            self.clear()
+            self.model_version = model_version
+
+    def clear(self):
+        """Discard game data, or invalidate before changing a model's weights."""
+        for cache in (
+            self.all_moves,
+            self.boards,
+            self.positions,
+            self.board_states,
+            self.move_lists,
+            self.evaluations,
+            *self.rules,
+        ):
+            cache.clear()
+
+
 class MCTS:
-    # Geometry/encoding tables are constant; position caches belong to a search.
+    # Geometry/encoding tables are constant; position caches have explicit owners.
     _move_encoding_table = None  # Will be initialized in __init__
 
-    def __init__(self, model, config: ModelConfig):
-        self._all_moves_cache = LRUCache(maxsize=10_000)
-        self._board_cache = LRUCache(maxsize=10_000)
-        self._board_state_cache = LRUCache(maxsize=10_000)
-        self._move_list_cache = LRUCache(maxsize=10_000)
-        self._evaluation_cache = LRUCache(maxsize=10_000)
-        self._rule_caches = tuple(LRUCache(maxsize=10_000) for _ in range(3))
+    def __init__(self, model, config: ModelConfig, cache=None, model_version=None):
+        self._owns_cache = cache is None
+        self.cache = cache if cache is not None else GameSearchCache(model)
+        self.cache.bind(model, model_version)
+        self.model_version = model_version
+        self._all_moves_cache = self.cache.all_moves
+        self._board_cache = self.cache.boards
+        self._position_cache = self.cache.positions
+        self._board_state_cache = self.cache.board_states
+        self._move_list_cache = self.cache.move_lists
+        self._evaluation_cache = self.cache.evaluations
+        self._rule_caches = self.cache.rules
         self.model = model
         self.config = config
         self.debug = config.debug
-        self.training = True
+        # An explicitly shared game cache serves a fixed inference snapshot.
+        self.training = self._owns_cache
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
         self.root_node = None  # Initialize root_node
@@ -207,6 +252,7 @@ class MCTS:
             if isinstance(child, BitBoard):
                 child.freeze()
             self._board_cache[key] = child
+            self._position_cache[self._board_key(child)] = child
             return child
         child = self._board_cache[key]
         return (
@@ -253,28 +299,32 @@ class MCTS:
         return result
 
     def _clear_caches(self):
-        for cache in (
-            self._all_moves_cache,
-            self._board_cache,
-            self._board_state_cache,
-            self._move_list_cache,
-            self._evaluation_cache,
-            *self._rule_caches,
-        ):
-            cache.clear()
+        self.cache.clear()
+
+    def _get_root_board(self, board):
+        key = self._board_key(board)
+        if key in self._position_cache and isinstance(board, BitBoard):
+            return self._position_cache[key]._with_position_history(
+                board.position_history.copy()
+            )
+        root = board.copy()
+        self._attach_rule_caches(root)
+        if isinstance(root, BitBoard):
+            root.freeze()
+        self._position_cache[key] = root
+        return root
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
         # Don't switch to eval mode during training
         if not self.training:
             self.model.eval()
 
-        self._clear_caches()
+        self.cache.bind(self.model, self.model_version)
+        if self._owns_cache:
+            self._clear_caches()
         try:
-            # Own the root snapshot; the caller may advance its game afterwards.
-            root_board = board.copy()
-            self._attach_rule_caches(root_board)
-            if isinstance(root_board, BitBoard):
-                root_board.freeze()
+            # A played move often selects a snapshot built in the previous search.
+            root_board = self._get_root_board(board)
             self.root_node = Node(root_board)
             policy, value = self._evaluate_board(root_board)
             self._expand_node(self.root_node, policy, value)
@@ -299,7 +349,8 @@ class MCTS:
             return move
 
         finally:
-            self._clear_caches()
+            if self._owns_cache:
+                self._clear_caches()
             # Restore training mode if we were training
             if self.training:
                 self.model.train()

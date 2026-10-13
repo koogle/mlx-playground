@@ -873,6 +873,10 @@ class BitBoard:
         """Reuse physical state while keeping this path's repetition history."""
         history = parent.position_history.copy()
         self._record_departure(history, parent.get_hash())
+        return self._with_position_history(history)
+
+    def _with_position_history(self, history):
+        """Attach independent history to an already-frozen physical snapshot."""
         if history == self.position_history:
             return self
         # Physical state and king coordinates are frozen; only the path context

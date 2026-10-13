@@ -8,7 +8,7 @@ import numpy as np
 from chess_engine.bitboard import BitBoard
 from cachetools import LRUCache
 from config.model_config import ModelConfig
-from model.mcts import MCTS, Node
+from model.mcts import MCTS, Node, GameSearchCache
 
 
 class TestCaches(unittest.TestCase):
@@ -270,6 +270,113 @@ class TestCaches(unittest.TestCase):
             search._move_list_cache,
         ):
             self.assertLessEqual(len(cache), 2)
+
+    def test_successive_game_turns_reuse_boards_and_evaluations_with_fresh_visits(self):
+        from tests.test_mcts_sequential import RecordingModel
+
+        class InferenceModel(RecordingModel):
+            def eval(self):
+                self.training = False
+
+        model = InferenceModel()
+        cache = GameSearchCache(model)
+        board = BitBoard()
+        first = MCTS(model, ModelConfig(n_simulations=12), cache=cache)
+        move = first.get_move(board)
+        child = first.root_node.children[move]
+        self.assertIn(first._board_key(child.board), cache.evaluations)
+        previous_visits = child.visit_count
+        self.assertTrue(board.make_move(*move))
+        second = MCTS(model, ModelConfig(n_simulations=5), cache=cache)
+        with patch.object(
+            board, "copy", side_effect=AssertionError("rebuilt next-turn root")
+        ):
+            second.get_move(board)
+        self.assertIs(second.root_node.board, child.board)
+        self.assertIsNot(second.root_node, child)
+        self.assertEqual(second.root_node.visit_count, 5)
+        self.assertEqual(child.visit_count, previous_visits)
+        evaluated = [states.tobytes() for states in model.inputs]
+        self.assertEqual(len(evaluated), len(set(evaluated)))
+        cache.clear()
+        for stored in (
+            cache.boards,
+            cache.positions,
+            cache.evaluations,
+            cache.board_states,
+            cache.move_lists,
+            cache.all_moves,
+            *cache.rules,
+        ):
+            self.assertEqual(len(stored), 0)
+
+    def test_self_play_worker_shares_one_game_cache_and_clears_it_at_finish(self):
+        from unittest.mock import Mock
+        from model.self_play import play_single_game
+        from tests.test_mcts_sequential import RecordingModel
+
+        caches = []
+        moves = iter(
+            [((1, 5), (2, 5)), ((6, 4), (4, 4)), ((1, 6), (3, 6)), ((7, 3), (3, 7))]
+        )
+
+        def scripted_move(search, board, temperature):
+            caches.append(search.cache)
+            search.root_node = Node(board)
+            return next(moves)
+
+        queue = Mock()
+        with (
+            patch.object(MCTS, "get_move", autospec=True, side_effect=scripted_move),
+            patch("model.self_play.tqdm"),
+            patch(
+                "model.self_play.get_policy_distribution",
+                return_value=np.ones(4672) / 4672,
+            ),
+        ):
+            play_single_game(RecordingModel(), ModelConfig(), 0, queue, 1)
+        self.assertEqual(len(caches), 4)
+        self.assertTrue(all(cache is caches[0] for cache in caches))
+        self.assertEqual(queue.put.call_args.args[0]["white_result"], -1.0)
+        self.assertEqual(queue.put.call_args.args[0]["n_moves"], 4)
+        self.assertEqual(len(caches[0].positions), 0)
+        self.assertEqual(len(caches[0].evaluations), 0)
+
+    def test_game_cache_rejects_competing_models_and_invalidates_new_versions(self):
+        from tests.test_mcts_sequential import RecordingModel
+
+        model = RecordingModel()
+        board = BitBoard()
+        cache = GameSearchCache(model, model_version=1)
+        first = MCTS(model, ModelConfig(), cache=cache, model_version=1)
+        first._evaluate_board(board)
+        with self.assertRaisesRegex(ValueError, "one model snapshot"):
+            MCTS(RecordingModel(), ModelConfig(), cache=cache)
+        second = MCTS(model, ModelConfig(), cache=cache, model_version=2)
+        self.assertEqual(len(cache.evaluations), 0)
+        second._evaluate_board(board)
+        self.assertEqual(len(model.inputs), 2)
+        self.assertEqual(cache.model_version, 2)
+
+    def test_game_cache_inference_preserves_network_weights_and_batchnorm_statistics(
+        self,
+    ):
+        from mlx.utils import tree_flatten
+        from model.network import ChessNet
+
+        config = ModelConfig(n_residual_blocks=0, n_filters=4, n_simulations=2)
+        model = ChessNet(config)
+        before = {
+            key: np.array(value) for key, value in tree_flatten(model.parameters())
+        }
+        cache = GameSearchCache(model)
+        board = BitBoard()
+        for _ in range(2):
+            move = MCTS(model, config, cache=cache).get_move(board)
+            self.assertTrue(board.make_move(*move))
+        self.assertFalse(model.training)
+        for key, value in tree_flatten(model.parameters()):
+            np.testing.assert_array_equal(before[key], np.array(value))
 
     def test_search_caches_are_isolated_and_cleared_on_success_and_failure(self):
         from tests.test_mcts_sequential import RecordingModel

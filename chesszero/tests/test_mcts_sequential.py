@@ -99,6 +99,22 @@ class TestMCTSSequential(unittest.TestCase):
         self.assertEqual(len(evaluated), len(set(evaluated)))
         self.assertTrue(all(len(batch) == 1 for batch in model.inputs))
 
+    def test_searches_do_not_share_mutable_nodes_or_visits(self):
+        first, _, _ = self.search(ToyBoard(), simulations=12)
+        first_counts = [
+            child.visit_count for child in first.root_node.children.values()
+        ]
+        second, _, _ = self.search(ToyBoard(), simulations=5)
+        self.assertEqual(second.root_node.visit_count, 5)
+        self.assertEqual(
+            sum(c.visit_count for c in second.root_node.children.values()), 5
+        )
+        self.assertEqual(
+            first_counts, [c.visit_count for c in first.root_node.children.values()]
+        )
+        for move, child in first.root_node.children.items():
+            self.assertIsNot(child, second.root_node.children[move])
+
     def test_each_inference_evaluates_one_position(self):
         search, model, _ = self.search(ToyBoard(), simulations=12)
         self.assertEqual(search.root_node.visit_count, 12)

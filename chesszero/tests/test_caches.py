@@ -32,7 +32,7 @@ class TestCaches(unittest.TestCase):
         second_policy[search.encode_move(*d4)] = 1.0
         first = Node(board)
         search._expand_node(first, first_policy, 0.8)
-        search.backup([first, first.children[e4]], -0.8)
+        search.backup([first, first.children[e4]], -0.8, value_player=1)
         # Applies equally to a competing model or changed weights on the same model.
         second = Node(board.copy())
         search._expand_node(second, second_policy, -0.5)

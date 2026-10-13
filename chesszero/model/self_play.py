@@ -150,7 +150,10 @@ def create_batches(games, batch_size: int):
             all_policies.append(policy)
 
             # Plane 12 is 1 for White to move and 0 for Black to move.
-            value_target = white_result * (2 * state[12, 0, 0] - 1)
+            if state[12, 0, 0] == 1:
+                value_target = white_result
+            else:
+                value_target = -white_result
             all_values.append(value_target)
 
     print(f"Total positions collected: {len(all_states)}")

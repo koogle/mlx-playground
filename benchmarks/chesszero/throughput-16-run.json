@@ -1,0 +1,12 @@
+{
+  "run_id": "throughput-16-20261013-210810",
+  "workers": 16,
+  "games_per_update": 16,
+  "cpu": 32,
+  "initial_generation": 4,
+  "resume_run": "learning-merged-20261013-205953",
+  "calls": {
+    "L40S": "fc-01M4VHG89JSAP1MKHP4S33DP1P",
+    "H100": "fc-01M4VHG8EKTXA93FMJ2VZ4QJBZ"
+  }
+}

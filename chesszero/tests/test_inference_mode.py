@@ -97,6 +97,22 @@ class TestInferenceMode(unittest.TestCase):
         self.assertFalse(model.training)
         self.assertFalse(best_model.training)
 
+    def test_fresh_network_has_unit_batchnorm_running_variance(self):
+        from model.network import ChessNet
+        from mlx.utils import tree_flatten
+
+        model = ChessNet(
+            ModelConfig(n_residual_blocks=1, n_filters=4, policy_output_dim=4)
+        )
+        variances = [
+            value
+            for name, value in tree_flatten(model.parameters())
+            if name.endswith("running_var")
+        ]
+        self.assertEqual(len(variances), 5)
+        for variance in variances:
+            np.testing.assert_array_equal(variance, np.ones(variance.shape))
+
     def test_loss_computation_switches_back_to_training_mode(self):
         config = ModelConfig(n_residual_blocks=0, n_filters=2, policy_output_dim=4)
         with tempfile.TemporaryDirectory() as directory:

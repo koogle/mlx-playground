@@ -60,7 +60,7 @@ class TestInferenceMode(unittest.TestCase):
         game.board.is_game_over.side_effect = [False, False, True]
         game.board.state = np.zeros((19, 8, 8), dtype=np.float32)
         game.board.get_game_result.return_value = 1.0
-        game.get_current_turn.side_effect = [0, 1]
+        game.board.get_current_turn.side_effect = [0, 1]
         return game
 
     def checking_search(self, model, config, **kwargs):

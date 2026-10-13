@@ -10,7 +10,10 @@ from model.move_encoding import MoveDestination, encode_move
 class Node:
     """Tree node storing state, prior probabilities, visit counts, and Q-values"""
 
-    def __init__(self, board: BitBoard, parent=None, prior=0.0):
+    def __init__(self, board: BitBoard, parent=None, prior=0.0, exploration_noise=True):
+        self.exploration_noise = (
+            parent.exploration_noise if parent else exploration_noise
+        )
         self.visit_count = 0
         self.value_sum = 0.0
         self.evaluation = 0.0  # Network value from this node's side-to-move perspective
@@ -38,7 +41,7 @@ class Node:
             priors = np.array([child.prior for child in children])
 
             # Add less Dirichlet noise at root
-            if self.parent is None:
+            if self.parent is None and self.exploration_noise:
                 alpha = 0.15  # Reduced from 0.3
                 noise = np.random.dirichlet([alpha] * len(priors))
                 priors = (
@@ -63,10 +66,8 @@ class Node:
         exploration = c_puct * priors * sqrt_total / (1 + visit_counts)
         ucb_scores = q_values + temperature * exploration
 
-        # Reduced random noise
-        ucb_scores += np.random.normal(
-            0, 0.001, size=len(ucb_scores)
-        )  # Reduced from 0.01ex
+        if self.exploration_noise:
+            ucb_scores += np.random.normal(0, 0.001, size=len(ucb_scores))
 
         selected_idx = np.argmax(ucb_scores)
         return moves[selected_idx], children[selected_idx]
@@ -115,11 +116,19 @@ class MCTS:
     # Geometry/encoding tables are constant; position caches have explicit owners.
     _move_encoding_table = None  # Will be initialized in __init__
 
-    def __init__(self, model, config: ModelConfig, cache=None, model_version=None):
+    def __init__(
+        self,
+        model,
+        config: ModelConfig,
+        cache=None,
+        model_version=None,
+        exploration_noise=True,
+    ):
         self._owns_cache = cache is None
         self.cache = cache if cache is not None else GameSearchCache(model)
         self.cache.bind(model, model_version)
         self.model_version = model_version
+        self.exploration_noise = exploration_noise
         self._all_moves_cache = self.cache.all_moves
         self._board_cache = self.cache.boards
         self._position_cache = self.cache.positions
@@ -322,7 +331,7 @@ class MCTS:
                 self._clear_caches()
             # A played move often selects a snapshot built in the previous search.
             root_board = self._get_root_board(board)
-            self.root_node = Node(root_board)
+            self.root_node = Node(root_board, exploration_noise=self.exploration_noise)
             policy, value = self._evaluate_board(root_board)
             self._expand_node(self.root_node, policy, value)
 

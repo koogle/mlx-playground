@@ -136,6 +136,16 @@ class MCTS:
         board_hash = node.board.get_hash()
         node.evaluation = float(value)
 
+        # Check transposition table first
+        if board_hash in MCTS._transposition_table:
+            cached_node = MCTS._transposition_table[board_hash]
+            if cached_node.visit_count > node.visit_count:
+                node.children = cached_node.children
+                node.is_expanded = True
+                node.value_sum = cached_node.value_sum
+                node.visit_count = cached_node.visit_count
+                return
+
         # Check for cycles
         current = node
         path_positions = {board_hash}
@@ -147,6 +157,12 @@ class MCTS:
                 return
             path_positions.add(parent_hash)
             current = current.parent
+
+        # Use cached subtree if available
+        if board_hash in MCTS._tree_cache:
+            node.children = MCTS._tree_cache[board_hash]
+            node.is_expanded = True
+            return
 
         board = node.board
         policy_np = np.array(policy)
@@ -180,6 +196,13 @@ class MCTS:
         node.children = children
         node.is_expanded = True
 
+        if len(node.children) > 0:
+            MCTS._tree_cache[board_hash] = node.children
+
+        # Cache the expanded node
+        # if node.visit_count > 10:  # Only cache well-explored nodes
+        #    MCTS._transposition_table[board_hash] = node
+
     def get_move(self, board: BitBoard, temperature: float = 0.0):
         # Don't switch to eval mode during training
         if not self.training:
@@ -189,6 +212,12 @@ class MCTS:
             # Clean caches periodically
             if len(MCTS._all_moves_cache) > self.cache_max_size:
                 self._prune_caches()
+
+            key = board.get_hash()
+            if key in MCTS._transposition_table:
+                cached_node = MCTS._transposition_table[key]
+                if cached_node.visit_count > self.config.n_simulations // 2:
+                    return self._select_move_with_temperature(cached_node, temperature)
 
             # Create root and do initial evaluation
             self.root_node = Node(board)

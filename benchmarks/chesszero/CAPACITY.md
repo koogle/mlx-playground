@@ -1,0 +1,7 @@
+# Higher-concurrency L40S sweep
+
+The sweep is running on Modal using the full model and fixed PR #22 source `96cb5f6`, generation-4 checkpoint, 32 simulations/move, 32 CPU cores, and an inference batch cap of 64. The first active probe uses 512 games. Each successful complete generation and finite Adam update triggers twice as many games: 1024, 2048, and higher. The controller stops on a failed probe or rejected resource request; that outcome must be inspected before calling it a hardware limit.
+
+A CPU-only Modal controller keeps the sequence independent of the local workspace. Its invocation and volume directory are recorded in `capacity-controller.json`. Live state and raw results are stored in that directory on `chesszero-convergence`. `capacity_sweep.py` implements the sequence; `modal_high_parallel.py` supplies the GPU probes and controller. Host memory starts with a 64 GiB reservation and a larger cap that doubles with each stage. Reserved and actual memory must be distinguished when comparing these probes with earlier results.
+
+Earlier submissions failed before executing a benchmark because their image did not ship the shared `modal_batched_throughput` module. The corrected image explicitly includes that module. Those startup failures are not capacity measurements. The previously working deployment also passed a one-game allocation control on the same model/checkpoint. The corrected 512-game probe has started and is serving requests; 256 remains the largest completed and validated concurrency until the new probe completes.

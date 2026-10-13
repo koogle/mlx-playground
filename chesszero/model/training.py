@@ -19,7 +19,8 @@ import gc
 import psutil
 import os
 import traceback
-from model.game_workers import GameResultSender, run_game_workers
+from multiprocessing.connection import Connection
+from model.game_workers import run_game_workers
 from mlx.utils import tree_flatten, tree_map
 
 
@@ -277,7 +278,7 @@ class Trainer:
         config: ModelConfig,
         game_id: int,
         player_color: int,
-        result_queue: GameResultSender,
+        result_connection: Connection,
         max_workers: int,
     ):
         """Worker process that plays a single evaluation game and reports its result."""
@@ -316,7 +317,7 @@ class Trainer:
             result = game.board.get_game_result(player_color)
             if result is None:
                 raise RuntimeError("Evaluation ended without a terminal result")
-            result_queue.put(
+            result_connection.send(
                 {
                     "game_id": game_id,
                     "result": result,
@@ -328,7 +329,7 @@ class Trainer:
         except Exception as e:
             logging.error(f"Error in evaluation game {game_id}: {str(e)}")
             logging.error(traceback.format_exc())
-            result_queue.put(None)
+            result_connection.send(None)
 
     def evaluate_against_best(
         self, n_games: int = 40, max_workers: int = 10

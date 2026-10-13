@@ -77,14 +77,14 @@ class TestInferenceMode(unittest.TestCase):
         return search
 
     def test_self_play_worker_keeps_model_in_eval(self):
-        model, queue = ModeModel(), Mock()
+        model, connection = ModeModel(), Mock()
         with (
             patch("model.self_play.ChessGame", return_value=self.worker_game()),
             patch("model.self_play.MCTS", side_effect=self.checking_search),
             patch("model.self_play.tqdm"),
         ):
             config = ModelConfig(temperature=0.7, temp_decay_steps=1, temp_final=0.2)
-            play_single_game(model, config, 0, queue, 1)
+            play_single_game(model, config, 0, connection, 1)
         self.assertEqual(
             [
                 search.get_move.call_args.kwargs["temperature"]
@@ -92,20 +92,20 @@ class TestInferenceMode(unittest.TestCase):
             ],
             [0.7, 0.2],
         )
-        self.assertIsNotNone(queue.put.call_args.args[0])
+        self.assertIsNotNone(connection.send.call_args.args[0])
         self.assertFalse(model.training)
 
     def test_evaluation_worker_sets_both_models_to_eval(self):
-        model, best_model, queue = ModeModel(), ModeModel(), Mock()
+        model, best_model, connection = ModeModel(), ModeModel(), Mock()
         with (
             patch("model.training.ChessGame", return_value=self.worker_game()),
             patch("model.training.MCTS", side_effect=self.checking_search),
             patch("model.training.tqdm"),
         ):
             Trainer.play_evaluation_game_worker(
-                model, best_model, ModelConfig(), 0, 0, queue, 1
+                model, best_model, ModelConfig(), 0, 0, connection, 1
             )
-        self.assertIsNotNone(queue.put.call_args.args[0])
+        self.assertIsNotNone(connection.send.call_args.args[0])
         self.assertFalse(model.training)
         self.assertFalse(best_model.training)
 

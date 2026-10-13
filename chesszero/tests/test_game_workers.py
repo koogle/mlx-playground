@@ -19,7 +19,7 @@ def worker_probe(kind, sender, max_workers):
     if kind == "crash":
         os._exit(7)
     if kind != "missing":
-        sender.put(None if kind == "failure" else kind)
+        sender.send(None if kind == "failure" else kind)
 
 
 class TestGameWorkers(unittest.TestCase):

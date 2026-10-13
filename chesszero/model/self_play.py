@@ -9,7 +9,8 @@ from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
 import logging
-from model.game_workers import GameResultSender, run_game_workers
+from multiprocessing.connection import Connection
+from model.game_workers import run_game_workers
 import traceback
 
 
@@ -17,7 +18,7 @@ def play_single_game(
     model: ChessNet,
     config: ModelConfig,
     game_id: int,
-    result_queue: GameResultSender,
+    result_connection: Connection,
     max_workers: int,
 ):
     """Worker process that plays a single complete game"""
@@ -65,7 +66,7 @@ def play_single_game(
         else:
             black_result = -white_result
 
-        result_queue.put(
+        result_connection.send(
             {
                 "game_id": game_id,
                 "history": game_history,
@@ -79,7 +80,7 @@ def play_single_game(
     except Exception as e:
         logger.error(f"Error in game {game_id}: {str(e)}")
         logger.error(traceback.format_exc())
-        result_queue.put(None)
+        result_connection.send(None)
     finally:
         game_cache.clear()
 

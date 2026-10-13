@@ -46,5 +46,29 @@
       "filters": 4
     },
     "purpose": "CPU subprocess/data-flow smoke; not a convergence or throughput benchmark"
+  },
+  {
+    "games": 2,
+    "positions": 449,
+    "adam_updates": 1,
+    "losses": [
+      8.586560249328613,
+      8.448589324951172,
+      0.13618426024913788,
+      0.0017866502748802304
+    ],
+    "evaluation": [
+      0.0,
+      0,
+      1,
+      1
+    ],
+    "elapsed_seconds": 61.11,
+    "source_revision": "9062d3226cd949cd67ff83ba35d55a6fcf128164",
+    "network": {
+      "residual_blocks": 0,
+      "filters": 4
+    },
+    "purpose": "Final NumPy-worker CPU subprocess/data-flow smoke; not a convergence benchmark"
   }
 ]

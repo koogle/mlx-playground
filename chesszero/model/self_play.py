@@ -147,8 +147,8 @@ def create_batches(games, batch_size: int):
         print("Warning: No positions to create batches from!")
         return
 
-    states = mx.array(all_states)
-    policies = mx.array(all_policies)
+    states = mx.array(np.stack(all_states))
+    policies = mx.array(np.stack(all_policies))
     values = mx.array(all_values)
 
     n_samples = len(states)

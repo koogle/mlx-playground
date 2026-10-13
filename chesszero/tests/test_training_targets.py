@@ -15,14 +15,14 @@ from model.training import Trainer
 def position(white_to_move):
     state = np.zeros((19, 8, 8), dtype=np.float32)
     state[12].fill(white_to_move)
-    return mx.array(state)
+    return state
 
 
 class TestValueTargets(unittest.TestCase):
     def test_generated_game_has_one_target_per_position(self):
         history = [
-            (position(True), mx.array([0.75, 0.25]), None),
-            (position(False), mx.array([0.25, 0.75]), None),
+            (position(True), np.array([0.75, 0.25], dtype=np.float32), None),
+            (position(False), np.array([0.25, 0.75], dtype=np.float32), None),
         ]
         for white_result in (1.0, -1.0, 0.0):
             with self.subTest(white_result=white_result):
@@ -48,14 +48,14 @@ class TestValueTargets(unittest.TestCase):
                 self.assertEqual(len(batches), 1)
                 states, policies, values = batches[0]
                 np.testing.assert_array_equal(values, [white_result, -white_result])
-                np.testing.assert_array_equal(states, mx.stack([h[0] for h in history]))
+                np.testing.assert_array_equal(states, np.stack([h[0] for h in history]))
                 np.testing.assert_array_equal(policies, [[0.75, 0.25], [0.25, 0.75]])
 
     def test_targets_follow_side_to_move_not_history_index(self):
         # Also covers a game history starting from a Black-to-move position.
         history = [
-            (position(False), mx.array([0.5, 0.5]), None),
-            (position(True), mx.array([0.5, 0.5]), None),
+            (position(False), np.array([0.5, 0.5], dtype=np.float32), None),
+            (position(True), np.array([0.5, 0.5], dtype=np.float32), None),
         ]
         _, _, values = next(create_batches([(history, 1.0)], batch_size=2))
         np.testing.assert_array_equal(values, [-1.0, 1.0])

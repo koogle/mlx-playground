@@ -31,7 +31,7 @@ image = (
     )
 )
 volume = modal.Volume.from_name("chesszero-convergence")
-app = modal.App("chesszero-rpc-throughput-numpy")
+app = modal.App("chesszero-rpc-throughput-final")
 
 
 def experiment(label, run_id, workers):

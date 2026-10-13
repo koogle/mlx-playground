@@ -34,7 +34,7 @@ volume = modal.Volume.from_name("chesszero-convergence")
 app = modal.App("chesszero-rpc-throughput-final")
 
 
-def experiment(label, run_id, workers):
+def experiment(label, run_id, workers, limit_seconds=1800):
     import psutil
 
     out = Path("/results") / run_id / label
@@ -66,6 +66,8 @@ def experiment(label, run_id, workers):
             ).strip().splitlines()
             # Container cgroup memory includes the server and every CPU worker.
             memory_file = Path("/sys/fs/cgroup/memory.current")
+            if not memory_file.exists():
+                memory_file = Path("/sys/fs/cgroup/memory/memory.usage_in_bytes")
             if memory_file.exists():
                 sample["container_memory_bytes"] = int(memory_file.read_text())
             cpu_file = Path("/sys/fs/cgroup/cpu.stat")
@@ -89,7 +91,7 @@ def experiment(label, run_id, workers):
             (out / "gpu-samples.json").write_text(json.dumps(samples))
             volume.commit()
             print(label, round(time.monotonic() - start), gpu, flush=True)
-            if time.monotonic() - start > 1800:
+            if time.monotonic() - start > limit_seconds:
                 import signal
 
                 os.killpg(process.pid, signal.SIGTERM)

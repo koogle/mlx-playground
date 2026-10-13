@@ -77,8 +77,6 @@ class RecordingModel:
 class TestMCTSSequential(unittest.TestCase):
     def setUp(self):
         np.random.seed(42)
-        for name in ("_tree_cache", "_transposition_table", "_all_moves_cache"):
-            getattr(MCTS, name).clear()
 
     def search(self, board, simulations=17, model=None):
         model = model or RecordingModel()

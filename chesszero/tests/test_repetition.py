@@ -57,14 +57,12 @@ class TestRepetition(unittest.TestCase):
         self.assertEqual(repeated.get_hash(), fresh.get_hash())
         # Both lookup orders must work with the shared game-over cache.
         for boards in ((fresh, repeated), (repeated, fresh)):
-            BitBoard._game_over_cache.clear()
+            fresh._game_over_cache.clear()
             for board in boards:
                 self.assertEqual(board.is_game_over(), board is repeated)
                 if board is repeated:
-                    self.assertIsNot(
-                        BitBoard._game_over_cache.get(board.get_hash()), True
-                    )
-            self.assertFalse(BitBoard._game_over_cache[fresh.get_hash()])
+                    self.assertIsNot(fresh._game_over_cache.get(board.get_hash()), True)
+            self.assertFalse(fresh._game_over_cache[fresh.get_hash()])
 
     def test_copy_keeps_history_independent(self):
         board = BitBoard()
@@ -83,7 +81,7 @@ class TestRepetition(unittest.TestCase):
         clone.position_history[future.get_repetition_hash()] = 2
         self.assertEqual(board.get_repetition_hash(), clone.get_repetition_hash())
         self.assertEqual(board.get_hash(), clone.get_hash())
-        self.assertEqual(board.get_hash(), hash_board_state(board.state.tobytes()))
+        self.assertEqual(hash(board), hash_board_state(board.state.tobytes()))
         self.assertEqual(hash(board), hash(clone))
 
 

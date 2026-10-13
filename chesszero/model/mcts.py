@@ -307,16 +307,11 @@ class MCTS:
         return moves[np.random.choice(len(moves), p=probs)]
 
     def backup(self, search_path: List[Node], value: float):
-        """Fully vectorized backup"""
-        # Using native int/float updates
-        # Precompute the values for each node along the path:
-        values_along_path = [
-            value if idx % 2 == 0 else -value for idx in range(len(search_path))
-        ]
-        for node, v in zip(search_path, values_along_path):
+        """Back up a leaf-side-to-move value, changing perspective at each edge."""
+        for node in reversed(search_path):
             node.visit_count += 1
-            node.value_sum += v
-        del values_along_path
+            node.value_sum += value
+            value = -value
 
     def _get_all_valid_moves(
         self, board: BitBoard

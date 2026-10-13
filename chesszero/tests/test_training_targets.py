@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import mlx.core as mx
 import numpy as np
@@ -26,9 +26,7 @@ class TestValueTargets(unittest.TestCase):
         ]
         for white_result in (1.0, -1.0, 0.0):
             with self.subTest(white_result=white_result):
-                context = Mock()
-                context.Process.return_value.is_alive.return_value = False
-                context.Queue.return_value.get.return_value = {
+                result = {
                     "game_id": 0,
                     "history": history,
                     "white_result": white_result,
@@ -36,7 +34,9 @@ class TestValueTargets(unittest.TestCase):
                     "n_moves": 2,
                     "final_board": "test board",
                 }
-                with patch("model.self_play.mp.get_context", return_value=context):
+                with patch(
+                    "model.self_play.run_game_workers", return_value=([result], 0)
+                ):
                     games = generate_games(
                         None, ModelConfig(n_games_per_iteration=1), max_workers=1
                     )

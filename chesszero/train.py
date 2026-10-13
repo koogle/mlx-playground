@@ -43,7 +43,16 @@ def main():
         default=8,
         help="Number of parallel workers for game generation",
     )
+    parser.add_argument(
+        "--games-per-iteration",
+        type=int,
+        help="Fresh games collected before one training update (defaults to at least --workers)",
+    )
     args = parser.parse_args()
+    if args.workers < 1 or (
+        args.games_per_iteration is not None and args.games_per_iteration < 1
+    ):
+        parser.error("Worker and game counts must be positive")
 
     if args.resume_interrupted and args.resume is None:
         parser.error("--resume-interrupted requires --resume")
@@ -58,6 +67,10 @@ def main():
         checkpoint_dir=args.checkpoint_dir,
         resume_epoch=args.resume,
         resume_interrupted=args.resume_interrupted,
+    )
+
+    trainer.config.n_games_per_iteration = args.games_per_iteration or max(
+        trainer.config.n_games_per_iteration, args.workers
     )
 
     if args.profile:

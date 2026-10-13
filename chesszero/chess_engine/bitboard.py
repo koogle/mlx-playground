@@ -57,8 +57,9 @@ class BitBoard:
         self.knight_attacks = self._init_knight_attacks()
         self.king_attacks = self._init_king_attacks()
         self.pawn_attacks = self._init_pawn_attacks()
+        # Copies share these fixed lookup tables, so prevent accidental edits.
         for table in (self.knight_attacks, self.king_attacks, self.pawn_attacks):
-            table.flags.writeable = False
+            table.setflags(write=False)
 
         # Track king positions directly - (row, col) for each color
         self.king_positions = {

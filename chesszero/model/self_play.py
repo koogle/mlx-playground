@@ -177,10 +177,6 @@ def create_batches(games, batch_size: int):
 
     for i in range(0, n_samples, batch_size):
         batch_indices = indices[i : i + batch_size]
-        if len(batch_indices) < batch_size:
-            pad_size = batch_size - len(batch_indices)
-            batch_indices = mx.concatenate([batch_indices, batch_indices[:pad_size]])
-
         yield (states[batch_indices], policies[batch_indices], values[batch_indices])
 
 

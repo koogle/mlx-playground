@@ -9,7 +9,6 @@ import numpy as np
 from mlx.utils import tree_flatten
 
 from config.model_config import ModelConfig
-from model.network import ChessNet
 from model.training import Trainer
 from model.mcts import Node
 from chess_engine.bitboard import BitBoard
@@ -20,7 +19,7 @@ class TestCheckpoints(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.config = ModelConfig(
-            n_filters=2, n_residual_blocks=0, policy_output_dim=4, learning_rate=1e-3
+            n_filters=2, n_residual_blocks=1, policy_output_dim=4, learning_rate=1e-3
         )
         self.batch = (
             mx.ones((2, 19, 8, 8)),

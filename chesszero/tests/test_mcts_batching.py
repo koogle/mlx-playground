@@ -77,8 +77,7 @@ class RecordingModel:
 class TestMCTSBatching(unittest.TestCase):
     def setUp(self):
         np.random.seed(42)
-        for name in ("_tree_cache", "_transposition_table", "_all_moves_cache"):
-            getattr(MCTS, name).clear()
+        MCTS._all_moves_cache.clear()
 
     def search(self, board, simulations=17, batch_size=8, model=None):
         model = model or RecordingModel()

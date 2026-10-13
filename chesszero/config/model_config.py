@@ -15,7 +15,7 @@ class ModelConfig:
     n_residual_blocks: int = 19
     n_filters: int = 256
     input_shape: tuple = (8, 8, 19)  # Board size + input planes (19 channels)
-    policy_output_dim: int = 4672  # All possible moves: 8x8x73
+    policy_output_dim: int = 4672  # From/to moves + reserved underpromotion outputs
 
     # MCTS
     n_simulations: int = 1600  # Fewer but higher quality simulations

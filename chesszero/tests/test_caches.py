@@ -44,6 +44,25 @@ class TestCaches(unittest.TestCase):
             self.assertEqual(child.visit_count, 0)
             self.assertEqual(child.value_sum, 0.0)
 
+    def test_hash_collision_cannot_reuse_another_positions_legal_moves(self):
+        with (
+            patch("chess_engine.bitboard.hash", return_value=7, create=True),
+            patch.object(BitBoard, "_valid_moves_cache", LRUCache()),
+            patch.object(MCTS, "_all_moves_cache", LRUCache()),
+        ):
+            first = BitBoard()
+            second = first.copy()
+            second.state[0, 1, 0] = 0
+            second.state[0, 2, 0] = 1
+            search = MCTS(None, ModelConfig())
+            self.assertEqual(first.get_valid_moves((1, 0)), {(2, 0), (3, 0)})
+            self.assertEqual(second.get_valid_moves((1, 0)), set())
+            self.assertIn((1, 0), search._get_all_valid_moves(first))
+            self.assertNotIn((1, 0), search._get_all_valid_moves(second))
+            self.assertIn((2, 0), search._get_all_valid_moves(second))
+            self.assertNotEqual(first.get_hash(), second.get_hash())
+            self.assertIsInstance(hash(first), int)
+
     def test_discarded_tree_can_be_collected(self):
         search = MCTS(None, ModelConfig())
         root = Node(BitBoard())

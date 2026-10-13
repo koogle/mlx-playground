@@ -848,14 +848,17 @@ class BitBoard:
 
         return board_str
 
-    def get_hash(self) -> int:
-        """Fast board hashing using numpy"""
-        # Use numpy's built-in hashing for arrays
-        return hash_board_state(self.state.tobytes())
+    def get_hash(self) -> bytes:
+        """Return an exact position key, so hash collisions cannot alias rules.
+
+        Dictionaries hash this key internally and compare its complete bytes on
+        collisions. Keeping only an integer digest loses that equality check.
+        """
+        return self.state.tobytes()
 
     def __hash__(self) -> int:
         """Hash the board"""
-        return self.get_hash()
+        return hash(self.get_hash())
 
     def _init_knight_attacks(self):
         """Pre-compute knight attack patterns for each square"""

@@ -247,13 +247,13 @@ class TestBoard(unittest.TestCase):
         self.board.state[2, 0, 2] = 1  # Add white bishop at c1
         assert self.board.is_draw()
 
-        # Test 4: King + 2 Knights vs King
+        # Test 4: Two knights can reach mate, even though they cannot force it.
         self.board.state.fill(0)  # Clear board
         self.board.state[5, 0, 4] = 1  # White king at e1
         self.board.state[11, 7, 4] = 1  # Black king at e8
         self.board.state[1, 0, 1] = 1  # White knight at b1
         self.board.state[1, 0, 6] = 1  # White knight at g1
-        assert self.board.is_draw()
+        assert not self.board.is_draw()
 
         # Test 5: King + Bishop vs King + Bishop (same color squares)
         self.board.state.fill(0)  # Clear board
@@ -277,7 +277,7 @@ class TestBoard(unittest.TestCase):
         self.board.state[11, 7, 4] = 1  # Black king at e8
         self.board.state[1, 0, 1] = 1  # White knight at b1
         self.board.state[7, 7, 6] = 1  # Black knight at g8
-        assert self.board.is_draw()
+        assert not self.board.is_draw()
 
     def test_king_moves_in_check(self):
         """Test that king moves are correctly limited when in check"""

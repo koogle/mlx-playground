@@ -38,3 +38,14 @@ To run tests with verbose output:
 ```bash
 python -m pytest tests/ -v
 ```
+Rule tests run against our own `BitBoard` implementation. Install the independent,
+test-only reference with `pip install -r tests/requirements.txt`, then run
+`python -m unittest discover -s tests` from `chesszero/`. `python-chess` is never
+imported by the engine, search, or training code.
+
+Self-play automatically claims a reached threefold repetition or 100-halfmove
+draw; there is no separate claim action in the policy. Checkmate takes precedence.
+The input retains 19 planes; plane 18 now means halfmoves/100, and plane 17 no
+longer saturates at 200 plies. Old checkpoints remain shape-compatible, but those
+counter features have corrected semantics. En passant is tracked in board state
+and legality/hash keys, but has no dedicated neural input plane.

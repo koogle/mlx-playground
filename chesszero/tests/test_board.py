@@ -1,237 +1,227 @@
+"""Rule regressions against python-chess (a test-only dependency)."""
+
+import random
 import unittest
-from chess_engine.board import Board, Color, Piece, PieceType
+
+import chess
+import numpy as np
+
+from chess_engine.bitboard import BitBoard
+
+
+def from_fen(fen):
+    reference = chess.Board(fen)
+    board = BitBoard()
+    board.state.fill(0)
+    for square, piece in reference.piece_map().items():
+        color = 0 if piece.color else 1
+        row, col = divmod(square, 8)
+        board.state[piece.piece_type - 1 + 6 * color, row, col] = 1
+        if piece.piece_type == chess.KING:
+            board.king_positions[color] = (row, col)
+    board.state[12].fill(reference.turn)
+    for color in (0, 1):
+        board.state[13 + 2 * color].fill(
+            reference.has_kingside_castling_rights(not color)
+        )
+        board.state[14 + 2 * color].fill(
+            reference.has_queenside_castling_rights(not color)
+        )
+    board.state[17].fill(
+        (2 * (reference.fullmove_number - 1) + (not reference.turn)) / 200
+    )
+    board.state[18].fill(reference.halfmove_clock / 100)
+    board.en_passant_target = (
+        divmod(reference.ep_square, 8) if reference.ep_square is not None else None
+    )
+    board.position_history = {board.get_repetition_hash(): 1}
+    return board, reference
+
+
+def coords(move):
+    target = divmod(move.to_square, 8)
+    if move.promotion:
+        target += (move.promotion - 1,)
+    return divmod(move.from_square, 8), target
+
+
+def legal_moves(board):
+    return {
+        (source, target)
+        for source, _ in board.get_all_pieces(board.get_current_turn())
+        for target in board.get_valid_moves(source)
+    }
 
 
 class TestBoard(unittest.TestCase):
-    def setUp(self):
-        self.board = Board()
+    def test_legal_moves_and_state_match_reference_during_seeded_games(self):
+        rng = random.Random(2026)
+        for _ in range(3):
+            board, reference = from_fen(chess.STARTING_FEN)
+            for ply in range(80):
+                moves = list(reference.legal_moves)
+                self.assertEqual(
+                    legal_moves(board), {coords(m) for m in moves}, reference.fen()
+                )
+                self.assertEqual(
+                    board.is_in_check(board.get_current_turn()), reference.is_check()
+                )
+                if not moves:
+                    break
+                move = rng.choice(moves)
+                self.assertTrue(board.make_move(*coords(move)))
+                reference.push(move)
+                expected, _ = from_fen(reference.fen(en_passant="fen"))
+                np.testing.assert_array_equal(board.state, expected.state)
+                self.assertEqual(board.en_passant_target, expected.en_passant_target)
 
-    def test_initial_position(self):
-        """Test initial board setup"""
-        # Test white pieces
-        self.assertEqual(len(self.board.white_pieces), 16)
-        self.assertEqual(len(self.board.black_pieces), 16)
+    def test_castling_both_sides_and_colors_moves_rook_and_clears_rights(self):
+        for color in ("w", "b"):
+            for uci in ("e1g1", "e1c1") if color == "w" else ("e8g8", "e8c8"):
+                board, ref = from_fen(f"r3k2r/8/8/8/8/8/8/R3K2R {color} KQkq - 0 1")
+                move = chess.Move.from_uci(uci)
+                self.assertIn(coords(move), legal_moves(board))
+                self.assertTrue(board.make_move(*coords(move)))
+                ref.push(move)
+                expected, _ = from_fen(ref.fen())
+                np.testing.assert_array_equal(board.state, expected.state)
 
-        # Test pawns
-        for col in range(8):
-            self.assertTrue(isinstance(self.board.squares[1][col], Piece))
-            self.assertEqual(self.board.squares[1][col].piece_type, PieceType.PAWN)
-            self.assertEqual(self.board.squares[1][col].color, Color.WHITE)
+    def test_special_positions_match_reference(self):
+        for fen in (
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            "4kr1r/8/8/8/8/8/8/R3K2R w KQ - 0 1",  # through check
+            "4k3/8/8/8/8/8/8/R3K2R w Q - 0 1",  # distinct rights
+            "4k3/8/8/r4pPK/8/8/8/8 w - f6 0 1",  # EP exposes rook
+            "4k3/8/8/3pP3/4K3/8/8/8 w - d6 0 1",  # EP evades check
+            "4k3/8/8/8/3Pp3/8/8/4K3 b - d3 0 1",  # black EP
+            "4k3/P7/8/8/8/8/7p/4K3 w - - 0 1",  # promotions
+        ):
+            board, ref = from_fen(fen)
+            self.assertEqual(
+                legal_moves(board), {coords(m) for m in ref.legal_moves}, fen
+            )
+            for move in list(ref.legal_moves):
+                child = board.copy()
+                self.assertTrue(child.make_move(*coords(move)))
+                ref.push(move)
+                expected, _ = from_fen(ref.fen(en_passant="fen"))
+                np.testing.assert_array_equal(child.state, expected.state)
+                ref.pop()
 
-            self.assertTrue(isinstance(self.board.squares[6][col], Piece))
-            self.assertEqual(self.board.squares[6][col].piece_type, PieceType.PAWN)
-            self.assertEqual(self.board.squares[6][col].color, Color.BLACK)
+    def test_en_passant_expires_and_changes_repetition_only_when_legal(self):
+        for fen, differs in (
+            ("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", True),
+            ("4k3/8/8/3p4/8/8/8/4K3 w - d6 0 1", False),
+            ("4k3/8/8/r4pPK/8/8/8/8 w - f6 0 1", False),
+        ):
+            board, _ = from_fen(fen)
+            clone = board.copy()
+            clone.en_passant_target = None
+            self.assertEqual(
+                board.get_repetition_hash() != clone.get_repetition_hash(), differs
+            )
+            self.assertNotEqual(board.get_hash(), clone.get_hash())
+        board, _ = from_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1")
+        self.assertTrue(board.make_move((0, 4), (0, 3)))
+        self.assertIsNone(board.en_passant_target)
 
-    def test_pawn_moves(self):
-        """Test pawn movement rules"""
-        # Test initial two-square move
-        valid_moves = self.board.get_valid_moves((1, 0))  # White pawn at a2
-        self.assertIn((2, 0), valid_moves)  # One square
-        self.assertIn((3, 0), valid_moves)  # Two squares
+    def test_rejected_moves_do_not_mutate_state(self):
+        board = BitBoard()
+        before = board.copy()
+        for move in (
+            ((1, 4), (4, 4)),
+            ((0, 4), (0, 6)),
+            ((1, 0), (2, 0, 5)),
+            ((6, 0), (5, 0)),
+            ((-1, 0), (0, 0)),
+        ):
+            self.assertFalse(board.make_move(*move))
+            np.testing.assert_array_equal(board.state, before.state)
+            self.assertEqual(board.get_hash(), before.get_hash())
 
-        # Test blocked pawn
-        self.board.squares[2][0] = Piece(PieceType.PAWN, Color.BLACK)
-        valid_moves = self.board.get_valid_moves((1, 0))
-        self.assertEqual(len(valid_moves), 0)
+    def test_fifty_move_boundary_and_resets(self):
+        board, _ = from_fen("4k3/8/8/8/8/8/P7/R3K3 w - - 99 151")
+        self.assertFalse(board.is_draw())
+        self.assertEqual(board.get_move_count(), 300)
+        pawn = board.copy()
+        self.assertTrue(pawn.make_move((1, 0), (2, 0)))
+        self.assertEqual(pawn.get_moves_without_progress(), 0)
+        self.assertTrue(board.make_move((0, 0), (0, 1)))
+        self.assertEqual(board.get_moves_without_progress(), 100)
+        self.assertEqual(board.get_move_count(), 301)
+        self.assertTrue(board.is_draw())
 
-        # Test diagonal capture
-        self.board.squares[2][1] = Piece(PieceType.PAWN, Color.BLACK)
-        valid_moves = self.board.get_valid_moves((1, 0))
-        self.assertIn((2, 1), valid_moves)  # Diagonal capture
+    def test_claimable_and_automatic_draw_thresholds(self):
+        board, _ = from_fen("4k3/8/8/8/8/8/8/R3K3 w - - 99 1")
+        self.assertTrue(board.can_claim_draw())  # May name a quiet next move.
+        self.assertFalse(board.is_draw())
+        board.state[18].fill(1.0)
+        self.assertTrue(board.is_fifty_moves())
+        self.assertTrue(board.is_draw())
+        self.assertFalse(board.is_draw(claim_draw=False))
+        board.state[18].fill(1.5)
+        self.assertTrue(board.is_seventyfive_moves())
+        self.assertTrue(board.is_draw(claim_draw=False))
+        board.state[18].fill(0)
+        board.position_history[board.get_repetition_hash()] = 3
+        self.assertTrue(board.is_draw())
+        self.assertFalse(board.is_draw(claim_draw=False))
+        board.position_history[board.get_repetition_hash()] = 5
+        self.assertTrue(board.is_draw(claim_draw=False))
 
-    def test_knight_moves(self):
-        """Test knight movement"""
-        # Clear the board
-        self.board = Board()
-        self.board.squares = [[None for _ in range(8)] for _ in range(8)]
+    def test_terminal_results_and_material_match_reference(self):
+        for fen in (
+            "7k/6Q1/5K2/8/8/8/8/8 b - - 100 90",  # mate beats 50 moves
+            "k7/2Q5/6K1/8/8/8/8/8 b - - 0 1",  # stalemate
+            "4k3/8/8/8/8/8/8/1N2K1N1 w - - 0 1",  # two knights can mate
+            "4k1n1/8/8/8/8/8/8/1N2K3 w - - 0 1",
+            "4kb2/8/8/8/8/8/8/2B1K3 w - - 0 1",
+            "4k3/8/8/8/8/8/8/2B1K3 w - - 0 1",
+        ):
+            board, ref = from_fen(fen)
+            self.assertEqual(
+                board._has_insufficient_material(), ref.is_insufficient_material()
+            )
+            outcome = ref.outcome()
+            for color in (0, 1):
+                expected = (
+                    None
+                    if outcome is None
+                    else (
+                        0.0
+                        if outcome.winner is None
+                        else (1.0 if outcome.winner == (color == 0) else -1.0)
+                    )
+                )
+                self.assertEqual(board.get_game_result(color), expected, fen)
 
-        # Place a knight in the center
-        knight = Piece(PieceType.KNIGHT, Color.WHITE)
-        self.board.squares[3][3] = knight
-        self.board.white_pieces = [(knight, (3, 3))]
+    def test_rook_capture_revokes_the_correct_castling_right(self):
+        board, ref = from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1")
+        move = chess.Move.from_uci("a1a8")
+        self.assertTrue(board.make_move(*coords(move)))
+        ref.push(move)
+        expected, _ = from_fen(ref.fen())
+        np.testing.assert_array_equal(board.state, expected.state)
+        self.assertEqual(board.get_moves_without_progress(), 0)
 
-        valid_moves = self.board.get_valid_moves((3, 3))
-        expected_moves = {
-            (1, 2),
-            (1, 4),  # Up 2, left/right 1
-            (5, 2),
-            (5, 4),  # Down 2, left/right 1
-            (2, 1),
-            (4, 1),  # Left 2, up/down 1
-            (2, 5),
-            (4, 5),  # Right 2, up/down 1
-        }
-        self.assertEqual(valid_moves, expected_moves)
-
-    def test_king_in_check(self):
-        """Test check detection and valid moves in check"""
-        # Clear the board
-        self.board = Board()
-        self.board.squares = [[None for _ in range(8)] for _ in range(8)]
-
-        # Setup: White king at e1, Black rook at e8
-        white_king = Piece(PieceType.KING, Color.WHITE)
-        black_rook = Piece(PieceType.ROOK, Color.BLACK)
-
-        self.board.squares[0][4] = white_king  # e1
-        self.board.squares[7][4] = black_rook  # e8
-
-        self.board.white_pieces = [(white_king, (0, 4))]
-        self.board.black_pieces = [(black_rook, (7, 4))]
-        self.board.current_turn = Color.WHITE
-
-        # Verify king is in check
-        self.assertTrue(self.board.is_in_check(Color.WHITE))
-
-        # Verify valid moves (king must move out of check)
-        valid_moves = self.board.get_valid_moves((0, 4))
-        expected_moves = {
-            (0, 3),
-            (0, 5),
-            (1, 3),
-            (1, 5),
-        }  # Removed (1, 4) as it's still in check
-        self.assertEqual(valid_moves, expected_moves)
-
-    def test_pinned_pieces(self):
-        """Test pinned piece movement restrictions"""
-        # Clear the board
-        self.board = Board()
-        self.board.squares = [[None for _ in range(8)] for _ in range(8)]
-
-        # Setup: White king at e1, White bishop at f2, Black queen at h4
-        # This creates a diagonal pin
-        white_king = Piece(PieceType.KING, Color.WHITE)
-        white_bishop = Piece(PieceType.BISHOP, Color.WHITE)
-        black_queen = Piece(PieceType.QUEEN, Color.BLACK)
-
-        # Place pieces
-        self.board.squares[0][4] = white_king  # e1
-        self.board.squares[1][5] = white_bishop  # f2
-        self.board.squares[3][7] = black_queen  # h4
-
-        # Update piece lists
-        self.board.white_pieces = [(white_king, (0, 4)), (white_bishop, (1, 5))]
-        self.board.black_pieces = [(black_queen, (3, 7))]
-        self.board.current_turn = Color.WHITE
-
-        # Get valid moves for the pinned bishop
-        valid_moves = self.board.get_valid_moves((1, 5))
-
-        # The bishop can only move along the diagonal between the king and queen
-        expected_moves = {(2, 6), (3, 7)}  # Can move to block or capture
-
-        self.assertEqual(valid_moves, expected_moves)
-
-    def test_castling(self):
-        """Test castling rules"""
-        # Clear the board
-        self.board = Board()
-        self.board.squares = [[None for _ in range(8)] for _ in range(8)]
-
-        # Setup: Initial position for castling
-        white_king = Piece(PieceType.KING, Color.WHITE)
-        white_rook1 = Piece(PieceType.ROOK, Color.WHITE)
-        white_rook2 = Piece(PieceType.ROOK, Color.WHITE)
-
-        # Place pieces
-        self.board.squares[0][4] = white_king  # e1
-        self.board.squares[0][0] = white_rook1  # a1
-        self.board.squares[0][7] = white_rook2  # h1
-
-        # Update piece lists and ensure pieces haven't moved
-        self.board.white_pieces = [
-            (white_king, (0, 4)),
-            (white_rook1, (0, 0)),
-            (white_rook2, (0, 7)),
-        ]
-        self.board.current_turn = Color.WHITE
-
-        # Make sure pieces haven't moved
-        white_king.has_moved = False
-        white_rook1.has_moved = False
-        white_rook2.has_moved = False
-
-        # Test both castling moves are valid
-        valid_moves = self.board.get_valid_moves((0, 4))
-        self.assertIn((0, 2), valid_moves)  # Queenside castling
-        self.assertIn((0, 6), valid_moves)  # Kingside castling
-
-    def test_board_copy(self):
-        """Test board copying maintains correct state"""
-        # Clear the board first to have a controlled test
-        self.board = Board()
-        self.board.squares = [[None for _ in range(8)] for _ in range(8)]
-
-        # Add specific pieces to test
-        white_pawn = Piece(PieceType.PAWN, Color.WHITE)
-        black_pawn = Piece(PieceType.PAWN, Color.BLACK)
-
-        # Place pieces
-        self.board.squares[3][4] = white_pawn  # e4
-        self.board.squares[4][4] = black_pawn  # e5
-
-        self.board.white_pieces = [(white_pawn, (3, 4))]
-        self.board.black_pieces = [(black_pawn, (4, 4))]
-        self.board.current_turn = Color.WHITE
-
-        # Copy board and verify state
-        copied_board = self.board.copy()
-
-        # Test piece positions
-        self.assertEqual(len(copied_board.white_pieces), 1)
-        self.assertEqual(len(copied_board.black_pieces), 1)
-
-        # Test piece positions match
-        self.assertEqual(copied_board.squares[3][4].piece_type, PieceType.PAWN)
-        self.assertEqual(copied_board.squares[3][4].color, Color.WHITE)
-        self.assertEqual(copied_board.squares[4][4].piece_type, PieceType.PAWN)
-        self.assertEqual(copied_board.squares[4][4].color, Color.BLACK)
-
-    def test_checkmate_detection(self):
-        """Test checkmate detection"""
-        # Setup fool's mate position
-        self.board.move_piece((1, 5), (2, 5))  # f2 to f3
-        self.board.move_piece((6, 4), (4, 4))  # e7 to e5
-        self.board.move_piece((1, 6), (3, 6))  # g2 to g4
-        self.board.move_piece((7, 3), (3, 7))  # Qd8 to h4
-
-        # Verify checkmate
-        self.assertTrue(self.board.is_checkmate(Color.WHITE))
-        self.assertFalse(self.board.is_checkmate(Color.BLACK))
-
-    def test_piece_list_consistency(self):
-        """Test that piece lists stay consistent with board state"""
-        self.board = Board()
-
-        # Make a move
-        from_pos = (1, 4)  # e2
-        to_pos = (3, 4)  # e4
-        self.board.move_piece(from_pos, to_pos)
-
-        # Verify piece lists match board state
-        white_pieces_on_board = []
-        black_pieces_on_board = []
-
-        for row in range(8):
-            for col in range(8):
-                piece = self.board.squares[row][col]
-                if piece:
-                    if piece.color == Color.WHITE:
-                        white_pieces_on_board.append((piece, (row, col)))
-                    else:
-                        black_pieces_on_board.append((piece, (row, col)))
-
-        # Verify lists match
-        self.assertEqual(
-            set((p[1] for p in self.board.white_pieces)),
-            set((p[1] for p in white_pieces_on_board)),
+    def test_kiwipete_perft_depth_two(self):
+        board, _ = from_fen(
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
         )
-        self.assertEqual(
-            set((p[1] for p in self.board.black_pieces)),
-            set((p[1] for p in black_pieces_on_board)),
-        )
+        moves = legal_moves(board)
+        self.assertEqual(len(moves), 48)
+        total = 0
+        for move in moves:
+            child = board.copy()
+            self.assertTrue(child.make_move(*move))
+            total += len(legal_moves(child))
+        self.assertEqual(total, 2039)
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_initial_perft_depth_two(self):
+        board = BitBoard()
+        total = 0
+        for move in legal_moves(board):
+            child = board.copy()
+            child.make_move(*move)
+            total += len(legal_moves(child))
+        self.assertEqual(total, 400)

@@ -39,7 +39,7 @@ class BitBoard:
     12: Color to move (1 for white, 0 for black)
     13-16: Castling rights (WK, WQ, BK, BQ)
     17: Move count (normalized by dividing by max moves)
-    18: No-progress count (normalized by dividing by 50)
+    18: Halfmoves without progress (normalized by dividing by 100)
     """
 
     _attack_pattern_cache = {}  # New cache for attack patterns
@@ -68,6 +68,8 @@ class BitBoard:
 
         # Pre-compute attack patterns for all squares
         self._init_attack_patterns()
+
+        self.en_passant_target = None
 
         # Count the initial position as its first occurrence.
         self.position_history = {self.get_repetition_hash(): 1}
@@ -143,128 +145,129 @@ class BitBoard:
         from_pos: Tuple[int, int],
         to_pos: Union[Tuple[int, int], Tuple[int, int, int]],
     ) -> bool:
-        """Make a move on the board. Returns True if successful.
-        For pawn promotion, to_pos should be (row, col, promotion_piece_type)"""
+        """Apply a legal move; rejected moves leave the position unchanged.
+
+        Promotion destinations include a third element: the promoted piece type.
+        """
         if self._read_only:
             raise ValueError("Cached search boards are read-only; copy before moving")
-        # First validate current board state
-        white_king_count = np.sum(self.state[5])
-        black_king_count = np.sum(self.state[11])
-        if white_king_count != 1 or black_king_count != 1:
-            print("\nInvalid board state detected before move!")
-            print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
-            print(f"Attempted move: {from_pos} -> {to_pos}")
-            print("Current position:")
-            print(self)
+        if len(from_pos) != 2 or len(to_pos) not in (2, 3):
+            return False
+        coordinates = (*from_pos, *to_pos[:2])
+        for coordinate in coordinates:
+            if not isinstance(coordinate, (int, np.integer)):
+                return False
+            if coordinate < 0 or coordinate >= 8:
+                return False
+        if to_pos not in self.get_valid_moves(from_pos):
             return False
 
-        from_row, from_col = from_pos
-        color, piece_type = self.get_piece_at(from_row, from_col)
-
-        if color == -1 or color != self.get_current_turn():
-            return False
-
-        # Handle pawn promotion
-        is_promotion = False
-        promotion_piece = None
-        if isinstance(to_pos, tuple) and len(to_pos) == 3:
-            to_row, to_col, promotion_piece = to_pos
-            is_promotion = True
-        else:
-            to_row, to_col = to_pos
-
-        # Check destination square
-        target_color, target_piece = self.get_piece_at(to_row, to_col)
-
-        # Prevent capturing kings
-        if target_piece == 5:  # King is piece_type 5
-            print(f"Illegal move: Cannot capture king at {to_pos}")
-            return False
-
-        # Correct capture detection - only enemy pieces count
-        is_capture = (target_color != -1) and (target_color != color)
-        resets_progress = piece_type == 0 or is_capture
-
-        # Clear destination square
-        self.state[:12, to_row, to_col] = 0
-
-        # Move piece
-        if is_promotion and piece_type == 0:  # Pawn promotion
-            # Place promoted piece
-            self.state[
-                promotion_piece if color == 0 else promotion_piece + 6, to_row, to_col
-            ] = 1
-        else:
-            # Move piece to target square
-            self.state[piece_type if color == 0 else piece_type + 6, to_row, to_col] = 1
-
-        # Clear source square
-        self.state[piece_type if color == 0 else piece_type + 6, from_row, from_col] = 0
-
-        # Validate board state after move
-        white_king_count = np.sum(self.state[5])
-        black_king_count = np.sum(self.state[11])
-        if white_king_count != 1 or black_king_count != 1:
-            print("\nInvalid board state after move!")
-            print(f"White kings: {white_king_count}, Black kings: {black_king_count}")
-            print(f"Move that caused error: {from_pos} -> {to_pos}")
-            print("Resulting position:")
-            print(self)
-            # Revert the move
-            self.state[piece_type if color == 0 else piece_type + 6, to_row, to_col] = 0
-            self.state[
-                piece_type if color == 0 else piece_type + 6, from_row, from_col
-            ] = 1
-            if is_capture:  # TODO: Need to track what piece was captured
-                pass  # Would need to restore captured piece
-            return False
-
-        # Update king position if moving king
-        if piece_type == 5:  # King
-            self.king_positions[color] = (to_row, to_col)
-
-        # Update castling rights (now using separate planes)
-        if piece_type == 5:  # King move
-            if color == 0:
-                self.state[13:15].fill(0)  # Clear white castling
-            else:
-                self.state[15:17].fill(0)  # Clear black castling
-        elif piece_type == 3:  # Rook move
-            if color == 0:
-                if from_col == 0:
-                    self.state[14].fill(0)  # Clear white queenside
-                elif from_col == 7:
-                    self.state[13].fill(0)  # Clear white kingside
-            else:
-                if from_col == 0:
-                    self.state[16].fill(0)  # Clear black queenside
-                elif from_col == 7:
-                    self.state[15].fill(0)  # Clear black kingside
-
-        # Update move counters (normalized)
-        moves = self.get_move_count() + 1
-        self.state[17].fill(min(moves / 200, 1.0))  # Normalize by max moves
-
-        if resets_progress:
-            self.state[18].fill(0)
-        else:
-            progress = self.get_moves_without_progress() + 1
-            self.state[18].fill(min(progress / 50, 1.0))  # Normalize by 50 move rule
-
-        # Update turn
-        self.state[12] = 1 - self.state[12]
-
-        # Record the resulting position only after a successful move.
+        # Validate first, then mutate and record the resulting position.
+        self._apply_move(from_pos, to_pos)
         self._record_position(self.position_history, self.get_repetition_hash())
         return True
 
+    def _move_pieces(self, from_pos, to_pos):
+        """Apply piece placement only, also used for king-safety checks."""
+        from_row, from_col = from_pos
+        to_row, to_col = to_pos[:2]
+        color, piece_type = self.get_piece_at(from_row, from_col)
+        piece_offset = 6 * color
+
+        # Clear any captured piece at the destination and remove the moving piece.
+        self.state[:12, to_row, to_col] = 0
+        self.state[piece_offset + piece_type, from_row, from_col] = 0
+        # Promotion replaces the pawn with the selected piece at its destination.
+        destination_piece = piece_type
+        if len(to_pos) == 3:
+            destination_piece = to_pos[2]
+        self.state[piece_offset + destination_piece, to_row, to_col] = 1
+
+        is_en_passant = piece_type == 0 and (to_row, to_col) == self.en_passant_target
+        if is_en_passant:
+            # The captured pawn is beside the source, not on the destination square.
+            opponent_pawn_plane = 6 * (1 - color)
+            self.state[opponent_pawn_plane, from_row, to_col] = 0
+
+        if piece_type == 5:
+            self.king_positions[color] = (to_row, to_col)
+            is_castling = abs(to_col - from_col) == 2
+            if is_castling:
+                if to_col == 6:  # Kingside: h-file rook moves to f-file.
+                    rook_from_col, rook_to_col = 7, 5
+                else:  # Queenside: a-file rook moves to d-file.
+                    rook_from_col, rook_to_col = 0, 3
+                rook_plane = piece_offset + 3
+                self.state[rook_plane, from_row, rook_from_col] = 0
+                self.state[rook_plane, from_row, rook_to_col] = 1
+
+    def _clear_rook_castling_right(self, color, rook_pos):
+        """Remove the right associated with a rook's original corner square."""
+        row, col = rook_pos
+        if color == 0:
+            home_row, kingside_plane, queenside_plane = 0, 13, 14
+        else:
+            home_row, kingside_plane, queenside_plane = 7, 15, 16
+        if row != home_row:
+            return
+        if col == 7:
+            self.state[kingside_plane].fill(0)
+        elif col == 0:
+            self.state[queenside_plane].fill(0)
+
+    def _apply_move(self, from_pos, to_pos):
+        """Apply a previously validated move, without recording repetition."""
+        from_row, from_col = from_pos
+        to_row, to_col = to_pos[:2]
+        color, piece_type = self.get_piece_at(from_row, from_col)
+        # Read capture information before piece placement clears the destination.
+        captured_color, captured_piece = self.get_piece_at(to_row, to_col)
+        is_en_passant = piece_type == 0 and (to_row, to_col) == self.en_passant_target
+        is_capture = captured_piece != -1 or is_en_passant
+
+        self._move_pieces(from_pos, to_pos)
+
+        # A king move removes both rights; a corner rook move/capture removes one.
+        if piece_type == 5:
+            if color == 0:
+                self.state[13:15].fill(0)
+            else:
+                self.state[15:17].fill(0)
+        elif piece_type == 3:
+            self._clear_rook_castling_right(color, from_pos)
+        if captured_piece == 3:
+            self._clear_rook_castling_right(captured_color, (to_row, to_col))
+
+        # En passant is available only immediately after a two-square pawn move.
+        self.en_passant_target = None
+        if piece_type == 0 and abs(to_row - from_row) == 2:
+            passed_row = (from_row + to_row) // 2
+            self.en_passant_target = (passed_row, from_col)
+
+        # Count each ply; the fifty-move rule counts 100 plies without progress.
+        move_count = self.get_move_count() + 1
+        self.state[17].fill(move_count / 200)
+        if piece_type == 0 or is_capture:
+            progress = 0
+        else:
+            progress = self.get_moves_without_progress() + 1
+        self.state[18].fill(progress / 100)
+        # Plane 12 is 1 for White to move and 0 for Black to move.
+        self.state[12] = 1 - self.state[12]
+
+    def _is_safe_move(self, from_pos, to_pos):
+        probe = self.copy()
+        color = self.get_piece_at(*from_pos)[0]
+        probe._move_pieces(from_pos, to_pos)
+        return not probe.is_in_check(color)
+
     def get_move_count(self) -> int:
         """Get total number of moves played"""
-        return int(self.state[17, 0, 0] * 200)  # Denormalize
+        return round(float(self.state[17, 0, 0]) * 200)  # Denormalize
 
     def get_moves_without_progress(self) -> int:
         """Get number of moves without a pawn move or capture"""
-        return int(self.state[18, 0, 0] * 50)  # Denormalize
+        return round(float(self.state[18, 0, 0]) * 100)  # Denormalize
 
     def copy(self) -> "BitBoard":
         """Create a deep copy of the board"""
@@ -279,6 +282,7 @@ class BitBoard:
         new_board._game_over_cache = self._game_over_cache
         new_board._pin_cache = self._pin_cache
         new_board._valid_moves_cache = self._valid_moves_cache
+        new_board.en_passant_target = self.en_passant_target
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -316,19 +320,16 @@ class BitBoard:
             else:
                 moves = self._get_step_moves(row, col, pattern.directions, color)
 
-        # Filter out moves that would capture the enemy king
-        enemy_king_pos = self.king_positions[1 - color]
-        if enemy_king_pos in moves:
-            moves.remove(enemy_king_pos)
-
-        # Check if piece is pinned
-        pin_direction = self._get_pin_info(pos)
-        if pin_direction:
-            moves = self._filter_pinned_moves(pos, moves, pin_direction)
-
-        # Filter moves that would leave king in check
-        if self.is_in_check(color):
-            moves = self._get_check_resolving_moves(pos, moves)
+        if piece_type == 5:
+            if self.can_castle_kingside(color):
+                moves.add((row, 6))
+            if self.can_castle_queenside(color):
+                moves.add((row, 2))
+        moves = {
+            move
+            for move in moves
+            if self.get_piece_at(*move[:2])[1] != 5 and self._is_safe_move(pos, move)
+        }
 
         self._valid_moves_cache[cache_key] = moves
         return moves.copy()
@@ -377,46 +378,26 @@ class BitBoard:
                         else:
                             moves.add((capture_row, capture_col))
 
-        return moves
-
-    def _get_step_moves(
-        self, row: int, col: int, directions: List[Tuple[int, int]], color: int
-    ) -> Set[Tuple[int, int]]:
-        """Get moves for non-sliding pieces (knight, king)"""
-        moves = set()
-        _, piece_type = self.get_piece_at(row, col)
-
-        for dr, dc in directions:
-            new_row, new_col = row + dr, col + dc
-            if 0 <= new_row < 8 and 0 <= new_col < 8:
-                target_color, _ = self.get_piece_at(new_row, new_col)
-                if target_color == -1 or target_color == (
-                    1 - color
-                ):  # Empty or enemy square
-                    # For king moves, check if target square is under attack
-                    if piece_type == 5:  # King
-                        # Create a copy of the board and simulate the move
-                        test_board = self.copy()
-                        test_board.state[5 if color == 0 else 11, row, col] = (
-                            0  # Remove king from current pos
-                        )
-                        test_board.state[5 if color == 0 else 11, new_row, new_col] = (
-                            1  # Place king at new pos
-                        )
-                        test_board.king_positions[color] = (
-                            new_row,
-                            new_col,
-                        )  # Update king position
-
-                        # Only add move if target square is not under attack
-                        if not test_board.is_square_attacked(
-                            (new_row, new_col), 1 - color
-                        ):
-                            moves.add((new_row, new_col))
-                    else:
-                        moves.add((new_row, new_col))
+        if self.en_passant_target is not None:
+            ep_row, ep_col = self.en_passant_target
+            if (
+                ep_row == row + direction
+                and abs(ep_col - col) == 1
+                and self.get_piece_at(ep_row, ep_col)[0] == -1
+                and self.get_piece_at(row, ep_col) == (1 - color, 0)
+            ):
+                moves.add(self.en_passant_target)
 
         return moves
+
+    def _get_step_moves(self, row, col, directions, color):
+        return {
+            (row + dr, col + dc)
+            for dr, dc in directions
+            if 0 <= row + dr < 8
+            and 0 <= col + dc < 8
+            and self.get_piece_at(row + dr, col + dc)[0] != color
+        }
 
     def _get_sliding_moves(
         self, row: int, col: int, directions: List[Tuple[int, int]], color: int
@@ -534,56 +515,35 @@ class BitBoard:
                     valid.add(move)
         return valid
 
-    def can_castle_kingside(self, color: int) -> bool:
-        """Check if kingside castling is possible"""
-        row = 0 if color == 0 else 7
-        king_channel = 5 if color == 0 else 11
-        rook_channel = 3 if color == 0 else 9
-
-        # Check pieces and rights
-        if not self.state[king_channel, row, 4]:
+    def _can_castle(self, color, kingside):
+        row = 7 * color
+        rook_col = 7 if kingside else 0
+        right = 13 + 2 * color + (not kingside)
+        if (
+            not self.state[right, 0, 0]
+            or self.get_piece_at(row, 4) != (color, 5)
+            or self.get_piece_at(row, rook_col) != (color, 3)
+        ):
             return False
-        if not self.state[rook_channel, row, 7]:
+        between = (5, 6) if kingside else (1, 2, 3)
+        if any(self.get_piece_at(row, col)[0] != -1 for col in between):
             return False
-        if not (self.state[13, row, 4] and self.state[13, row, 7]):
+        if self.is_in_check(color):
             return False
+        return self._is_safe_move(
+            (row, 4), (row, 5 if kingside else 3)
+        ) and self._is_safe_move((row, 4), (row, 6 if kingside else 2))
 
-        # Check squares between are empty
-        if any(self.get_piece_at(row, col)[0] != -1 for col in range(5, 7)):
-            return False
+    def can_castle_kingside(self, color):
+        return self._can_castle(color, True)
 
-        # Check path not under attack
-        enemy_color = 1 - color
-        return not any(
-            self.is_square_attacked((row, col), enemy_color) for col in range(4, 7)
-        )
-
-    def can_castle_queenside(self, color: int) -> bool:
-        """Check if queenside castling is possible"""
-        row = 0 if color == 0 else 7
-        king_channel = 5 if color == 0 else 11
-        rook_channel = 3 if color == 0 else 9
-
-        # Check if king and rook are in original positions
-        if not (self.state[king_channel, row, 4] and self.state[rook_channel, row, 0]):
-            return False
-
-        # Check if castling rights are maintained
-        if not (self.state[13, row, 4] and self.state[13, row, 0]):
-            return False
-
-        # Check if squares between are empty
-        if any(self.get_piece_at(row, col)[0] != -1 for col in range(1, 4)):
-            return False
-
-        # Check if king's path is under attack
-        enemy_color = 1 - color
-        return not any(
-            self.is_square_attacked((row, col), enemy_color) for col in range(2, 5)
-        )
+    def can_castle_queenside(self, color):
+        return self._can_castle(color, False)
 
     def is_checkmate(self, color: int) -> bool:
         """Check if the given color is checkmated"""
+        if color != self.get_current_turn():
+            return False
         # First verify we're in check
         if not self.is_in_check(color):
             return False
@@ -598,7 +558,7 @@ class BitBoard:
 
     def is_stalemate(self, color: int) -> bool:
         """Check if the given color is in stalemate"""
-        if self.is_in_check(color):
+        if color != self.get_current_turn() or self.is_in_check(color):
             return False
 
         # Check if any piece has valid moves
@@ -626,91 +586,45 @@ class BitBoard:
         self.state[5, 0, 4] = 1  # White king at e1 (needed!)
         self.state[12] = 1  # White to move
 
-    def is_draw(self) -> bool:
-        """Check if the position is a draw (insufficient material, 50-move rule, or repetition)"""
-        # First check 50-move rule
-        if self.get_moves_without_progress() >= 50:
-            return True
+    def is_repetition(self, count=3):
+        return self.position_history.get(self.get_repetition_hash(), 0) >= count
 
-        # Move counters do not affect repetition identity.
-        if self.position_history.get(self.get_repetition_hash(), 0) >= 3:
-            return True
+    def is_fifty_moves(self):
+        return self.get_moves_without_progress() >= 100 and not self.is_checkmate(
+            self.get_current_turn()
+        )
 
-        # Get all pieces for insufficient material check
-        white_pieces = self.get_all_pieces(0)
-        black_pieces = self.get_all_pieces(1)
+    def is_seventyfive_moves(self):
+        return self.get_moves_without_progress() >= 150 and not self.is_checkmate(
+            self.get_current_turn()
+        )
 
-        # Count pieces by type
-        white_counts = {piece_type: 0 for piece_type in range(6)}
-        black_counts = {piece_type: 0 for piece_type in range(6)}
-
-        for _, piece_type in white_pieces:
-            white_counts[piece_type] += 1
-        for _, piece_type in black_pieces:
-            black_counts[piece_type] += 1
-
-        # Check for any pawns, rooks, or queens - these are always sufficient material
-        if (
-            white_counts[0] > 0
-            or white_counts[3] > 0
-            or white_counts[4] > 0
-            or black_counts[0] > 0
-            or black_counts[3] > 0
-            or black_counts[4] > 0
-        ):
+    def can_claim_draw(self):
+        """A threefold/50-move claim can name the legal move about to be played."""
+        if self.is_checkmate(self.get_current_turn()):
             return False
-
-        # Insufficient material cases:
-
-        # 1. King vs King
-        if len(white_pieces) == 1 and len(black_pieces) == 1:
+        if self.is_repetition() or self.is_fifty_moves():
             return True
-
-        # 2. King and minor piece(s) vs lone King
-        if (len(white_pieces) >= 2 and len(black_pieces) == 1) or (
-            len(white_pieces) == 1 and len(black_pieces) >= 2
-        ):
-            # If either side has only knights, it's a draw
-            white_minors = white_counts[1] + white_counts[2]  # knights + bishops
-            black_minors = black_counts[1] + black_counts[2]  # knights + bishops
-
-            if len(black_pieces) == 1:  # White has the extra pieces
-                # Two knights vs lone king is a draw
-                if white_counts[1] == 2 and white_minors == 2:
+        for source, _ in self.get_all_pieces(self.get_current_turn()):
+            for target in self.get_valid_moves(source):
+                child = self.copy()
+                child.make_move(source, target)
+                if child.is_repetition() or child.is_fifty_moves():
                     return True
-                # Single minor piece vs king is a draw
-                if white_minors == 1:
-                    return True
-            elif len(white_pieces) == 1:  # Black has the extra pieces
-                # Two knights vs lone king is a draw
-                if black_counts[1] == 2 and black_minors == 2:
-                    return True
-                # Single minor piece vs king is a draw
-                if black_minors == 1:
-                    return True
-
-        # 3. King and bishop vs King and bishop (same colored squares)
-        if len(white_pieces) == 2 and len(black_pieces) == 2:
-            if white_counts[2] == 1 and black_counts[2] == 1:  # Both have bishops
-                # Get bishop positions
-                white_bishop_pos = next(
-                    pos for pos, piece_type in white_pieces if piece_type == 2
-                )
-                black_bishop_pos = next(
-                    pos for pos, piece_type in black_pieces if piece_type == 2
-                )
-                # Check if bishops are on same colored squares (using XOR)
-                if (white_bishop_pos[0] ^ white_bishop_pos[1]) == (
-                    black_bishop_pos[0] ^ black_bishop_pos[1]
-                ):
-                    return True
-
-        # 4. King and knight vs King and knight
-        if len(white_pieces) == 2 and len(black_pieces) == 2:
-            if white_counts[1] == 1 and black_counts[1] == 1:  # Both have knights
-                return True
-
         return False
+
+    def is_draw(self, claim_draw=True) -> bool:
+        """Self-play automatically claims threefold and the fifty-move rule.
+
+        A checkmate on the final halfmove takes precedence in get_game_result.
+        """
+        halfmoves = 100 if claim_draw else 150
+        occurrences = 3 if claim_draw else 5
+        return (
+            self.get_moves_without_progress() >= halfmoves
+            or self.is_repetition(occurrences)
+            or self._has_insufficient_material()
+        )
 
     def is_game_over(self) -> bool:
         """Check if the game is over (checkmate or draw)"""
@@ -739,74 +653,29 @@ class BitBoard:
         self._game_over_cache[cache_key] = False
         return False
 
-    def get_game_result(self, perspective_color: Optional[int] = None) -> float:
-        """Get the game result from the given color's perspective
-        Args:
-            perspective_color: 0 for white, 1 for black. If None, uses current turn
-        Returns:
-            0.0 for win
-            -1.0 for loss
-            -0.5 for draw
-        """
+    def get_game_result(self, perspective_color=None):
+        """Return +1/-1/0 for win/loss/draw, or None for an ongoing game."""
+        turn = self.get_current_turn()
         if perspective_color is None:
-            perspective_color = self.get_current_turn()
-
-        opponent_color = 1 - perspective_color
-
-        # Check if perspective player is checkmated
-        if self.is_checkmate(perspective_color):
-            return -1.0  # Loss
-
-        # Check if opponent is checkmated
-        elif self.is_checkmate(opponent_color):
-            return 1.0  # Win
-        elif self.is_stalemate(perspective_color):
-            return 0.0  # Draw
-        elif self.is_stalemate(opponent_color):
-            return 0.0  # Draw
-
-        # Check for draw
-        elif self.is_draw():
-            return 0.0  # Draw
-
-        # Game not over
+            perspective_color = turn
+        if self.is_checkmate(turn):
+            return -1.0 if perspective_color == turn else 1.0
+        if self.is_stalemate(turn) or self.is_draw():
+            return 0.0
         return None
 
-    def _has_insufficient_material(self) -> bool:
-        """Fast insufficient material check"""
-        # Get piece counts (use numpy operations)
-        white_pieces = self.state[0:6].sum()
-        black_pieces = self.state[6:12].sum()
-
-        # King vs King
-        if white_pieces == 1 and black_pieces == 1:
-            return True
-
-        # If either side has more than 3 pieces, sufficient material
-        if white_pieces > 3 or black_pieces > 3:
+    def _has_insufficient_material(self):
+        # Only declare standard dead-material cases; inability to force mate is
+        # not enough (two knights versus a king can still reach checkmate).
+        if self.state[[0, 3, 4, 6, 9, 10]].any():
             return False
-
-        # King + Bishop/Knight vs King
-        if (white_pieces == 2 and black_pieces == 1) or (
-            black_pieces == 2 and white_pieces == 1
-        ):
+        knights = int(self.state[[1, 7]].sum())
+        bishops = np.argwhere(self.state[[2, 8]] > 0)
+        if knights + len(bishops) <= 1:
             return True
-
-        # King + Bishop vs King + Bishop (same color bishops)
-        if white_pieces == 2 and black_pieces == 2:
-            # Check if both extra pieces are bishops
-            white_bishop = bool(self.state[2].any())  # Bishop channel
-            black_bishop = bool(self.state[8].any())  # Bishop channel
-            if white_bishop and black_bishop:
-                # Check if bishops are on same colored squares
-                white_bishop_pos = np.where(self.state[2])
-                black_bishop_pos = np.where(self.state[8])
-                if (white_bishop_pos[0] + white_bishop_pos[1]) % 2 == (
-                    black_bishop_pos[0] + black_bishop_pos[1]
-                ) % 2:
-                    return True
-
-        return False
+        if knights:
+            return False
+        return len({(int(row) + int(col)) % 2 for _, row, col in bishops}) == 1
 
     def __str__(self) -> str:
         """Return string representation of the board"""
@@ -851,7 +720,12 @@ class BitBoard:
         Dictionaries hash this key internally and compare its complete bytes on
         collisions. Keeping only an integer digest loses that equality check.
         """
-        return self.state.tobytes()
+        key = self.state.tobytes()
+        return (
+            key
+            if self.en_passant_target is None
+            else key + bytes(self.en_passant_target)
+        )
 
     @staticmethod
     def _record_position(history, position_key):
@@ -882,12 +756,22 @@ class BitBoard:
         self._read_only = True
 
     def get_repetition_hash(self) -> int:
-        """Hash pieces, side to move, and castling rights, excluding counters.
-
-        The engine does not yet represent en passant. Legal en-passant rights
-        must also be included here if that rule is implemented.
-        """
-        return hash(self.state[:17].tobytes())
+        """Counters are excluded; en passant matters only if a legal capture exists."""
+        ep = None
+        if self.en_passant_target is not None:
+            row, col = self.en_passant_target
+            color = self.get_current_turn()
+            source_row = row - (1 if color == 0 else -1)
+            for source_col in (col - 1, col + 1):
+                if (
+                    0 <= source_col < 8
+                    and self.get_piece_at(source_row, source_col) == (color, 0)
+                    and self.get_piece_at(source_row, col) == (1 - color, 0)
+                    and self._is_safe_move((source_row, source_col), (row, col))
+                ):
+                    ep = self.en_passant_target
+                    break
+        return hash((self.state[:17].tobytes(), ep))
 
     def __hash__(self) -> int:
         """Hash the board"""

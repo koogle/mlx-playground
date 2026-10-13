@@ -30,7 +30,7 @@ app = modal.App("chesszero-convergence")
 @app.function(
     image=image,
     gpu="L40S",
-    cpu=16,
+    cpu=32,
     memory=65536,
     timeout=43200,
     max_containers=1,
@@ -45,6 +45,7 @@ def run(
     resume_generation: int = 10,
     workers: int = 16,
     games_per_generation: int = 16,
+    eval_every: int = 10,
 ):
     import json
     import signal
@@ -76,6 +77,8 @@ def run(
         str(games_per_generation),
         "--workers",
         str(workers),
+        "--eval-every",
+        str(eval_every),
         "--simulations",
         "32",
     ]
@@ -149,10 +152,17 @@ def main(
     resume_generation: int = 10,
     workers: int = 16,
     games_per_generation: int = 16,
+    eval_every: int = 10,
 ):
     result = run.remote(
-        run_id, resume_run, training_seconds, limit_seconds, resume_generation,
-        workers, games_per_generation
+        run_id,
+        resume_run,
+        training_seconds,
+        limit_seconds,
+        resume_generation,
+        workers,
+        games_per_generation,
+        eval_every,
     )
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)

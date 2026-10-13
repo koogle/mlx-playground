@@ -1,0 +1,16 @@
+{
+  "run_id": "learning-16-20261013-211356",
+  "source_revision": "fa5539ff01d5dc8e2a0d43820c0f4a0f00b57fb3",
+  "resume_run": "throughput-16-20261013-210810/L40S",
+  "resume_generation": 5,
+  "workers": 16,
+  "cpu": 32,
+  "games_per_update": 64,
+  "gpu": "L40S",
+  "target_updates": 500,
+  "training_seconds": 39600,
+  "limit_seconds": 42900,
+  "eval_every": 10,
+  "paused": false,
+  "function_call_id": "fc-01M4VHTTH6ENHQS5D5PWJQ44A2"
+}

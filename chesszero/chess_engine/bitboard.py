@@ -69,7 +69,8 @@ class BitBoard:
         # Pre-compute attack patterns for all squares
         self._init_attack_patterns()
 
-        self.position_history = {}  # Track position repetitions
+        # Count the initial position as its first occurrence.
+        self.position_history = {self.get_repetition_hash(): 1}
 
     def initialize_board(self):
         """Set up the initial chess position"""
@@ -146,9 +147,6 @@ class BitBoard:
         For pawn promotion, to_pos should be (row, col, promotion_piece_type)"""
         if self._read_only:
             raise ValueError("Cached search boards are read-only; copy before moving")
-        # Update position history before making the move
-        self._record_departure(self.position_history, self.get_hash())
-
         # First validate current board state
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
@@ -256,6 +254,8 @@ class BitBoard:
         # Update turn
         self.state[12] = 1 - self.state[12]
 
+        # Record the resulting position only after a successful move.
+        self._record_position(self.position_history, self.get_repetition_hash())
         return True
 
     def get_move_count(self) -> int:
@@ -632,12 +632,9 @@ class BitBoard:
         if self.get_moves_without_progress() >= 50:
             return True
 
-        # Check for threefold repetition using the position history
-        # The position hash includes piece positions, castling rights, en passant squares, and side to move
-        current_hash = self.get_hash()
-        if current_hash in self.position_history:
-            if self.position_history[current_hash] >= 3:
-                return True
+        # Move counters do not affect repetition identity.
+        if self.position_history.get(self.get_repetition_hash(), 0) >= 3:
+            return True
 
         # Get all pieces for insufficient material check
         white_pieces = self.get_all_pieces(0)
@@ -717,7 +714,12 @@ class BitBoard:
 
     def is_game_over(self) -> bool:
         """Check if the game is over (checkmate or draw)"""
-        cache_key = self.get_search_key()
+        # Draws can depend on history, which is deliberately not in the board
+        # hash. Check them before lookup and never store them in this cache.
+        if self.is_draw():
+            return True
+
+        cache_key = self.get_hash()
 
         if cache_key in self._game_over_cache:
             return self._game_over_cache[cache_key]
@@ -731,11 +733,6 @@ class BitBoard:
 
         # Check for stalemate
         elif self.is_stalemate(current_turn):
-            self._game_over_cache[cache_key] = True
-            return True
-
-        # Check for draw
-        elif self.is_draw():
             self._game_over_cache[cache_key] = True
             return True
 
@@ -856,23 +853,14 @@ class BitBoard:
         """
         return self.state.tobytes()
 
-    def get_search_key(self):
-        """Identify a complete search state, including its repetition context."""
-        return (
-            self.get_hash(),
-            frozenset(self.position_history.items()),
-            tuple(sorted(self.king_positions.items())),
-            getattr(self, "en_passant_target", None),
-        )
-
     @staticmethod
-    def _record_departure(history, position_key):
+    def _record_position(history, position_key):
         history[position_key] = history.get(position_key, 0) + 1
 
     def _with_search_history(self, parent):
         """Reuse physical state while keeping this path's repetition history."""
         history = parent.position_history.copy()
-        self._record_departure(history, parent.get_hash())
+        self._record_position(history, self.get_repetition_hash())
         return self._with_position_history(history)
 
     def _with_position_history(self, history):
@@ -892,6 +880,14 @@ class BitBoard:
         self.king_positions = MappingProxyType(self.king_positions)
         self.position_history = MappingProxyType(self.position_history)
         self._read_only = True
+
+    def get_repetition_hash(self) -> int:
+        """Hash pieces, side to move, and castling rights, excluding counters.
+
+        The engine does not yet represent en passant. Legal en-passant rights
+        must also be included here if that rule is implemented.
+        """
+        return hash(self.state[:17].tobytes())
 
     def __hash__(self) -> int:
         """Hash the board"""

@@ -1,88 +1,81 @@
 import multiprocessing as mp
+import os
 import unittest
 
 import mlx.core as mx
-import mlx.nn as nn
 import numpy as np
 
 from config.model_config import ModelConfig
 from model.game_workers import run_game_workers
 from model.inference import BatchedInference, InferenceClient
+from model.network import ChessNet
 
 
-class AnalyticModel(nn.Module):
-    def __init__(self, offset=0, fail=False):
-        super().__init__()
-        self.offset, self.fail = offset, fail
-        # The model must never be serialized into the game workers.
-        self.unpicklable = lambda: None
-
-    def __call__(self, states):
-        if self.fail:
-            raise RuntimeError("broken forward")
-        values = states[:, 0, 0, 0] + self.offset
-        return mx.stack([values, -values], axis=1), values[:, None]
+def small_model(bias=0):
+    config = ModelConfig(
+        n_residual_blocks=0, n_filters=2, policy_output_dim=4, inference_batch_size=2
+    )
+    model = ChessNet(config)
+    model.policy_fc.weight = mx.zeros_like(model.policy_fc.weight)
+    model.policy_fc.bias = mx.array([bias, 0.0, 0.0, 0.0])
+    model.unpicklable = lambda: None  # Only weights go to the server, never the model.
+    return model, config
 
 
-def prediction_worker(first, second, index, barrier, sender, max_workers):
+def prediction_worker(client, index, barrier, sender, max_workers):
     mx.set_default_device(mx.cpu)
-    assert isinstance(first, InferenceClient)
+    assert isinstance(client, InferenceClient)
     if barrier is not None:
         barrier.wait(timeout=10)
-    state = mx.full((1, 19, 8, 8), index)
     try:
-        a, _ = first(state)
-        b, _ = second(state)
-        sender.send((np.array(a), np.array(b), str(mx.default_device())))
-    except RuntimeError as error:
-        sender.send(str(error))
+        policy, _ = client(mx.full((1, 19, 8, 8), index))
+        sender.send((np.array(policy), str(mx.default_device())))
+    finally:
+        client.close()
 
 
 class TestSharedInference(unittest.TestCase):
-    def test_spawned_games_share_models_batch_and_keep_outputs_separate(self):
-        first, second = AnalyticModel(), AnalyticModel(offset=10)
-        config = ModelConfig(inference_batch_size=4, inference_wait_ms=50)
+    def test_spawned_games_use_one_process_with_bounded_queued_inference(self):
+        model, config = small_model()
         barrier = mp.get_context("spawn").Barrier(4)
-        jobs = [(first, second, i, barrier) for i in range(4)]
-        with BatchedInference([first, second], config) as service:
+        with BatchedInference(model, config) as service:
+            self.assertNotEqual(service.manager._process.pid, os.getpid())
+            self.assertIsInstance(service.manager.address, str)  # Local IPC, not TCP.
             results, failures = run_game_workers(
-                prediction_worker, jobs, 4, inference=service
+                prediction_worker,
+                [(i, barrier) for i in range(4)],
+                4,
+                (service.client(),),
             )
-            self.assertFalse(first.training)
-            self.assertEqual(failures, 0)
-        self.assertTrue(first.training)
-        self.assertEqual(service.positions, 8)
-        self.assertEqual(service.max_batch_size, 4)
-        self.assertEqual(service.forward_passes, 2)
-        for i, (a, b, device) in enumerate(results):
-            np.testing.assert_array_equal(a, [[i, -i]])
-            np.testing.assert_array_equal(b, [[i + 10, -i - 10]])
+        self.assertEqual(failures, 0)
+        self.assertEqual(service.statistics["positions"], 4)
+        self.assertLessEqual(service.statistics["largest_batch"], 2)
+        for policy, device in results:
+            np.testing.assert_allclose(policy, [[0.25] * 4])
             self.assertIn("cpu", device)
 
-    def test_forward_failure_disconnects_waiter_and_restores_mode(self):
-        model = AnalyticModel(fail=True)
+    def test_rpc_failure_returns_to_caller_and_shutdown_completes(self):
+        model, config = small_model()
         with self.assertRaisesRegex(RuntimeError, "Shared inference failed"):
-            with BatchedInference([model], ModelConfig()) as service:
-                results, failures = run_game_workers(
-                    prediction_worker, [(model, model, 0, None)], 1, inference=service
-                )
-        self.assertTrue(model.training)
-        self.assertEqual(failures, 0)
-        self.assertIn("disconnected", results[0])
+            with BatchedInference(model, config) as service:
+                client = service.client()
+                try:
+                    with self.assertRaises(RuntimeError):
+                        client(mx.zeros((1, 1)))  # Invalid chess input fails remotely.
+                finally:
+                    client.close()
 
-    def test_multi_position_requests_respect_forward_batch_limit(self):
-        model = AnalyticModel()
-        with BatchedInference([model], ModelConfig(inference_batch_size=2)) as service:
-            args, connection = service.prepare_job((model,), mp.get_context("spawn"))
+    def test_evaluation_checkpoints_share_the_same_process_and_model_architecture(self):
+        current, config = small_model(0)
+        reference, _ = small_model(2)
+        with BatchedInference(current, config, reference_model=reference) as service:
+            a, b = service.client(), service.reference_client()
             try:
-                policies, values = args[0](
-                    mx.broadcast_to(mx.arange(5)[:, None, None, None], (5, 19, 8, 8))
-                )
+                state = mx.ones((1, 19, 8, 8))
+                np.testing.assert_allclose(a(state)[0], [[0.25] * 4])
+                expected = np.array(mx.softmax(mx.array([[2.0, 0.0, 0.0, 0.0]])))
+                np.testing.assert_allclose(b(state)[0], expected, rtol=1e-6)
+                np.testing.assert_allclose(a(state)[0], [[0.25] * 4])
             finally:
-                connection.close()
-        np.testing.assert_array_equal(values, np.arange(5)[:, None])
-        np.testing.assert_array_equal(
-            policies, np.stack([np.arange(5), -np.arange(5)], axis=1)
-        )
-        self.assertEqual(service.max_batch_size, 2)
-        self.assertEqual(service.positions, 5)
+                a.close()
+                b.close()

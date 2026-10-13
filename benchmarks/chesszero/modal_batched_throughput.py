@@ -34,7 +34,7 @@ volume = modal.Volume.from_name("chesszero-convergence")
 app = modal.App("chesszero-batched-throughput")
 
 
-def experiment(label, run_id):
+def experiment(label, run_id, workers):
     out = Path("/results") / run_id / label
     out.mkdir(parents=True, exist_ok=False)
     samples = []
@@ -44,7 +44,7 @@ def experiment(label, run_id):
             [sys.executable, "-u", "/opt/throughput.py", str(out)],
             stdout=log,
             stderr=subprocess.STDOUT,
-            env=dict(os.environ, TQDM_DISABLE="1"),
+            env=dict(os.environ, TQDM_DISABLE="1", CHESSZERO_WORKERS=str(workers)),
             start_new_session=True,
         )
         while process.poll() is None:
@@ -56,7 +56,17 @@ def experiment(label, run_id):
                 ],
                 text=True,
             ).strip()
-            samples.append({"seconds": time.monotonic() - start, "gpu": gpu})
+            sample = {"seconds": time.monotonic() - start, "gpu": gpu}
+            # Container cgroup memory includes the server and every CPU worker.
+            memory_file = Path("/sys/fs/cgroup/memory.current")
+            if memory_file.exists():
+                sample["container_memory_bytes"] = int(memory_file.read_text())
+            cpu_file = Path("/sys/fs/cgroup/cpu.stat")
+            if cpu_file.exists():
+                sample["cpu_usage_usec"] = int(dict(
+                    line.split() for line in cpu_file.read_text().splitlines()
+                )["usage_usec"])
+            samples.append(sample)
             (out / "gpu-samples.json").write_text(json.dumps(samples))
             volume.commit()
             print(label, round(time.monotonic() - start), gpu, flush=True)
@@ -90,8 +100,8 @@ def experiment(label, run_id):
     scaledown_window=2,
     volumes={"/results": volume},
 )
-def l40s(run_id):
-    return experiment("L40S", run_id)
+def l40s(run_id, workers=16):
+    return experiment("L40S", run_id, workers)
 
 
 @app.function(
@@ -103,5 +113,5 @@ def l40s(run_id):
     scaledown_window=2,
     volumes={"/results": volume},
 )
-def h100(run_id):
-    return experiment("H100", run_id)
+def h100(run_id, workers=16):
+    return experiment("H100", run_id, workers)

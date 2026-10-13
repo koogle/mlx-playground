@@ -1,11 +1,10 @@
 import numpy as np
 from chess_engine.game import ChessGame
 from chess_engine.bitboard import BitBoard
-from model.network import ChessNet
 from config.model_config import ModelConfig
 from model.mcts import MCTS, GameSearchCache
 from model.move_encoding import encode_move
-from typing import List, Tuple
+from typing import List, Tuple, TYPE_CHECKING
 import mlx.core as mx
 from tqdm import tqdm
 import logging
@@ -14,21 +13,22 @@ from model.game_workers import run_game_workers
 from model.inference import BatchedInference, InferenceClient
 import traceback
 
+if TYPE_CHECKING:
+    from model.network import ChessNet
+
 
 def play_single_game(
-    model: ChessNet | InferenceClient,
+    model: InferenceClient,
     config: ModelConfig,
     game_id: int,
     result_connection: Connection,
     max_workers: int,
 ):
     """Worker process that plays a single complete game"""
-    if isinstance(model, InferenceClient):
-        mx.set_default_device(mx.cpu)
+    mx.set_default_device(mx.cpu)
     logger = logging.getLogger(__name__)
     game_cache = GameSearchCache(model)
     try:
-        model.eval()
         game = ChessGame()
         game_history = []
 
@@ -87,18 +87,19 @@ def play_single_game(
         result_connection.send(None)
     finally:
         game_cache.clear()
+        model.close()
 
 
 def generate_games(
-    model: ChessNet | InferenceClient, config: ModelConfig, max_workers: int = 8
+    model: "ChessNet", config: ModelConfig, max_workers: int = 8
 ) -> List[Tuple]:
     logger = logging.getLogger(__name__)
     if config.n_games_per_iteration < 1:
         raise ValueError("Games per iteration must be positive")
-    jobs = [(model, config, game_id) for game_id in range(config.n_games_per_iteration)]
-    with BatchedInference([model], config) as inference:
+    jobs = [(config, game_id) for game_id in range(config.n_games_per_iteration)]
+    with BatchedInference(model, config) as inference:
         results, failures = run_game_workers(
-            play_single_game, jobs, max_workers, inference=inference
+            play_single_game, jobs, max_workers, clients=(inference.client(),)
         )
     logger.info("Self-play generation: %d completed, %d failed", len(results), failures)
     if not results:

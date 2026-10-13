@@ -1,4 +1,3 @@
-import multiprocessing as mp
 import unittest
 from unittest.mock import patch
 
@@ -10,40 +9,27 @@ from config.model_config import ModelConfig
 from model.inference import BatchedInference
 from model.mcts import MCTS
 from test_mcts_sequential import RecordingModel, ToyBoard
-from test_shared_inference import AnalyticModel
+from test_shared_inference import small_model
 
 
 class TestPredictionReuse(unittest.TestCase):
     def test_deduplication_lru_model_isolation_and_new_snapshot(self):
-        first, second = AnalyticModel(), AnalyticModel(offset=10)
-        config = ModelConfig(prediction_cache_size=1)
-        with BatchedInference([first, second], config) as service:
-            clients, connection = service.prepare_job(
-                (first, second), mp.get_context("spawn")
-            )
-            try:
-                a, b = clients
-                np.testing.assert_array_equal(
-                    a(mx.full((3, 19, 8, 8), 2))[1], [[2]] * 3
-                )
-                a(mx.full((1, 19, 8, 8), 2))
-                self.assertEqual(service.positions, 1)
-                self.assertEqual(service.cache_hits, 3)
-                np.testing.assert_array_equal(b(mx.full((1, 19, 8, 8), 2))[1], [[12]])
-                a(mx.full((1, 19, 8, 8), 2))  # Model B evicted A's entry.
-                self.assertEqual(service.positions, 3)
-                self.assertEqual(len(service.predictions), 1)
-            finally:
-                connection.close()
-        first.offset = 20
-        with BatchedInference([first], config) as fresh:
-            clients, connection = fresh.prepare_job((first,), mp.get_context("spawn"))
-            try:
-                np.testing.assert_array_equal(
-                    clients[0](mx.full((1, 19, 8, 8), 2))[1], [[22]]
-                )
-            finally:
-                connection.close()
+        first, config = small_model()
+        second, _ = small_model(2)
+        config.prediction_cache_size = 1
+        state = mx.ones((1, 19, 8, 8))
+        with BatchedInference(first, config, reference_model=second) as service:
+            a, b = service.client(), service.reference_client()
+            expected = np.array(a(state)[0])
+            np.testing.assert_array_equal(a(state)[0], expected)
+            self.assertEqual(service.rpc.statistics()["positions"], 1)
+            self.assertEqual(service.rpc.statistics()["cache_hits"], 1)
+            self.assertFalse(np.array_equal(b(state)[0], expected))
+            a(state)  # Reference weights evicted the current entry.
+            self.assertEqual(service.rpc.statistics()["positions"], 3)
+        first.policy_fc.bias = mx.array([3.0, 0.0, 0.0, 0.0])
+        with BatchedInference(first, config) as fresh:
+            self.assertFalse(np.array_equal(fresh.client()(state)[0], expected))
 
     def test_prediction_identity_uses_nn_input_not_en_passant_state(self):
         model = RecordingModel()

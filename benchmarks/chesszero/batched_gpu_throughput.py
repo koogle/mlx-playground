@@ -3,12 +3,12 @@ from pathlib import Path
 
 sys.path.insert(0, "/opt/chesszero/chesszero")
 import json
+import os
 import time
 import numpy as np
 import mlx.core as mx
 from mlx.utils import tree_flatten
 from config.model_config import ModelConfig
-from model.training import Trainer
 from model.self_play import play_single_game, create_batches
 from model.game_workers import run_game_workers
 from model.inference import BatchedInference
@@ -26,22 +26,25 @@ def timed_game(model, config, game_id, directory, sender, max_workers):
 
 
 def main():
+    from model.training import Trainer
+
     mx.set_default_device(mx.gpu)
     out = Path(sys.argv[1])
     source = Path("/results/learning-merged-20261013-205953/checkpoints")
     trainer = Trainer(ModelConfig(), checkpoint_dir=source, resume_epoch=4)
     # Save trial checkpoints separately from the resume source.
     trainer.checkpoint_dir = out / "checkpoints"
-    trainer.config.n_games_per_iteration = 16
+    workers = int(os.environ.get("CHESSZERO_WORKERS", "16"))
+    trainer.config.n_games_per_iteration = workers
     trainer.config.n_simulations = 32
     trainer.config.batch_size = 64
     trainer.model.eval()
     mx.eval(trainer.model.parameters())
     mx.clear_cache()
     start = time.monotonic()
-    jobs = [(trainer.model, trainer.config, i, str(out)) for i in range(16)]
-    with BatchedInference([trainer.model], trainer.config) as inference:
-        results, failures = run_game_workers(timed_game, jobs, 16, inference=inference)
+    jobs = [(trainer.config, i, str(out)) for i in range(workers)]
+    with BatchedInference(trainer.model, trainer.config) as inference:
+        results, failures = run_game_workers(timed_game, jobs, workers, clients=(inference.client(),))
     seconds = time.monotonic() - start
     if failures:
         raise RuntimeError(f"{failures} games failed")
@@ -57,12 +60,8 @@ def main():
         raise RuntimeError("Nonfinite parameters")
     trainer._save_checkpoint(5)
     row = {
-        "inference": {
-            "forwards": inference.forward_passes,
-            "positions": inference.positions,
-            "largest_batch": inference.max_batch_size,
-        },
-        "workers": 16,
+        "inference": inference.statistics,
+        "workers": workers,
         "games": len(games),
         "failures": failures,
         "positions": sum(len(h) for h, _ in games),
@@ -71,7 +70,7 @@ def main():
         "games_per_minute": len(games) * 60 / seconds,
         "individual_game_seconds": [
             json.loads((out / f"game-{i}.json").read_text())["seconds"]
-            for i in range(16)
+            for i in range(workers)
         ],
         "learning_seconds": learning_seconds,
         "losses": losses,

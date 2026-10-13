@@ -130,8 +130,6 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = config.debug
-        # An explicitly shared game cache serves a fixed inference snapshot.
-        self.training = self._owns_cache
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
         self.root_node = None  # Initialize root_node
@@ -315,14 +313,13 @@ class MCTS:
         return root
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-        # Don't switch to eval mode during training
-        if not self.training:
-            self.model.eval()
-
-        self.cache.bind(self.model, self.model_version)
-        if self._owns_cache:
-            self._clear_caches()
+        # Mode controls BatchNorm/dropout, not whether autodiff accumulates gradients.
+        was_training = self.model.training
+        self.model.eval()
         try:
+            self.cache.bind(self.model, self.model_version)
+            if self._owns_cache:
+                self._clear_caches()
             # A played move often selects a snapshot built in the previous search.
             root_board = self._get_root_board(board)
             self.root_node = Node(root_board)
@@ -351,9 +348,7 @@ class MCTS:
         finally:
             if self._owns_cache:
                 self._clear_caches()
-            # Restore training mode if we were training
-            if self.training:
-                self.model.train()
+            self.model.train(was_training)
 
     def _select_move_with_temperature(
         self, node: Node, temperature: float

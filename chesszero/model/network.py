@@ -108,6 +108,8 @@ class ChessNet(nn.Module):
                 std = mx.sqrt(2.0 / fan_in)
                 return mx.random.normal(a.shape) * std
             elif "bn" in path:
+                if "running_var" in path:
+                    return mx.ones(a.shape)
                 if "weight" in path:  # gamma
                     return mx.ones(a.shape) * 0.1  # Start with smaller scale
                 else:  # bias (beta)

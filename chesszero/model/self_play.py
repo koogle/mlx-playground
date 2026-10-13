@@ -25,6 +25,7 @@ def play_single_game(
     logger = logging.getLogger(__name__)
     game_cache = GameSearchCache(model)
     try:
+        model.eval()
         game = ChessGame()
         game_history = []
 

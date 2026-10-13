@@ -1,0 +1,39 @@
+[
+  {
+    "workers": 512,
+    "run_id": "scale-rpc-22-512-20261013-223633",
+    "function_call_id": "fc-01M4VPJ2P3EW3T7PCN3FEXBJF1",
+    "source_revision": "96cb5f6",
+    "gpu": "L40S",
+    "cpu": 32,
+    "memory_mb": 196608,
+    "limit_seconds": 3600,
+    "status": "cancelled while queued",
+    "reason": "Retry with the same 64 GiB minimum as prior trials and a larger memory limit"
+  },
+  {
+    "workers": 512,
+    "run_id": "scale-burst-rpc-22-512-20261013-224043",
+    "function_call_id": "fc-01M4VPSQ0QQ9HJ61CD4T3RD4WT",
+    "source_revision": "96cb5f6",
+    "gpu": "L40S",
+    "cpu": 32,
+    "memory_request_mb": 65536,
+    "memory_limit_mb": 196608,
+    "limit_seconds": 3600,
+    "status": "cancelled before benchmark startup",
+    "reason": "Missing shared benchmark module in the probe image; not a capacity result"
+  },
+  {
+    "workers": 512,
+    "run_id": "scale-fixed-rpc-22-512-20261013-225330",
+    "function_call_id": "fc-01M4VQH45EDDA0DK6K9PVW8ETD",
+    "source_revision": "96cb5f6",
+    "cpu": 32,
+    "gpu": "L40S",
+    "memory_request_mb": 65536,
+    "memory_limit_mb": 196608,
+    "limit_seconds": 3600,
+    "status": "submitted"
+  }
+]

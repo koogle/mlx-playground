@@ -57,6 +57,8 @@ class BitBoard:
         self.knight_attacks = self._init_knight_attacks()
         self.king_attacks = self._init_king_attacks()
         self.pawn_attacks = self._init_pawn_attacks()
+        for table in (self.knight_attacks, self.king_attacks, self.pawn_attacks):
+            table.flags.writeable = False
 
         # Track king positions directly - (row, col) for each color
         self.king_positions = {
@@ -270,14 +272,16 @@ class BitBoard:
         return round(float(self.state[18, 0, 0]) * 100)  # Denormalize
 
     def copy(self) -> "BitBoard":
-        """Create a deep copy of the board"""
-        new_board = BitBoard()
-        new_board.state = self.state.copy()
+        """Copy mutable position state without constructing a starting position.
 
-        # Create a new dict with deep copies of the tuples
-        new_board.king_positions = {
-            color: (row, col) for color, (row, col) in self.king_positions.items()
-        }
+        Static attack tables are read-only and shared. Scalar/tuple metadata is
+        immutable; state, king positions and repetition history are independent.
+        """
+        new_board = object.__new__(type(self))
+        new_board.__dict__ = self.__dict__.copy()
+        new_board._read_only = False
+        new_board.state = self.state.copy()
+        new_board.king_positions = self.king_positions.copy()
         new_board.position_history = self.position_history.copy()
         new_board._game_over_cache = self._game_over_cache
         new_board._pin_cache = self._pin_cache

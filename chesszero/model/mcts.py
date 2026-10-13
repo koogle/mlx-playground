@@ -10,18 +10,43 @@ from model.move_encoding import MoveDestination, encode_move
 class Node:
     """Tree node storing state, prior probabilities, visit counts, and Q-values"""
 
-    def __init__(self, board: BitBoard, parent=None, prior=0.0, exploration_noise=True):
+    def __init__(
+        self,
+        board: BitBoard = None,
+        parent=None,
+        prior=0.0,
+        exploration_noise=True,
+        move=None,
+        board_factory=None,
+    ):
         self.exploration_noise = (
             parent.exploration_noise if parent else exploration_noise
         )
         self.visit_count = 0
         self.value_sum = 0.0
         self.evaluation = 0.0  # Network value from this node's side-to-move perspective
-        self.board = board
+        self._board = board
+        self._board_factory = parent._board_factory if parent else board_factory
+        self.move = move
         self.parent = parent
         self.prior = prior
         self.children = {}
         self.is_expanded = False
+
+    @property
+    def board(self):
+        """Materialize a child position only when search actually visits it."""
+        if self._board is None:
+            if self._board_factory is not None:
+                self._board = self._board_factory(self.parent.board, *self.move)
+                return self._board
+            board = self.parent.board.copy()
+            if not board.make_move(*self.move):
+                raise ValueError(
+                    f"Search tried to materialize an illegal move: {self.move}"
+                )
+            self._board = board
+        return self._board
 
     def value(self):
         if self.visit_count == 0:
@@ -207,15 +232,13 @@ class MCTS:
 
         children = {}
         total_prior = 0.0
-        position_key = self._board_key(board)
 
         for from_pos, to_pos in moves:
             move_idx = MCTS._move_encoding_table[(from_pos, to_pos)]
             prior = max(float(policy_np[move_idx]), 1e-8)
             total_prior += prior
-            child_board = self._get_child_board(board, from_pos, to_pos, position_key)
             children[(from_pos, to_pos)] = Node(
-                board=child_board, parent=node, prior=prior
+                parent=node, prior=prior, move=(from_pos, to_pos)
             )
 
         # Normalize priors
@@ -331,7 +354,11 @@ class MCTS:
                 self._clear_caches()
             # A played move often selects a snapshot built in the previous search.
             root_board = self._get_root_board(board)
-            self.root_node = Node(root_board, exploration_noise=self.exploration_noise)
+            self.root_node = Node(
+                root_board,
+                exploration_noise=self.exploration_noise,
+                board_factory=self._get_child_board,
+            )
             policy, value = self._evaluate_board(root_board)
             self._expand_node(self.root_node, policy, value)
 

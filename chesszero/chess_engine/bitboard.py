@@ -1,6 +1,6 @@
 from cachetools import LRUCache
 import numpy as np
-from typing import List, Tuple, Set, Optional
+from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
 from types import MappingProxyType
 
@@ -140,72 +140,113 @@ class BitBoard:
         """Returns 0 for white, 1 for black"""
         return 0 if self.state[12, 0, 0] else 1
 
-    def make_move(self, from_pos, to_pos) -> bool:
-        """Apply a legal move; rejected moves leave every part of the board intact."""
+    def make_move(
+        self,
+        from_pos: Tuple[int, int],
+        to_pos: Union[Tuple[int, int], Tuple[int, int, int]],
+    ) -> bool:
+        """Apply a legal move; rejected moves leave the position unchanged.
+
+        Promotion destinations include a third element: the promoted piece type.
+        """
         if self._read_only:
             raise ValueError("Cached search boards are read-only; copy before moving")
-        if (
-            len(from_pos) != 2
-            or len(to_pos) not in (2, 3)
-            or not all(
-                isinstance(v, (int, np.integer)) and 0 <= v < 8
-                for v in (*from_pos, *to_pos[:2])
-            )
-        ):
+        if len(from_pos) != 2 or len(to_pos) not in (2, 3):
             return False
+        coordinates = (*from_pos, *to_pos[:2])
+        for coordinate in coordinates:
+            if not isinstance(coordinate, (int, np.integer)):
+                return False
+            if coordinate < 0 or coordinate >= 8:
+                return False
         if to_pos not in self.get_valid_moves(from_pos):
             return False
+
         self._apply_move(from_pos, to_pos)
-        repetition_hash = self.get_repetition_hash()
-        self.position_history[repetition_hash] = (
-            self.position_history.get(repetition_hash, 0) + 1
-        )
+        self._record_position(self.position_history, self.get_repetition_hash())
         return True
 
     def _move_pieces(self, from_pos, to_pos):
         """Apply piece placement only, also used for king-safety checks."""
-        row, col = from_pos
+        from_row, from_col = from_pos
         to_row, to_col = to_pos[:2]
-        color, piece = self.get_piece_at(row, col)
+        color, piece_type = self.get_piece_at(from_row, from_col)
+        piece_offset = 6 * color
+
         self.state[:12, to_row, to_col] = 0
-        self.state[piece + 6 * color, row, col] = 0
-        promoted = to_pos[2] if len(to_pos) == 3 else piece
-        self.state[promoted + 6 * color, to_row, to_col] = 1
-        if piece == 0 and (to_row, to_col) == self.en_passant_target:
-            self.state[6 * (1 - color), row, to_col] = 0
-        if piece == 5:
+        self.state[piece_offset + piece_type, from_row, from_col] = 0
+        destination_piece = piece_type
+        if len(to_pos) == 3:
+            destination_piece = to_pos[2]
+        self.state[piece_offset + destination_piece, to_row, to_col] = 1
+
+        is_en_passant = piece_type == 0 and (to_row, to_col) == self.en_passant_target
+        if is_en_passant:
+            opponent_pawn_plane = 6 * (1 - color)
+            self.state[opponent_pawn_plane, from_row, to_col] = 0
+
+        if piece_type == 5:
             self.king_positions[color] = (to_row, to_col)
-            if abs(to_col - col) == 2:
-                rook_col = 7 if to_col == 6 else 0
-                rook_target = 5 if to_col == 6 else 3
-                self.state[3 + 6 * color, row, rook_col] = 0
-                self.state[3 + 6 * color, row, rook_target] = 1
+            is_castling = abs(to_col - from_col) == 2
+            if is_castling:
+                if to_col == 6:  # Kingside: h-file rook moves to f-file.
+                    rook_from_col, rook_to_col = 7, 5
+                else:  # Queenside: a-file rook moves to d-file.
+                    rook_from_col, rook_to_col = 0, 3
+                rook_plane = piece_offset + 3
+                self.state[rook_plane, from_row, rook_from_col] = 0
+                self.state[rook_plane, from_row, rook_to_col] = 1
+
+    def _clear_rook_castling_right(self, color, rook_pos):
+        """Remove the right associated with a rook's original corner square."""
+        row, col = rook_pos
+        if color == 0:
+            home_row, kingside_plane, queenside_plane = 0, 13, 14
+        else:
+            home_row, kingside_plane, queenside_plane = 7, 15, 16
+        if row != home_row:
+            return
+        if col == 7:
+            self.state[kingside_plane].fill(0)
+        elif col == 0:
+            self.state[queenside_plane].fill(0)
 
     def _apply_move(self, from_pos, to_pos):
         """Apply a previously validated move, without recording repetition."""
-        row, col = from_pos
+        from_row, from_col = from_pos
         to_row, to_col = to_pos[:2]
-        color, piece = self.get_piece_at(row, col)
+        color, piece_type = self.get_piece_at(from_row, from_col)
         captured_color, captured_piece = self.get_piece_at(to_row, to_col)
-        capture = captured_piece != -1 or (
-            piece == 0 and (to_row, to_col) == self.en_passant_target
-        )
+        is_en_passant = piece_type == 0 and (to_row, to_col) == self.en_passant_target
+        is_capture = captured_piece != -1 or is_en_passant
+
         self._move_pieces(from_pos, to_pos)
-        if piece == 5:
-            self.state[13 + 2 * color : 15 + 2 * color].fill(0)
-        if piece == 3 and row == 7 * color and col in (0, 7):
-            self.state[13 + 2 * color + (col == 0)].fill(0)
-        if captured_piece == 3 and to_row == 7 * captured_color and to_col in (0, 7):
-            self.state[13 + 2 * captured_color + (to_col == 0)].fill(0)
-        self.en_passant_target = (
-            ((row + to_row) // 2, col)
-            if piece == 0 and abs(to_row - row) == 2
-            else None
-        )
-        self.state[17].fill((self.get_move_count() + 1) / 200)
-        progress = 0 if piece == 0 or capture else self.get_moves_without_progress() + 1
+
+        # A king move removes both rights; a corner rook move/capture removes one.
+        if piece_type == 5:
+            if color == 0:
+                self.state[13:15].fill(0)
+            else:
+                self.state[15:17].fill(0)
+        elif piece_type == 3:
+            self._clear_rook_castling_right(color, from_pos)
+        if captured_piece == 3:
+            self._clear_rook_castling_right(captured_color, (to_row, to_col))
+
+        # En passant is available only immediately after a two-square pawn move.
+        self.en_passant_target = None
+        if piece_type == 0 and abs(to_row - from_row) == 2:
+            passed_row = (from_row + to_row) // 2
+            self.en_passant_target = (passed_row, from_col)
+
+        move_count = self.get_move_count() + 1
+        self.state[17].fill(move_count / 200)
+        if piece_type == 0 or is_capture:
+            progress = 0
+        else:
+            progress = self.get_moves_without_progress() + 1
         self.state[18].fill(progress / 100)
-        self.state[12].fill(color)  # White's move leaves Black (0) to move.
+        self.state[12] = 1 - self.state[12]
 
     def _is_safe_move(self, from_pos, to_pos):
         probe = self.copy()

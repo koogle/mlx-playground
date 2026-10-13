@@ -68,6 +68,8 @@ class Trainer:
             self.start_epoch = 0
             self.optimizer = optim.Adam(learning_rate=config.learning_rate)
 
+        self._loss_and_grad = nn.value_and_grad(self.model, self._loss_fn)
+
     def train(self, n_epochs: Optional[int] = None, n_workers: int = 8):
         """Main training loop with parallel game generation"""
         n_epochs = n_epochs or self.config.n_epochs
@@ -161,37 +163,20 @@ class Trainer:
             self.logger.info(f"Final checkpoint saved at epoch {epoch + 1}")
             raise
 
-    def _compute_gradients(self, batch):
-        """Reuse autodiff without compiling a graph for every final batch size."""
-        self.model.train()
-        if getattr(self, "_gradient_model", None) is not self.model:
-            model = self.model
-
-            def loss_fn(states, policies, values):
-                policy_logits, pred_values = model.forward_logits(states)
-                p_loss = mx_losses.cross_entropy(
-                    logits=policy_logits, targets=policies, reduction="mean"
-                )
-                v_loss = mx_losses.mse_loss(
-                    predictions=pred_values.reshape(-1),
-                    targets=values,
-                    reduction="mean",
-                )
-                l2_loss = sum(
-                    1e-6 * mx.sum(mx.square(parameter))
-                    for _, parameter in tree_flatten(model.trainable_parameters())
-                    if len(parameter.shape) > 1
-                )
-                return p_loss + v_loss + l2_loss, (p_loss, v_loss, l2_loss)
-
-            # Fresh generations have different unpadded tail sizes. Compiling
-            # this entire gradient graph specializes each size and caused tens
-            # of seconds of CUDA compilation per tail in measured self-play.
-            # Autodiff still runs on the selected MLX device and updates BN
-            # statistics, while differentiating only trainable parameters.
-            self._loss_and_grad = nn.value_and_grad(model, loss_fn)
-            self._gradient_model = model
-        return self._loss_and_grad(*batch)
+    def _loss_fn(self, states, policies, values):
+        policy_logits, pred_values = self.model.forward_logits(states)
+        p_loss = mx_losses.cross_entropy(
+            logits=policy_logits, targets=policies, reduction="mean"
+        )
+        v_loss = mx_losses.mse_loss(
+            predictions=pred_values.reshape(-1), targets=values, reduction="mean"
+        )
+        l2_loss = sum(
+            1e-6 * mx.sum(mx.square(parameter))
+            for _, parameter in tree_flatten(self.model.trainable_parameters())
+            if len(parameter.shape) > 1
+        )
+        return p_loss + v_loss + l2_loss, (p_loss, v_loss, l2_loss)
 
     def train_on_batches(self, batches):
         """Average gradients over fresh positions and apply exactly one update.
@@ -199,6 +184,7 @@ class Trainer:
         Learned parameters remain fixed across microbatches. BatchNorm still uses
         each microbatch's statistics; this does not emulate one giant BN batch.
         """
+        self.model.train()
         accumulated = None
         weighted_losses = mx.zeros(4)
         n_positions = 0
@@ -209,7 +195,7 @@ class Trainer:
                 batch_size = len(batch[0])
                 if batch_size == 0:
                     continue
-                (loss, components), grads = self._compute_gradients(batch)
+                (loss, components), grads = self._loss_and_grad(*batch)
                 if accumulated is None:
                     accumulated = tree_map(lambda g: g * batch_size, grads)
                 else:

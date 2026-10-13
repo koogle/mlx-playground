@@ -306,12 +306,17 @@ class MCTS:
         # Sample move based on visit count distribution
         return moves[np.random.choice(len(moves), p=probs)]
 
-    def backup(self, search_path: List[Node], value: float):
-        """Back up a leaf-side-to-move value, changing perspective at each edge."""
-        for node in reversed(search_path):
+    def backup(self, search_path: List[Node], value: float, value_player: int):
+        """Accumulate value in each node's side-to-move perspective.
+
+        value_player identifies whose outcome value estimates (0=White, 1=Black).
+        """
+        for node in search_path:
+            node_value = (
+                value if node.board.get_current_turn() == value_player else -value
+            )
             node.visit_count += 1
-            node.value_sum += value
-            value = -value
+            node.value_sum += node_value
 
     def _get_all_valid_moves(
         self, board: BitBoard
@@ -406,7 +411,9 @@ class MCTS:
                 nodes_to_expand, policies, values, paths
             ):
                 self._expand_node(node, policy, value.item())
-                self.backup(path, value.item())
+                self.backup(
+                    path, value.item(), value_player=node.board.get_current_turn()
+                )
 
         # Always backup values for all paths
         for path in paths_buffer[:batch_size]:
@@ -418,10 +425,16 @@ class MCTS:
                 # Terminal state - use game result
                 value = leaf_node.board.get_game_result()
                 if value is not None:
-                    self.backup(path, value)
+                    self.backup(
+                        path, value, value_player=leaf_node.board.get_current_turn()
+                    )
             elif leaf_node.is_expanded:
                 # Expanded node - use current value estimate
-                self.backup(path, leaf_node.value())
+                self.backup(
+                    path,
+                    leaf_node.value(),
+                    value_player=leaf_node.board.get_current_turn(),
+                )
 
     def should_stop(self, root: Node) -> bool:
         """More conservative early stopping"""

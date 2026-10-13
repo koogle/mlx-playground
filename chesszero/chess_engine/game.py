@@ -85,25 +85,13 @@ class ChessGame:
         self, from_pos: Tuple[int, int], to_pos: Tuple[int, int], move_str: str
     ) -> bool:
         """Make a move using board coordinates"""
-        # Track moves without captures or pawn moves for 50/75 move rule
-        piece = self.board.get_piece_at(*from_pos)
-        target = self.board.get_piece_at(*to_pos)
-
-        # Check for pawn
-        if piece[1] == 0 or target[0] != -1:
-            self.moves_without_progress = 0
-        else:
-            self.moves_without_progress += 1
-
-        # Make the move
         if self.board.make_move(from_pos, to_pos):
             self.move_history.append(move_str)
             return True
         return False
 
     def can_claim_draw(self) -> bool:
-        """Check if a player can claim a draw (50-move rule)"""
-        return self.moves_without_progress >= 50
+        return self.board.can_claim_draw()
 
     def __str__(self):
         return str(self.board)

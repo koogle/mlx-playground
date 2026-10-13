@@ -15,7 +15,7 @@ class ModelConfig:
     n_residual_blocks: int = 19
     n_filters: int = 256
     input_shape: tuple = (8, 8, 19)  # Board size + input planes (19 channels)
-    policy_output_dim: int = 4672  # All possible moves: 8x8x73
+    policy_output_dim: int = 4672  # From/to moves + reserved underpromotion outputs
 
     # MCTS
     n_simulations: int = 1600  # Fewer but higher quality simulations
@@ -26,7 +26,7 @@ class ModelConfig:
     # Training
     batch_size: int = 1024  # 2048
     n_epochs: int = 1000
-    learning_rate: float = 0.2
+    learning_rate: float = 1e-3  # Conservative starting rate for Adam
 
     # Self-play
     n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals

@@ -13,8 +13,8 @@ from model.self_play import get_policy_distribution
 class TestPromotionEncoding(unittest.TestCase):
     def setUp(self):
         self.search = MCTS(None, ModelConfig())
-        MCTS._tree_cache.clear()
-        MCTS._transposition_table.clear()
+        for name in ("_tree_cache", "_transposition_table", "_all_moves_cache"):
+            getattr(MCTS, name, {}).clear()
 
     def test_all_underpromotions_have_unique_reserved_indices(self):
         reserved = set()

@@ -166,10 +166,11 @@ class Trainer:
 
     @staticmethod
     def _evaluation_score(wins, losses, draws):
+        """Fraction of all evaluation games won; draws contribute no credit."""
         total = wins + losses + draws
         if total <= 0:
             raise ValueError("Evaluation requires completed games")
-        return (wins + 0.5 * draws) / total
+        return wins / total
 
     def _loss_fn(self, states, policies, values):
         policy_logits, pred_values = self.model.forward_logits(states)

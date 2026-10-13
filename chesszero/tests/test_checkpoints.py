@@ -96,9 +96,10 @@ class TestCheckpoints(unittest.TestCase):
         )
         self.trainer(resume_epoch=1)
 
-    def test_draws_contribute_half_a_point(self):
-        self.assertEqual(Trainer._evaluation_score(0, 0, 40), 0.5)
-        self.assertEqual(Trainer._evaluation_score(1, 0, 39), 0.5125)
+    def test_draws_count_as_games_but_not_wins(self):
+        self.assertEqual(Trainer._evaluation_score(0, 0, 40), 0.0)
+        self.assertEqual(Trainer._evaluation_score(1, 0, 39), 0.025)
+        self.assertEqual(Trainer._evaluation_score(6, 4, 10), 0.3)
         self.assertEqual(Trainer._evaluation_score(24, 16, 0), 0.6)
         with self.assertRaises(ValueError):
             Trainer._evaluation_score(0, 0, 0)

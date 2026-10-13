@@ -12,7 +12,6 @@ from tempfile import TemporaryDirectory
 import threading
 from typing import TYPE_CHECKING
 
-import mlx.core as mx
 import numpy as np
 from cachetools import LRUCache
 from config.model_config import ModelConfig
@@ -27,11 +26,11 @@ class InferenceClient:
     def __init__(self, rpc, reference=False):
         self.rpc, self.reference = rpc, reference
 
-    def __call__(self, states: mx.array) -> tuple[mx.array, mx.array]:
+    def __call__(self, states: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         position = np.asarray(states[0], dtype=np.float32)
         predict = self.rpc.predict_reference if self.reference else self.rpc.predict
         policy, value = predict(position)
-        return mx.array(policy), mx.array(value)
+        return policy, value
 
     def close(self):
         # The manager owns the backend; releasing a client must not close it.
@@ -42,7 +41,10 @@ class _InferenceBackend:
     """The manager constructs this object inside its dedicated GPU process."""
 
     def __init__(self, config, current_path, reference_path, device):
+        import mlx.core as mx
         from model.network import ChessNet
+
+        self.mx = mx
 
         self.device = mx.gpu if device == "gpu" else mx.cpu
         mx.set_default_device(self.device)
@@ -75,6 +77,7 @@ class _InferenceBackend:
         return response.result()
 
     def _predict(self, batch):
+        mx = self.mx
         # Keys describe the exact network input under a fixed weight snapshot.
         # Rules/history and root exploration noise never enter this cache.
         pending, predictions = {}, {}
@@ -106,6 +109,7 @@ class _InferenceBackend:
             response.set_result(predictions[key])
 
     def _serve(self):
+        mx = self.mx
         mx.set_default_device(self.device)
         while True:
             first = self.requests.get()  # Block only when the queue has no work.
@@ -164,6 +168,8 @@ class BatchedInference:
     """
 
     def __init__(self, model: ChessNet, config: ModelConfig, reference_model=None):
+        import mlx.core as mx
+
         if config.inference_batch_size < 1:
             raise ValueError("Inference batch size must be positive")
         self.model, self.config, self.reference_model = model, config, reference_model

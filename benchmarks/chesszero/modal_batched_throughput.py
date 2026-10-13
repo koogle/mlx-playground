@@ -31,13 +31,16 @@ image = (
     )
 )
 volume = modal.Volume.from_name("chesszero-convergence")
-app = modal.App("chesszero-batched-throughput")
+app = modal.App("chesszero-rpc-throughput-numpy")
 
 
 def experiment(label, run_id, workers):
+    import psutil
+
     out = Path("/results") / run_id / label
     out.mkdir(parents=True, exist_ok=False)
     samples = []
+    observed_processes = {}
     start = time.monotonic()
     with (out / "run.log").open("w") as log:
         process = subprocess.Popen(
@@ -57,6 +60,10 @@ def experiment(label, run_id, workers):
                 text=True,
             ).strip()
             sample = {"seconds": time.monotonic() - start, "gpu": gpu}
+            sample["gpu_processes"] = subprocess.check_output(
+                ["nvidia-smi", "--query-compute-apps=pid,used_gpu_memory", "--format=csv,noheader,nounits"],
+                text=True,
+            ).strip().splitlines()
             # Container cgroup memory includes the server and every CPU worker.
             memory_file = Path("/sys/fs/cgroup/memory.current")
             if memory_file.exists():
@@ -66,6 +73,18 @@ def experiment(label, run_id, workers):
                 sample["cpu_usage_usec"] = int(dict(
                     line.split() for line in cpu_file.read_text().splitlines()
                 )["usage_usec"])
+            for child in [psutil.Process(process.pid), *psutil.Process(process.pid).children(recursive=True)]:
+                observed_processes.setdefault(child.pid, child)
+            rss, cpu_percent = 0, 0.0
+            for child in observed_processes.values():
+                try:
+                    rss += child.memory_info().rss
+                    cpu_percent += child.cpu_percent()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            # RSS sums count shared pages more than once; retain this distinction.
+            sample["process_tree_rss_bytes"] = rss
+            sample["process_tree_cpu_cores"] = cpu_percent / 100
             samples.append(sample)
             (out / "gpu-samples.json").write_text(json.dumps(samples))
             volume.commit()

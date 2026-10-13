@@ -1,6 +1,5 @@
 import numpy as np
 from typing import List, Tuple, Set, Dict
-import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from cachetools import LRUCache
 from config.model_config import ModelConfig
@@ -317,7 +316,7 @@ class MCTS:
         """Reuse the network input tensor for a physical position."""
         key = self._board_key(board)
         if key not in self._board_state_cache:
-            self._board_state_cache[key] = mx.array(board.state, dtype=mx.float32)[
+            self._board_state_cache[key] = np.array(board.state, dtype=np.float32)[
                 None, ...
             ]
         return self._board_state_cache[key]
@@ -340,7 +339,6 @@ class MCTS:
         if key in self._evaluation_cache:
             return self._evaluation_cache[key]
         policies, values = self.model(self._get_board_state(board))
-        mx.eval(policies, values)
         policy = np.array(policies[0])
         policy.flags.writeable = False
         result = policy, float(values[0].item())

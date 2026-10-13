@@ -5,7 +5,6 @@ from config.model_config import ModelConfig
 from model.mcts import MCTS, GameSearchCache
 from model.move_encoding import encode_move
 from typing import List, Tuple, TYPE_CHECKING
-import mlx.core as mx
 from tqdm import tqdm
 import logging
 from multiprocessing.connection import Connection
@@ -25,7 +24,6 @@ def play_single_game(
     max_workers: int,
 ):
     """Worker process that plays a single complete game"""
-    mx.set_default_device(mx.cpu)
     logger = logging.getLogger(__name__)
     game_cache = GameSearchCache(model)
     try:
@@ -52,7 +50,7 @@ def play_single_game(
                 raise RuntimeError("Search returned no move for an ongoing game")
 
             policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
-            state = mx.array(game.board.state, dtype=mx.float32)
+            state = np.array(game.board.state, dtype=np.float32)
             game_history.append((state, policy, None))
             if not game.make_move(move[0], move[1]):
                 raise RuntimeError("Search returned an illegal move")
@@ -121,6 +119,8 @@ def create_batches(games, batch_size: int):
             Value targets are converted to the side-to-move perspective of each state.
         batch_size: Size of training batches
     """
+    import mlx.core as mx
+
     print(
         f"Creating batches from {len(games)} game instances with batch_size {batch_size}"
     )
@@ -170,8 +170,8 @@ def get_policy_distribution(root_node, policy_output_dim: int):
 
     policy = policy / np.sum(policy) if np.sum(policy) > 0 else policy
 
-    return mx.array(policy)
+    return policy
 
 
-def encode_board(board: BitBoard) -> mx.array:
-    return mx.array(board.state, dtype=mx.float32)
+def encode_board(board: BitBoard) -> np.ndarray:
+    return np.array(board.state, dtype=np.float32)

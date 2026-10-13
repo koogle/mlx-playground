@@ -1,0 +1,50 @@
+[
+  {
+    "games": 2,
+    "positions": 1003,
+    "adam_updates": 1,
+    "losses": [
+      8.451798439025879,
+      8.449813842773438,
+      0.00021889196068514138,
+      0.0017662496538832784
+    ],
+    "evaluation": [
+      0.0,
+      0,
+      0,
+      2
+    ],
+    "elapsed_seconds": 76.53,
+    "source_revision": "651efcd",
+    "network": {
+      "residual_blocks": 0,
+      "filters": 4
+    },
+    "purpose": "CPU subprocess/data-flow smoke; not a convergence or throughput benchmark"
+  },
+  {
+    "games": 2,
+    "positions": 559,
+    "adam_updates": 1,
+    "losses": [
+      8.450597763061523,
+      8.448685646057129,
+      0.00016115607286337763,
+      0.0017520214896649122
+    ],
+    "evaluation": [
+      0.0,
+      0,
+      1,
+      1
+    ],
+    "elapsed_seconds": 55.64,
+    "source_revision": "947af86",
+    "network": {
+      "residual_blocks": 0,
+      "filters": 4
+    },
+    "purpose": "CPU subprocess/data-flow smoke; not a convergence or throughput benchmark"
+  }
+]

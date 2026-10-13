@@ -3,7 +3,6 @@
 from multiprocessing.connection import Connection
 import logging
 import traceback
-import mlx.core as mx
 from tqdm import tqdm
 from chess_engine.game import ChessGame
 from config.model_config import ModelConfig
@@ -22,7 +21,6 @@ def play_evaluation_game_worker(
 ):
     """Worker process that plays a single evaluation game and reports its result."""
     try:
-        mx.set_default_device(mx.cpu)
         game = ChessGame()
 
         pbar = tqdm(

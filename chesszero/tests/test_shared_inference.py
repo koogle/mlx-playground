@@ -1,17 +1,19 @@
 import multiprocessing as mp
 import os
+import sys
 import unittest
 
-import mlx.core as mx
 import numpy as np
 
 from config.model_config import ModelConfig
 from model.game_workers import run_game_workers
 from model.inference import BatchedInference, InferenceClient
-from model.network import ChessNet
 
 
 def small_model(bias=0):
+    import mlx.core as mx
+    from model.network import ChessNet
+
     config = ModelConfig(
         n_residual_blocks=0, n_filters=2, policy_output_dim=4, inference_batch_size=2
     )
@@ -23,13 +25,14 @@ def small_model(bias=0):
 
 
 def prediction_worker(client, index, barrier, sender, max_workers):
-    mx.set_default_device(mx.cpu)
+    assert "mlx.core" not in sys.modules
     assert isinstance(client, InferenceClient)
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == ""
     if barrier is not None:
         barrier.wait(timeout=10)
     try:
-        policy, _ = client(mx.full((1, 19, 8, 8), index))
-        sender.send((np.array(policy), str(mx.default_device())))
+        policy, _ = client(np.full((1, 19, 8, 8), index, dtype=np.float32))
+        sender.send((np.array(policy), "cpu"))
     finally:
         client.close()
 
@@ -61,7 +64,7 @@ class TestSharedInference(unittest.TestCase):
                 client = service.client()
                 try:
                     with self.assertRaises(RuntimeError):
-                        client(mx.zeros((1, 1)))  # Invalid chess input fails remotely.
+                        client(np.zeros((1, 1), dtype=np.float32))  # Invalid chess input fails remotely.
                 finally:
                     client.close()
 
@@ -71,9 +74,9 @@ class TestSharedInference(unittest.TestCase):
         with BatchedInference(current, config, reference_model=reference) as service:
             a, b = service.client(), service.reference_client()
             try:
-                state = mx.ones((1, 19, 8, 8))
+                state = np.ones((1, 19, 8, 8), dtype=np.float32)
                 np.testing.assert_allclose(a(state)[0], [[0.25] * 4])
-                expected = np.array(mx.softmax(mx.array([[2.0, 0.0, 0.0, 0.0]])))
+                expected = np.exp([[2.0, 0.0, 0.0, 0.0]]) / (np.exp(2) + 3)
                 np.testing.assert_allclose(b(state)[0], expected, rtol=1e-6)
                 np.testing.assert_allclose(a(state)[0], [[0.25] * 4])
             finally:

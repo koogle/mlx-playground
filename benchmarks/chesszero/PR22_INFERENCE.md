@@ -1,5 +1,9 @@
 # Shared inference on L40S
 
+The process-based local-RPC implementation (`651efcd`) supersedes the thread-based version below. Fresh full-model trials at 16, 32, and 128 parallel games are in progress. These historical measurements do not validate the new architecture.
+
+## Historical thread-based implementation
+
 PR #22 (`07138c24a4aa630c9fb1b8002446751646eb4394`) was compared with merged main (`fa5539f`) on Modal L40S. Both used 32 CPU cores, sixteen game workers, the original 19-block / 256-filter network, generation-4 model/Adam state, sixteen fresh games, and 32 simulations per move. Per-game seeds were identical.
 
 | Measurement | Main | PR #22 |

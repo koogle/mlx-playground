@@ -6,8 +6,6 @@ import json
 import os
 import time
 import numpy as np
-import mlx.core as mx
-from mlx.utils import tree_flatten
 from config.model_config import ModelConfig
 from model.self_play import play_single_game, create_batches
 from model.game_workers import run_game_workers
@@ -15,9 +13,7 @@ from model.inference import BatchedInference
 
 
 def timed_game(model, config, game_id, directory, sender, max_workers):
-    mx.set_default_device(mx.cpu)
     np.random.seed(9000 + game_id)
-    mx.random.seed(9000 + game_id)
     start = time.monotonic()
     play_single_game(model, config, game_id, sender, max_workers)
     (Path(directory) / f"game-{game_id}.json").write_text(
@@ -26,6 +22,9 @@ def timed_game(model, config, game_id, directory, sender, max_workers):
 
 
 def main():
+    import mlx.core as mx
+    from mlx.utils import tree_flatten
+
     from model.training import Trainer
 
     mx.set_default_device(mx.gpu)

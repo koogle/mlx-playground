@@ -11,8 +11,9 @@
   "training_seconds": 39600,
   "limit_seconds": 42900,
   "eval_every": 10,
-  "paused": false,
+  "paused": true,
   "function_call_id": "fc-01M4VHZBF7CJMQ2Q3H17M4MT15",
   "simulations": 128,
-  "supersedes": "learning-16-20261013-211356"
+  "supersedes": "learning-16-20261013-211356",
+  "reason": "User requested focus on PRs and authorized stopping in-flight runs"
 }

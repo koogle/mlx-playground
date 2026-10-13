@@ -1,0 +1,11 @@
+{
+  "run_id": "batched-22-20261013-212955",
+  "pr": 22,
+  "source_revision": "07138c2",
+  "gpu": "L40S",
+  "workers": 16,
+  "cpu": 32,
+  "simulations": 32,
+  "baseline_run": "throughput-16-20261013-210810/L40S",
+  "function_call_id": "fc-01M4VJR2JNYHDBCFRKWFQRKAB6"
+}

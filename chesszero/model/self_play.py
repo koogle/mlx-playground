@@ -9,8 +9,7 @@ from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
 import logging
-import multiprocessing as mp
-from queue import Empty
+from model.game_workers import GameResultSender, run_game_workers
 import traceback
 
 
@@ -18,7 +17,7 @@ def play_single_game(
     model: ChessNet,
     config: ModelConfig,
     game_id: int,
-    result_queue: mp.Queue,
+    result_queue: GameResultSender,
     max_workers: int,
 ):
     """Worker process that plays a single complete game"""
@@ -39,14 +38,20 @@ def play_single_game(
 
         while not game.board.is_game_over():
             mcts = MCTS(model, config, cache=game_cache)
-            move = mcts.get_move(game.board, temperature=1.0)
-            if not move:
-                break
+            temperature = (
+                config.temperature
+                if len(game_history) < config.temp_decay_steps
+                else config.temp_final
+            )
+            move = mcts.get_move(game.board, temperature=temperature)
+            if move is None:
+                raise RuntimeError("Search returned no move for an ongoing game")
 
             policy = get_policy_distribution(mcts.root_node, config.policy_output_dim)
             state = mx.array(game.board.state, dtype=mx.float32)
             game_history.append((state, policy, None))
-            game.make_move(move[0], move[1])
+            if not game.make_move(move[0], move[1]):
+                raise RuntimeError("Search returned an illegal move")
 
             pbar.update(1)
 
@@ -54,7 +59,7 @@ def play_single_game(
 
         white_result = game.board.get_game_result(perspective_color=0)
         if white_result is None:
-            white_result = 0.0
+            raise RuntimeError("Self-play ended without a terminal result")
         if white_result == 0.0:
             black_result = 0.0
         else:
@@ -83,55 +88,21 @@ def generate_games(
     model: ChessNet, config: ModelConfig, max_workers: int = 8
 ) -> List[Tuple]:
     logger = logging.getLogger(__name__)
-    games_data = []
-    total_games_needed = config.n_games_per_iteration
-    games_completed = 0
-    game_id = 0
-
-    ctx = mp.get_context("spawn")
-    result_queue = ctx.Queue()
-
-    active_workers = []
-
-    try:
-        while games_completed < total_games_needed:
-            while len(active_workers) < max_workers and game_id < total_games_needed:
-                p = ctx.Process(
-                    target=play_single_game,
-                    args=(model, config, game_id, result_queue, max_workers),
-                )
-                p.start()
-                active_workers.append((p, game_id))
-                game_id += 1
-
-            try:
-                result = result_queue.get(timeout=1)
-                if result is not None:
-                    games_completed += 1
-
-                    # Store each game once, with its outcome from White's perspective.
-                    games_data.append((result["history"], result["white_result"]))
-
-                    logger.info(
-                        f"Game {result['game_id']} completed with {result['n_moves']} moves"
-                    )
-                    logger.info(
-                        f"White result: {result['white_result']}, Black result: {result['black_result']}"
-                    )
-                    logger.info(f"Final board:\n{result['final_board']}")
-
-            except Empty:
-                logger.debug("No results available in queue yet")
-
-            active_workers = [(p, gid) for p, gid in active_workers if p.is_alive()]
-
-    finally:
-        for p, _ in active_workers:
-            if p.is_alive():
-                p.terminate()
-                p.join()
-
-    return games_data
+    if config.n_games_per_iteration < 1:
+        raise ValueError("Games per iteration must be positive")
+    jobs = [(model, config, game_id) for game_id in range(config.n_games_per_iteration)]
+    results, failures = run_game_workers(play_single_game, jobs, max_workers)
+    logger.info("Self-play generation: %d completed, %d failed", len(results), failures)
+    if not results:
+        raise RuntimeError("All self-play games failed; no training update can be made")
+    for result in results:
+        logger.info(
+            "Game %d: %d moves, White result %s",
+            result["game_id"],
+            result["n_moves"],
+            result["white_result"],
+        )
+    return [(result["history"], result["white_result"]) for result in results]
 
 
 def create_batches(games, batch_size: int):

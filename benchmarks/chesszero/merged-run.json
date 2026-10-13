@@ -1,0 +1,15 @@
+{
+  "run_id": "learning-merged-20261013-205953",
+  "function_call_id": "fc-01M4VH13EDWZXBWGDKM3M9BQAY",
+  "source_revision": "fa5539ff01d5dc8e2a0d43820c0f4a0f00b57fb3",
+  "deployment": "https://modal.com/apps/radiantai/main/deployed/chesszero-convergence",
+  "target_updates": 500,
+  "games_per_update": 12,
+  "workers": 8,
+  "gpu": "L40S",
+  "hard_timeout_seconds": 43200,
+  "paused": false,
+  "resume_manifest": "learning-parallel-20261013-164630/checkpoints/state_epoch_3.json",
+  "pipeline": false,
+  "failed_launch": "learning-merged-20261013-205847"
+}

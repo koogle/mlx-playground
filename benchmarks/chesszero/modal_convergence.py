@@ -19,6 +19,7 @@ image = (
         "psutil==7.0.0",
         "tqdm==4.67.1",
         "python-chess==1.999",
+        "cachetools==7.2.1",
     )
     .add_local_dir(export / "candidate", "/opt/chesszero", copy=True)
 )
@@ -75,7 +76,6 @@ def run(
         "8",
         "--simulations",
         "32",
-        "--pipeline",
     ]
     if resume_run:
         command.extend(

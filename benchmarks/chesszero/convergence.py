@@ -306,7 +306,9 @@ def main():
         source_dir = args.resume_run / "checkpoints"
         manifest_name = f"state_epoch_{args.resume_generation}.json"
         manifest = json.loads((source_dir / manifest_name).read_text())
-        shutil.copy2(source_dir / manifest_name, checkpoint_dir / manifest_name)
+        # Older experimental runs stored a removed MCTS tuning option.
+        manifest["config"].pop("mcts_batch_size", None)
+        write_json(checkpoint_dir / manifest_name, manifest)
         for key in (
             "model_file",
             "optimizer_file",

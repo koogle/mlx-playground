@@ -1,0 +1,99 @@
+[
+  {
+    "seconds": 0.03551471500000014,
+    "gpu": "7, 0",
+    "gpu_processes": [],
+    "process_tree_rss_bytes": 44941312,
+    "process_tree_cpu_cores": 0.0
+  },
+  {
+    "seconds": 16.589256714999998,
+    "gpu": "1848, 40",
+    "gpu_processes": [
+      "1, 1574",
+      "1, 1574"
+    ],
+    "process_tree_rss_bytes": 10815217664,
+    "process_tree_cpu_cores": 0.376
+  },
+  {
+    "seconds": 33.223601171000006,
+    "gpu": "2040, 48",
+    "gpu_processes": [
+      "1, 1766",
+      "1, 1766"
+    ],
+    "process_tree_rss_bytes": 11761344512,
+    "process_tree_cpu_cores": 3.789
+  },
+  {
+    "seconds": 50.000747446000005,
+    "gpu": "2072, 45",
+    "gpu_processes": [
+      "1, 1798",
+      "1, 1798"
+    ],
+    "process_tree_rss_bytes": 12178096128,
+    "process_tree_cpu_cores": 3.9279999999999995
+  },
+  {
+    "seconds": 66.60815255899999,
+    "gpu": "2104, 40",
+    "gpu_processes": [
+      "1, 1830",
+      "1, 1830"
+    ],
+    "process_tree_rss_bytes": 12363440128,
+    "process_tree_cpu_cores": 3.8390000000000004
+  },
+  {
+    "seconds": 83.15600682899999,
+    "gpu": "2136, 36",
+    "gpu_processes": [
+      "1, 1862",
+      "1, 1862"
+    ],
+    "process_tree_rss_bytes": 11134976000,
+    "process_tree_cpu_cores": 3.0239999999999996
+  },
+  {
+    "seconds": 99.944631092,
+    "gpu": "2200, 37",
+    "gpu_processes": [
+      "1, 1926",
+      "1, 1926"
+    ],
+    "process_tree_rss_bytes": 11117015040,
+    "process_tree_cpu_cores": 2.6740000000000004
+  },
+  {
+    "seconds": 116.581295871,
+    "gpu": "2200, 37",
+    "gpu_processes": [
+      "1, 1926",
+      "1, 1926"
+    ],
+    "process_tree_rss_bytes": 10893611008,
+    "process_tree_cpu_cores": 2.536
+  },
+  {
+    "seconds": 133.368299078,
+    "gpu": "2200, 34",
+    "gpu_processes": [
+      "1, 1926",
+      "1, 1926"
+    ],
+    "process_tree_rss_bytes": 10474860544,
+    "process_tree_cpu_cores": 2.39
+  },
+  {
+    "seconds": 149.74849120800002,
+    "gpu": "2200, 25",
+    "gpu_processes": [
+      "1, 1926",
+      "1, 1926"
+    ],
+    "process_tree_rss_bytes": 8926830592,
+    "process_tree_cpu_cores": 1.835
+  }
+]

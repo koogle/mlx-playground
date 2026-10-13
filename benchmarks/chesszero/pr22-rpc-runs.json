@@ -1,0 +1,38 @@
+[
+  {
+    "run_id": "final-rpc-22-16-20261013-221335",
+    "workers": 16,
+    "function_call_id": "fc-01M4VN81AA90HC2BEN6RDWQPED",
+    "source_revision": "96cb5f6",
+    "gpu": "L40S",
+    "cpu": 32,
+    "memory_mb": 65536
+  },
+  {
+    "run_id": "final-rpc-22-128-20261013-221335",
+    "workers": 128,
+    "function_call_id": "fc-01M4VN81FK8V4DBB7NZ31CZ7M1",
+    "source_revision": "96cb5f6",
+    "gpu": "L40S",
+    "cpu": 32,
+    "memory_mb": 65536
+  },
+  {
+    "run_id": "final-rpc-22-256-20261013-221335",
+    "workers": 256,
+    "function_call_id": "fc-01M4VN81NE0BWZTJYB2J6CM3K8",
+    "source_revision": "96cb5f6",
+    "gpu": "L40S",
+    "cpu": 32,
+    "memory_mb": 65536
+  },
+  {
+    "run_id": "final-rpc-22-64-20261013-221728",
+    "workers": 64,
+    "function_call_id": "fc-01M4VNF4V385WFCCKG1M8ZM5RK",
+    "source_revision": "96cb5f6",
+    "gpu": "L40S",
+    "cpu": 32,
+    "memory_mb": 65536
+  }
+]

@@ -1,0 +1,447 @@
+[
+  {
+    "seconds": 0.03260179799999996,
+    "gpu": "3, 0",
+    "gpu_processes": [],
+    "process_tree_rss_bytes": 40726528,
+    "process_tree_cpu_cores": 0.0
+  },
+  {
+    "seconds": 16.981147101,
+    "gpu": "1256, 0",
+    "gpu_processes": [
+      "1, 1114",
+      "1, 1114"
+    ],
+    "process_tree_rss_bytes": 28027293696,
+    "process_tree_cpu_cores": 0.446
+  },
+  {
+    "seconds": 33.96865828,
+    "gpu": "1556, 21",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 38303404032,
+    "process_tree_cpu_cores": 3.579999999999997
+  },
+  {
+    "seconds": 50.811410650999996,
+    "gpu": "1556, 32",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 43803557888,
+    "process_tree_cpu_cores": 6.278000000000007
+  },
+  {
+    "seconds": 67.627021681,
+    "gpu": "1556, 34",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 49935237120,
+    "process_tree_cpu_cores": 5.986000000000001
+  },
+  {
+    "seconds": 84.585365501,
+    "gpu": "1556, 28",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 55972773888,
+    "process_tree_cpu_cores": 5.476
+  },
+  {
+    "seconds": 101.143215826,
+    "gpu": "1556, 26",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 61324394496,
+    "process_tree_cpu_cores": 5.788999999999998
+  },
+  {
+    "seconds": 117.986688965,
+    "gpu": "1556, 29",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 64461012992,
+    "process_tree_cpu_cores": 5.525
+  },
+  {
+    "seconds": 134.534441549,
+    "gpu": "1556, 25",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 66869129216,
+    "process_tree_cpu_cores": 5.697000000000002
+  },
+  {
+    "seconds": 151.225078557,
+    "gpu": "1556, 29",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 67875880960,
+    "process_tree_cpu_cores": 6.282999999999996
+  },
+  {
+    "seconds": 168.225110956,
+    "gpu": "1556, 24",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 69868441600,
+    "process_tree_cpu_cores": 6.334999999999999
+  },
+  {
+    "seconds": 185.527413693,
+    "gpu": "1556, 25",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 72019611648,
+    "process_tree_cpu_cores": 6.613999999999999
+  },
+  {
+    "seconds": 202.231570274,
+    "gpu": "1556, 28",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 74347823104,
+    "process_tree_cpu_cores": 6.362000000000003
+  },
+  {
+    "seconds": 218.823879765,
+    "gpu": "1556, 31",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 76745580544,
+    "process_tree_cpu_cores": 6.6910000000000025
+  },
+  {
+    "seconds": 235.569877212,
+    "gpu": "1556, 30",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 78909476864,
+    "process_tree_cpu_cores": 6.5850000000000035
+  },
+  {
+    "seconds": 253.070340515,
+    "gpu": "1556, 31",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 81453998080,
+    "process_tree_cpu_cores": 7.268000000000002
+  },
+  {
+    "seconds": 269.68603777500005,
+    "gpu": "1556, 32",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 82822451200,
+    "process_tree_cpu_cores": 6.953000000000004
+  },
+  {
+    "seconds": 287.063142049,
+    "gpu": "1556, 30",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 83120021504,
+    "process_tree_cpu_cores": 7.259000000000004
+  },
+  {
+    "seconds": 303.852623836,
+    "gpu": "1556, 25",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 85152546816,
+    "process_tree_cpu_cores": 7.586999999999998
+  },
+  {
+    "seconds": 320.63473556800005,
+    "gpu": "1556, 31",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 84355702784,
+    "process_tree_cpu_cores": 7.6199999999999966
+  },
+  {
+    "seconds": 337.569978557,
+    "gpu": "1556, 28",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 83957440512,
+    "process_tree_cpu_cores": 6.848000000000006
+  },
+  {
+    "seconds": 354.22974268300004,
+    "gpu": "1556, 21",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 83759636480,
+    "process_tree_cpu_cores": 7.382999999999997
+  },
+  {
+    "seconds": 371.032769384,
+    "gpu": "1556, 29",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 84790087680,
+    "process_tree_cpu_cores": 7.436999999999996
+  },
+  {
+    "seconds": 387.776807087,
+    "gpu": "1556, 26",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 83349032960,
+    "process_tree_cpu_cores": 7.230999999999995
+  },
+  {
+    "seconds": 404.519660869,
+    "gpu": "1556, 34",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 84567814144,
+    "process_tree_cpu_cores": 6.579999999999996
+  },
+  {
+    "seconds": 421.63248049400005,
+    "gpu": "1556, 30",
+    "gpu_processes": [
+      "1, 1414",
+      "1, 1414"
+    ],
+    "process_tree_rss_bytes": 80790626304,
+    "process_tree_cpu_cores": 7.136999999999995
+  },
+  {
+    "seconds": 439.265318428,
+    "gpu": "1684, 29",
+    "gpu_processes": [
+      "1, 1542",
+      "1, 1542"
+    ],
+    "process_tree_rss_bytes": 78248239104,
+    "process_tree_cpu_cores": 7.938000000000004
+  },
+  {
+    "seconds": 456.4139736,
+    "gpu": "3092, 31",
+    "gpu_processes": [
+      "1, 2822",
+      "1, 2822"
+    ],
+    "process_tree_rss_bytes": 75905085440,
+    "process_tree_cpu_cores": 7.010999999999998
+  },
+  {
+    "seconds": 473.255333162,
+    "gpu": "4404, 10",
+    "gpu_processes": [
+      "1, 4134",
+      "1, 4134"
+    ],
+    "process_tree_rss_bytes": 72509235200,
+    "process_tree_cpu_cores": 6.577000000000002
+  },
+  {
+    "seconds": 490.11335587300005,
+    "gpu": "5684, 33",
+    "gpu_processes": [
+      "1, 5414",
+      "1, 5414"
+    ],
+    "process_tree_rss_bytes": 67491532800,
+    "process_tree_cpu_cores": 5.992999999999999
+  },
+  {
+    "seconds": 507.22905038000005,
+    "gpu": "6388, 32",
+    "gpu_processes": [
+      "1, 6118",
+      "1, 6118"
+    ],
+    "process_tree_rss_bytes": 65907879936,
+    "process_tree_cpu_cores": 5.965999999999997
+  },
+  {
+    "seconds": 523.942006088,
+    "gpu": "7796, 34",
+    "gpu_processes": [
+      "1, 7526",
+      "1, 7526"
+    ],
+    "process_tree_rss_bytes": 61842219008,
+    "process_tree_cpu_cores": 5.4239999999999995
+  },
+  {
+    "seconds": 540.86595306,
+    "gpu": "8020, 33",
+    "gpu_processes": [
+      "1, 7750",
+      "1, 7750"
+    ],
+    "process_tree_rss_bytes": 60273790976,
+    "process_tree_cpu_cores": 6.189999999999998
+  },
+  {
+    "seconds": 557.382415047,
+    "gpu": "8308, 39",
+    "gpu_processes": [
+      "1, 8038",
+      "1, 8038"
+    ],
+    "process_tree_rss_bytes": 59844730880,
+    "process_tree_cpu_cores": 6.065999999999999
+  },
+  {
+    "seconds": 573.908652262,
+    "gpu": "8308, 38",
+    "gpu_processes": [
+      "1, 8038",
+      "1, 8038"
+    ],
+    "process_tree_rss_bytes": 58977484800,
+    "process_tree_cpu_cores": 5.356
+  },
+  {
+    "seconds": 590.643626268,
+    "gpu": "8500, 32",
+    "gpu_processes": [
+      "1, 8230",
+      "1, 8230"
+    ],
+    "process_tree_rss_bytes": 58197712896,
+    "process_tree_cpu_cores": 5.820000000000001
+  },
+  {
+    "seconds": 607.678529922,
+    "gpu": "8500, 36",
+    "gpu_processes": [
+      "1, 8230",
+      "1, 8230"
+    ],
+    "process_tree_rss_bytes": 55348801536,
+    "process_tree_cpu_cores": 5.164999999999999
+  },
+  {
+    "seconds": 624.256468251,
+    "gpu": "9972, 39",
+    "gpu_processes": [
+      "1, 9702",
+      "1, 9702"
+    ],
+    "process_tree_rss_bytes": 43502612480,
+    "process_tree_cpu_cores": 4.784999999999999
+  },
+  {
+    "seconds": 641.355635114,
+    "gpu": "10388, 33",
+    "gpu_processes": [
+      "1, 10118",
+      "1, 10118"
+    ],
+    "process_tree_rss_bytes": 29400985600,
+    "process_tree_cpu_cores": 3.7680000000000002
+  },
+  {
+    "seconds": 658.185342871,
+    "gpu": "10580, 16",
+    "gpu_processes": [
+      "1, 10310",
+      "1, 10310"
+    ],
+    "process_tree_rss_bytes": 23642562560,
+    "process_tree_cpu_cores": 3.2999999999999994
+  },
+  {
+    "seconds": 675.614101179,
+    "gpu": "10932, 30",
+    "gpu_processes": [
+      "1, 10662",
+      "1, 10662"
+    ],
+    "process_tree_rss_bytes": 14486024192,
+    "process_tree_cpu_cores": 2.5879999999999996
+  },
+  {
+    "seconds": 692.220740165,
+    "gpu": "10932, 26",
+    "gpu_processes": [
+      "1, 10662",
+      "1, 10662"
+    ],
+    "process_tree_rss_bytes": 12465123328,
+    "process_tree_cpu_cores": 2.2960000000000003
+  },
+  {
+    "seconds": 709.514923761,
+    "gpu": "10932, 20",
+    "gpu_processes": [
+      "1, 10662",
+      "1, 10662"
+    ],
+    "process_tree_rss_bytes": 10336907264,
+    "process_tree_cpu_cores": 1.8940000000000001
+  },
+  {
+    "seconds": 726.139583832,
+    "gpu": "3801, 75",
+    "gpu_processes": [
+      "1, 3192"
+    ],
+    "process_tree_rss_bytes": 7588790272,
+    "process_tree_cpu_cores": 1.278
+  },
+  {
+    "seconds": 742.739834489,
+    "gpu": "4345, 67",
+    "gpu_processes": [
+      "1, 3224"
+    ],
+    "process_tree_rss_bytes": 7588790272,
+    "process_tree_cpu_cores": 1.591
+  }
+]

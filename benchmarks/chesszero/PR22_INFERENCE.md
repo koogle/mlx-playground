@@ -1,6 +1,27 @@
 # Shared inference on L40S
 
-The process-based local-RPC implementation (`651efcd`) supersedes the thread-based version below. Fresh full-model trials at 16, 32, and 128 parallel games are in progress. These historical measurements do not validate the new architecture.
+The final process-based RPC implementation in PR #22 (`96cb5f6f0e16c73adc2bafa51f945a7f51b75884`) was tested on Modal L40S with 32 CPU cores and 64 GB requested container RAM. All trials use the original 19-block / 256-filter / 32,601,345-parameter model, the same generation-4 checkpoint, seeds `9000 + game_id`, 32 simulations per move, and an inference batch cap of 64. Each trial generates a complete fresh generation and then performs exactly one accumulated Adam update; learning is a separate phase.
+
+CPU workers use NumPy only. MLX's CUDA build allocates GPU-managed memory even for its CPU arrays, so selecting `mx.cpu` was insufficient to eliminate worker CUDA contexts. The final worker modules import without MLX, receive no CUDA device visibility, and send plain NumPy data to a single model process through local manager RPC. Evaluation uses the same executor with current/accepted weight snapshots. PR #23's additional prediction cache and tree reuse are excluded from these GPU trials.
+
+| Parallel games | Positions | Self-play time | Games/min | Positions/s | Sampled GPU peak | Mean batch |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 16 | 2,734 | 151.81 s | 6.32 | 18.01 | 2.15 GiB | 3.92 |
+| 64 | 11,312 | 292.88 s | 13.11 | 38.62 | 7.43 GiB | 14.88 |
+| 128 | 24,018 | 473.00 s | 16.24 | 50.78 | 10.90 GiB | 25.38 |
+| 256 | 48,067 | 709.89 s | 21.64 | 67.71 | 10.68 GiB | 40.87 |
+
+All 464 games across the four trials completed without failures. Every trial completed one update from Adam step 4 to 5 with finite parameters. Common game-ID prefixes had identical game lengths, and the 16-game trial matched main's game lengths and losses exactly.
+
+At sixteen workers, main (`fa5539f`) took 231.97 seconds / 4.14 games per minute versus the final PR's 151.81 seconds / 6.32 games per minute: **52.8% higher throughput** and 34.6% shorter generation time. Sampled GPU peak fell from 10.79 to 2.15 GiB (80.1%). The 256-worker trial reached **21.64 games/minute**, 3.42 times the new 16-worker rate and 5.23 times main's recorded 16-worker rate. The latter comparison changes concurrency and is not an isolated code-change comparison.
+
+256 is the largest tested successful concurrency, not a measured hardware limit. It was fastest here; its rate was 33.3% above 128 workers for twice the workers. GPU memory remained below 11 GiB, while CPU memory grew substantially. Peak summed process RSS was 11.51 / 24.84 / 43.85 / 79.30 GiB for 16 / 64 / 128 / 256 workers. **These RSS sums double-count shared pages and are not physical container RAM measurements.** More games remain possible in principle, but increasing them does not by itself saturate GPU compute. Approximate mean sampled self-play GPU utilisation was 29–38%; profiling inference execution, RPC scheduling, and CPU search would identify the next throughput limit.
+
+Learning took 5.39 / 10.96 / 20.47 / 35.94 seconds respectively. These trials verify game generation, data transfer, gradient accumulation, and checkpoint publication. One generation at 32 simulations per move is not evidence of convergence or a measurement of the paused 128-simulation training configuration.
+
+Sampling occurred about every fifteen seconds and may miss brief memory peaks. Utilisation averages omit the first thirty seconds and use approximate phase boundaries; complete generations include startup and the tail of long games. Different generation sizes include additional seeded games, so positions/second helps compare differing game lengths. These are single trials per setting, not repeated confidence intervals.
+
+Raw results and sampling: `pr22-rpc-comparison.json`, `pr22-rpc-result-{16,64,128,256}.json`, `pr22-rpc-gpu-samples-{16,64,128,256}.json`, and `pr22-rpc-runs.json`. Reproduction uses `batched_gpu_throughput.py` and `modal_batched_throughput.py` with `CHESSZERO_EXPORT_DIR` pointing to an immutable archive of the recorded PR source. The harness commit is `312ef27`. All benchmark calls have ended; longer learning runs remain paused.
 
 ## Historical thread-based implementation
 

@@ -81,7 +81,6 @@ class MCTS:
         self.model = model
         self.config = config
         self.debug = config.debug
-        self.training = True
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
         self.root_node = None  # Initialize root_node
@@ -173,9 +172,9 @@ class MCTS:
         node.is_expanded = True
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-        # Don't switch to eval mode during training
-        if not self.training:
-            self.model.eval()
+        # Search predicts fixed-network targets; mode does not control autodiff.
+        was_training = self.model.training
+        self.model.eval()
 
         try:
             # Create root and do initial evaluation
@@ -204,9 +203,7 @@ class MCTS:
             return move
 
         finally:
-            # Restore training mode if we were training
-            if self.training:
-                self.model.train()
+            self.model.train(was_training)
 
     def _select_move_with_temperature(
         self, node: Node, temperature: float

@@ -24,6 +24,7 @@ def play_single_game(
     """Worker process that plays a single complete game"""
     logger = logging.getLogger(__name__)
     try:
+        model.eval()
         game = ChessGame()
         game_history = []
 

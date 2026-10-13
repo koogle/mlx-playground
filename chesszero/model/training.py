@@ -80,7 +80,7 @@ class Trainer:
                 epoch_start_time = time.time()
                 self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
                 self.logger.info(f"Generating games using {n_workers} workers...")
-                self.model.train()
+                self.model.eval()
 
                 games = generate_games(self.model, self.config, n_workers)
 
@@ -196,6 +196,7 @@ class Trainer:
 
     def train_on_batch(self, batch):
         """Train on a single batch of data with memory optimizations"""
+        self.model.train()
         states, policies, values = batch
 
         try:
@@ -277,6 +278,8 @@ class Trainer:
     ):
         """Worker process that plays a single evaluation game and collects training data"""
         try:
+            model.eval()
+            best_model.eval()
             game = ChessGame()
             game_history = []
 

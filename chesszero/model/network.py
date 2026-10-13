@@ -1,7 +1,7 @@
 import mlx.core as mx
 import mlx.nn as nn
 from config.model_config import ModelConfig
-from typing import Tuple
+from typing import Tuple, Optional
 from mlx.utils import tree_map_with_path, tree_flatten, tree_unflatten
 import json
 import os
@@ -189,15 +189,15 @@ class ChessNet(nn.Module):
 
     def save_checkpoint(
         self,
-        checkpoint_dir,
-        epoch,
-        optimizer_state=None,
-        interrupted=False,
-        best_model_win_rate=None,
-        best_model=None,
-        best_optimizer_state=None,
-        completed_epochs=None,
-    ):
+        checkpoint_dir: str | Path,
+        epoch: int,
+        optimizer_state: Optional[dict] = None,
+        interrupted: bool = False,
+        best_model_win_rate: Optional[float] = None,
+        best_model: Optional["ChessNet"] = None,
+        best_optimizer_state: Optional[dict] = None,
+        completed_epochs: Optional[int] = None,
+    ) -> None:
         """Publish a complete checkpoint manifest after all tensor files are saved."""
         checkpoint_dir = Path(checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -244,7 +244,9 @@ class ChessNet(nn.Module):
         os.replace(temporary, checkpoint_dir / f"state_{label}.json")
 
     @classmethod
-    def load_checkpoint(cls, checkpoint_dir, epoch, interrupted=False):
+    def load_checkpoint(
+        cls, checkpoint_dir: str | Path, epoch: int, interrupted: bool = False
+    ) -> Tuple["ChessNet", dict]:
         """Load the current checkpoint format with full model/Adam state."""
         directory = Path(checkpoint_dir)
         label = f"{'interrupted_' if interrupted else ''}epoch_{epoch}"

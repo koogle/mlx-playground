@@ -63,7 +63,7 @@ class TestInferenceMode(unittest.TestCase):
         game.get_current_turn.side_effect = [0, 1]
         return game
 
-    def checking_search(self, model, config):
+    def checking_search(self, model, config, **kwargs):
         self.assertFalse(model.training)
         search = Mock()
         search.get_move.return_value = ((0, 1), (2, 2))

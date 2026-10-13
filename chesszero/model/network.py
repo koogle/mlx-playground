@@ -2,8 +2,11 @@ import mlx.core as mx
 import mlx.nn as nn
 from config.model_config import ModelConfig
 from typing import Tuple, Optional
-from mlx.utils import tree_map_with_path
+from mlx.utils import tree_map_with_path, tree_flatten, tree_unflatten
 import json
+import os
+import uuid
+import warnings
 from pathlib import Path
 
 
@@ -185,69 +188,107 @@ class ChessNet(nn.Module):
 
     def save_checkpoint(
         self,
-        checkpoint_dir: str,
-        epoch: int,
+        checkpoint_dir,
+        epoch,
         optimizer_state=None,
         interrupted=False,
-        best_model_win_rate: Optional[float] = None,
+        best_model_win_rate=None,
+        best_model=None,
+        best_optimizer_state=None,
+        completed_epochs=None,
     ):
-        """Save model checkpoint and training state"""
+        """Publish a complete checkpoint manifest after all tensor files are saved."""
         checkpoint_dir = Path(checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        label = f"{'interrupted_' if interrupted else ''}epoch_{epoch}"
+        token = f"{label}_{uuid.uuid4().hex}"
 
-        # Save model parameters
-        if interrupted:
-            model_path = checkpoint_dir / f"model_interrupted_epoch_{epoch}.safetensors"
-        else:
-            model_path = checkpoint_dir / f"model_epoch_{epoch}.safetensors"
+        def save_model(model, name):
+            filename = f"{name}_{token}.safetensors"
+            model.save_weights(str(checkpoint_dir / filename))
+            return filename
 
-        # Save model weights
-        self.save_weights(str(model_path))
+        def save_optimizer(state, name):
+            if state is None:
+                return None
+            filename = f"{name}_{token}.safetensors"
+            tensors = {key: mx.array(value) for key, value in tree_flatten(state)}
+            mx.save_safetensors(str(checkpoint_dir / filename), tensors)
+            return filename
 
-        # Convert optimizer state arrays to regular Python lists for JSON serialization
-        if optimizer_state is not None:
-            optimizer_state = {
-                "step": int(optimizer_state["step"]),  # Convert uint64 to int
-                "learning_rate": float(
-                    optimizer_state["learning_rate"]
-                ),  # Convert to float
-            }
-
-        # Save training state
         state = {
+            "version": 2,
             "epoch": epoch,
-            "optimizer_state": optimizer_state,
+            "completed_epochs": (
+                epoch - int(interrupted)
+                if completed_epochs is None
+                else completed_epochs
+            ),
+            "interrupted": interrupted,
+            "model_file": save_model(self, "model"),
+            "optimizer_file": save_optimizer(optimizer_state, "optimizer"),
+            "best_model_file": save_model(best_model, "best")
+            if best_model is not None
+            else None,
+            "best_optimizer_file": save_optimizer(
+                best_optimizer_state, "best_optimizer"
+            ),
             "config": vars(self.config),
             "best_model_win_rate": best_model_win_rate,
         }
-        state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
-        with open(state_path, "w") as f:
-            json.dump(state, f)
+        # Unique tensor filenames keep an older manifest valid if saving fails.
+        temporary = checkpoint_dir / f"state_{token}.json.tmp"
+        with temporary.open("w") as handle:
+            json.dump(state, handle)
+        os.replace(temporary, checkpoint_dir / f"state_{label}.json")
 
     @classmethod
-    def load_checkpoint(
-        cls, checkpoint_dir: str, epoch: int
-    ) -> Tuple["ChessNet", dict]:
-        """Load model checkpoint and return model and training state"""
-        checkpoint_dir = Path(checkpoint_dir)
-
-        model_path = checkpoint_dir / f"model_epoch_{epoch}.safetensors"
-
-        state_path = checkpoint_dir / f"state_epoch_{epoch}.json"
-        with open(state_path) as f:
-            state = json.load(f)
-
-        if state["optimizer_state"] is not None:
-            state["optimizer_state"] = {
-                "step": mx.array(state["optimizer_state"]["step"], dtype=mx.uint64),
-                "learning_rate": mx.array(
-                    state["optimizer_state"]["learning_rate"], dtype=mx.float32
-                ),
-            }
-
-        # Recreate model with saved config
+    def load_checkpoint(cls, checkpoint_dir, epoch, interrupted=False):
+        """Load full model/Adam state; legacy partial Adam state is reset safely."""
+        directory = Path(checkpoint_dir)
+        label = f"{'interrupted_' if interrupted else ''}epoch_{epoch}"
+        with (directory / f"state_{label}.json").open() as handle:
+            state = json.load(handle)
         config = ModelConfig(**state["config"])
         model = cls(config)
-        model.load_weights(str(model_path))
+        model.load_weights(
+            str(directory / state.get("model_file", f"model_{label}.safetensors"))
+        )
 
+        def load_optimizer(filename):
+            return (
+                tree_unflatten(list(mx.load(str(directory / filename)).items()))
+                if filename
+                else None
+            )
+
+        if state.get("version", 1) >= 2:
+            state["optimizer_state"] = load_optimizer(state.get("optimizer_file"))
+            state["best_optimizer_state"] = load_optimizer(
+                state.get("best_optimizer_file")
+            )
+            state["best_model"] = None
+            if state.get("best_model_file"):
+                best = cls(config)
+                best.load_weights(str(directory / state["best_model_file"]))
+                state["best_model"] = best
+        else:
+            # Keeping the old step without its first/second moments corrupts Adam
+            # bias correction. Preserve LR, but restart the whole optimizer.
+            old_optimizer = state.get("optimizer_state") or {}
+            state["optimizer_learning_rate"] = old_optimizer.get(
+                "learning_rate", config.learning_rate
+            )
+            if old_optimizer:
+                warnings.warn(
+                    "Legacy checkpoint lacks Adam moments; restarting Adam at step zero."
+                )
+            state["optimizer_state"] = None
+            state["best_optimizer_state"] = None
+            state["completed_epochs"] = state["epoch"]
+            state["best_model"] = None
+            if state.get("best_model_win_rate") is not None:
+                best = cls(config)
+                best.load_weights(str(directory / f"model_{label}.safetensors"))
+                state["best_model"] = best
         return model, state

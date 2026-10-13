@@ -33,6 +33,7 @@ class Trainer:
         config: ModelConfig,
         checkpoint_dir: str = "checkpoints",
         resume_epoch: Optional[int] = None,
+        resume_interrupted: bool = False,
     ):
         self.config = config
         self.checkpoint_dir = Path(checkpoint_dir)
@@ -51,19 +52,25 @@ class Trainer:
 
         self.best_model = None
         self.best_model_win_rate = 0.0
+        self.best_optimizer_state = None
 
         if resume_epoch is not None:
             self.logger.info(f"Resuming from epoch {resume_epoch}")
-            self.model, state = ChessNet.load_checkpoint(checkpoint_dir, resume_epoch)
-            self.start_epoch = resume_epoch + 1
-            self.optimizer = optim.Adam(learning_rate=config.learning_rate)
-            if state.get("optimizer_state"):
-                self.optimizer.state.update(state["optimizer_state"])
-            if state.get("best_model_win_rate"):
-                self.best_model_win_rate = state.get("best_model_win_rate", 0.0)
-                self.best_model, _ = ChessNet.load_checkpoint(
-                    checkpoint_dir, resume_epoch
+            self.model, state = ChessNet.load_checkpoint(
+                checkpoint_dir, resume_epoch, interrupted=resume_interrupted
+            )
+            self.config = self.model.config
+            self.start_epoch = state["completed_epochs"]
+            self.optimizer = optim.Adam(
+                learning_rate=state.get(
+                    "optimizer_learning_rate", self.config.learning_rate
                 )
+            )
+            if state.get("optimizer_state") is not None:
+                self.optimizer.state = state["optimizer_state"]
+            self.best_model = state.get("best_model")
+            self.best_optimizer_state = state.get("best_optimizer_state")
+            self.best_model_win_rate = state.get("best_model_win_rate") or 0.0
         else:
             self.model = ChessNet(config)
             self.start_epoch = 0
@@ -77,7 +84,6 @@ class Trainer:
 
         try:
             for epoch in range(self.start_epoch, n_epochs):
-
                 epoch_start_time = time.time()
                 self.logger.info(f"Epoch {epoch + 1}/{n_epochs}")
                 self.logger.info(f"Generating games using {n_workers} workers...")
@@ -113,48 +119,19 @@ class Trainer:
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
 
-                    updated = False
                     result = self.evaluate_against_best()
-
                     if result is None:
-                        self.logger.info(
-                            "No best model yet, using current model as best"
-                        )
-                        self.best_model = ChessNet(self.config)
-                        self.best_model.load_weights(
-                            tree_flatten(self.model.parameters())
-                        )
-                        updated = True
+                        self._accept_current_model()
                     else:
-                        win_rate, wins, losses, draws, eval_games = result
-
-                        self.logger.info(f"Win rate vs best: {win_rate:.2%}")
+                        score, wins, losses, draws, eval_games = result
                         self.logger.info(
-                            f"Wins: {wins}, Losses: {losses}, Draws: {draws}"
+                            f"Evaluation score: {score:.2%}; W/D/L: {wins}/{draws}/{losses}"
                         )
-
-                        if win_rate > 0.55:
-                            self.logger.info("New model is better, updating best model")
-                            self.best_model.load_weights(
-                                tree_flatten(self.model.parameters())
-                            )
-                            self.best_model_win_rate = win_rate
-                            updated = True
+                        if score > 0.55:
+                            self._accept_current_model(score)
                         else:
-                            self.logger.info("Reverting to best model")
-                            self.model.load_weights(
-                                tree_flatten(self.best_model.parameters())
-                            )
-
-                    if updated:
-                        self.logger.info("Saving checkpoint...")
-                        self.model.save_checkpoint(
-                            self.checkpoint_dir,
-                            epoch + 1,
-                            optimizer_state=self.optimizer.state,
-                            best_model_win_rate=self.best_model_win_rate,
-                        )
-                        self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
+                            self._revert_to_best()
+                    self._save_checkpoint(epoch + 1)
 
             total_time = time.time() - start_time
             self.logger.info("\n=== Training Completed ===")
@@ -162,14 +139,42 @@ class Trainer:
 
         except KeyboardInterrupt:
             self.logger.info("\nTraining interrupted. Saving final checkpoint...")
-            self.model.save_checkpoint(
-                self.checkpoint_dir,
-                epoch + 1,
-                optimizer_state=self.optimizer.state,
-                interrupted=True,
-            )
-            self.logger.info(f"Final checkpoint saved at epoch {epoch + 1}")
+            self._save_checkpoint(epoch + 1, interrupted=True, completed_epochs=epoch)
             raise
+
+    def _accept_current_model(self, score=0.0):
+        self.best_model = ChessNet(self.config)
+        self.best_model.load_weights(tree_flatten(self.model.parameters()))
+        # Arrays are immutable; copy containers so future Adam updates cannot
+        # overwrite the accepted model's moments/step.
+        self.best_optimizer_state = tree_map(lambda x: x, self.optimizer.state)
+        self.best_model_win_rate = score
+
+    def _revert_to_best(self):
+        self.model.load_weights(tree_flatten(self.best_model.parameters()))
+        if self.best_optimizer_state is not None:
+            self.optimizer.state = tree_map(lambda x: x, self.best_optimizer_state)
+        else:
+            self.optimizer = optim.Adam(learning_rate=self.optimizer.learning_rate)
+
+    def _save_checkpoint(self, epoch, interrupted=False, completed_epochs=None):
+        self.model.save_checkpoint(
+            self.checkpoint_dir,
+            epoch,
+            optimizer_state=self.optimizer.state,
+            interrupted=interrupted,
+            best_model_win_rate=self.best_model_win_rate,
+            best_model=self.best_model,
+            best_optimizer_state=self.best_optimizer_state,
+            completed_epochs=completed_epochs,
+        )
+
+    @staticmethod
+    def _evaluation_score(wins, losses, draws):
+        total = wins + losses + draws
+        if total <= 0:
+            raise ValueError("Evaluation requires completed games")
+        return (wins + 0.5 * draws) / total
 
     def _compute_gradients(self, batch):
         """Reuse a compiled gradient function while explicitly tracking model state."""
@@ -183,7 +188,9 @@ class Trainer:
                     logits=policy_logits, targets=policies, reduction="mean"
                 )
                 v_loss = mx_losses.mse_loss(
-                    predictions=pred_values.reshape(-1), targets=values, reduction="mean"
+                    predictions=pred_values.reshape(-1),
+                    targets=values,
+                    reduction="mean",
                 )
                 l2_loss = sum(
                     1e-6 * mx.sum(mx.square(parameter))
@@ -290,11 +297,11 @@ class Trainer:
 
             while not game.board.is_game_over():
                 if game.get_current_turn() == player_color:
-                    mcts = MCTS(model, config)
+                    mcts = MCTS(model, config, exploration_noise=False)
                 else:
-                    mcts = MCTS(best_model, config)
+                    mcts = MCTS(best_model, config, exploration_noise=False)
 
-                move = mcts.get_move(game.board, temperature=1.0)
+                move = mcts.get_move(game.board, temperature=0.0)
                 if not move:
                     break
 
@@ -332,6 +339,11 @@ class Trainer:
 
         if self.best_model is None:
             return None
+
+        if n_games < 2 or n_games % 2 or max_workers < 1:
+            raise ValueError(
+                "Evaluation needs a positive worker count and an even n_games >= 2"
+            )
 
         wins = 0
         losses = 0
@@ -413,6 +425,6 @@ class Trainer:
                     p.join()
 
         total_games = wins + losses + draws
-        win_rate = wins / (total_games - draws) if (total_games - draws) > 0 else 0
+        win_rate = self._evaluation_score(wins, losses, draws)
 
         return win_rate, wins, losses, draws, evaluation_games_data

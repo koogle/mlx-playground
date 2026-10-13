@@ -9,7 +9,8 @@ from config.model_config import ModelConfig
 class Node:
     """Tree node storing state, prior probabilities, visit counts, and Q-values"""
 
-    def __init__(self, board: BitBoard, parent=None, prior=0.0):
+    def __init__(self, board: BitBoard, parent=None, prior=0.0, exploration_noise=True):
+        self.exploration_noise = parent.exploration_noise if parent else exploration_noise
         self.visit_count = 0
         self.value_sum = 0.0
         self.pending_visits = 0  # Temporary reservations, never policy-target visits
@@ -41,7 +42,7 @@ class Node:
             priors = np.array([child.prior for child in children])
 
             # Add less Dirichlet noise at root
-            if self.parent is None:
+            if self.parent is None and self.exploration_noise:
                 alpha = 0.15  # Reduced from 0.3
                 noise = np.random.dirichlet([alpha] * len(priors))
                 priors = (
@@ -73,9 +74,8 @@ class Node:
         ucb_scores = q_values + temperature * exploration
 
         # Reduced random noise
-        ucb_scores += np.random.normal(
-            0, 0.001, size=len(ucb_scores)
-        )  # Reduced from 0.01ex
+        if self.exploration_noise:
+            ucb_scores += np.random.normal(0, 0.001, size=len(ucb_scores))
 
         selected_idx = np.argmax(ucb_scores)
         return moves[selected_idx], children[selected_idx]
@@ -86,7 +86,8 @@ class MCTS:
     _all_moves_cache = LRUCache()
     _move_encoding_table = None  # Will be initialized in __init__
 
-    def __init__(self, model, config: ModelConfig):
+    def __init__(self, model, config: ModelConfig, exploration_noise=True):
+        self.exploration_noise = exploration_noise
         self.model = model
         self.config = config
         self.debug = config.debug
@@ -193,7 +194,7 @@ class MCTS:
 
         try:
             # Create root and do initial evaluation
-            self.root_node = Node(board)
+            self.root_node = Node(board, exploration_noise=self.exploration_noise)
             board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
             policies, values = self.model(board_state)
             self._expand_node(self.root_node, policies[0], values[0].item())

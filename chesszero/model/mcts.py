@@ -3,6 +3,7 @@ from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
+from model.move_encoding import MoveDestination, encode_move
 
 
 class Node:
@@ -104,7 +105,7 @@ class MCTS:
 
     def _init_move_encoding_table(
         self,
-    ) -> Dict[Tuple[Tuple[int, int], Tuple[int, int]], int]:
+    ) -> Dict[Tuple[Tuple[int, int], MoveDestination], int]:
         """Pre-compute move index for every possible (from_pos, to_pos) combination, including pawn promotions"""
         table = {}
         for from_row in range(8):
@@ -113,25 +114,23 @@ class MCTS:
                     for to_col in range(8):
                         from_pos = (from_row, from_col)
                         to_pos = (to_row, to_col)
-                        from_idx = from_row * 8 + from_col
-                        to_idx = to_row * 8 + to_col
-                        move_idx = from_idx * 64 + to_idx
-                        table[(from_pos, to_pos)] = move_idx
+                        table[(from_pos, to_pos)] = encode_move(from_pos, to_pos)
 
                         # Add promotion moves
-                        if (from_row == 6 and to_row == 7) or (  # White pawn promoting
-                            from_row == 1 and to_row == 0
-                        ):  # Black pawn promoting
+                        if (from_row, to_row) in ((6, 7), (1, 0)) and abs(
+                            from_col - to_col
+                        ) <= 1:
                             for promotion_piece in range(
                                 1, 5
                             ):  # Knight, Bishop, Rook, Queen
-                                table[(from_pos, (to_row, to_col, promotion_piece))] = (
-                                    move_idx
+                                promotion = (to_row, to_col, promotion_piece)
+                                table[(from_pos, promotion)] = encode_move(
+                                    from_pos, promotion
                                 )
 
         return table
 
-    def encode_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> int:
+    def encode_move(self, from_pos: Tuple[int, int], to_pos: MoveDestination) -> int:
         """Fast move encoding using lookup table"""
         return MCTS._move_encoding_table[(from_pos, to_pos)]
 

@@ -4,6 +4,7 @@ from chess_engine.bitboard import BitBoard
 from model.network import ChessNet
 from config.model_config import ModelConfig
 from model.mcts import MCTS
+from model.move_encoding import encode_move
 from typing import List, Tuple
 import mlx.core as mx
 from tqdm import tqdm
@@ -184,12 +185,8 @@ def get_policy_distribution(root_node, policy_output_dim: int):
     policy = np.zeros(policy_output_dim, dtype=np.float32)
 
     for move, child in root_node.children.items():
-        from_pos, to_pos = move
-        from_idx = from_pos[0] * 8 + from_pos[1]
-        to_idx = to_pos[0] * 8 + to_pos[1]
-        move_idx = from_idx * 64 + to_idx
-        if move_idx < len(policy):
-            policy[move_idx] = child.visit_count
+        move_idx = encode_move(*move)
+        policy[move_idx] = child.visit_count
 
     policy = policy / np.sum(policy) if np.sum(policy) > 0 else policy
 

@@ -74,7 +74,7 @@ class TestPromotionEncoding(unittest.TestCase):
                 for piece in range(1, 5):
                     index = self.search.encode_move(source, (*target, piece))
                     policy[index] = piece / 10
-                root = Node(board)
+                root = Node(board, board_factory=self.search._get_child_board)
                 self.search._expand_node(root, mx.array(policy), 0.0)
                 for piece in range(1, 5):
                     child = root.children[(source, (*target, piece))]

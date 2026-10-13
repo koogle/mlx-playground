@@ -11,7 +11,7 @@ CPU workers use NumPy only. MLX's CUDA build allocates GPU-managed memory even f
 | 128 | 24,018 | 473.00 s | 16.24 | 50.78 | 10.90 GiB | 25.38 |
 | 256 | 48,067 | 709.89 s | 21.64 | 67.71 | 10.68 GiB | 40.87 |
 
-All 464 games across the four trials completed without failures. Every trial completed one update from Adam step 4 to 5 with finite parameters. Common game-ID prefixes had identical game lengths, and the 16-game trial matched main's game lengths and losses exactly.
+All 464 games across the four trials completed without failures. Every trial completed one update from Adam step 4 to 5 with finite parameters. The first sixteen game lengths matched across all settings, and the 16-game trial matched main's game lengths and losses exactly. The 128- and 256-game trials also matched their first 128 game lengths. Three later games differed between 64 and 128 workers (IDs 41, 44, and 54). Batch shapes can change floating-point evaluations and search trajectories; these three divergences have not been traced to a specific operation. Fixed seeds therefore do not establish full equivalence across concurrency settings.
 
 At sixteen workers, main (`fa5539f`) took 231.97 seconds / 4.14 games per minute versus the final PR's 151.81 seconds / 6.32 games per minute: **52.8% higher throughput** and 34.6% shorter generation time. Sampled GPU peak fell from 10.79 to 2.15 GiB (80.1%). The 256-worker trial reached **21.64 games/minute**, 3.42 times the new 16-worker rate and 5.23 times main's recorded 16-worker rate. The latter comparison changes concurrency and is not an isolated code-change comparison.
 

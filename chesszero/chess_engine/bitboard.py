@@ -162,6 +162,7 @@ class BitBoard:
         if to_pos not in self.get_valid_moves(from_pos):
             return False
 
+        # Validate first, then mutate and record the resulting position.
         self._apply_move(from_pos, to_pos)
         self._record_position(self.position_history, self.get_repetition_hash())
         return True
@@ -173,8 +174,10 @@ class BitBoard:
         color, piece_type = self.get_piece_at(from_row, from_col)
         piece_offset = 6 * color
 
+        # Clear any captured piece at the destination and remove the moving piece.
         self.state[:12, to_row, to_col] = 0
         self.state[piece_offset + piece_type, from_row, from_col] = 0
+        # Promotion replaces the pawn with the selected piece at its destination.
         destination_piece = piece_type
         if len(to_pos) == 3:
             destination_piece = to_pos[2]
@@ -182,6 +185,7 @@ class BitBoard:
 
         is_en_passant = piece_type == 0 and (to_row, to_col) == self.en_passant_target
         if is_en_passant:
+            # The captured pawn is beside the source, not on the destination square.
             opponent_pawn_plane = 6 * (1 - color)
             self.state[opponent_pawn_plane, from_row, to_col] = 0
 
@@ -216,6 +220,7 @@ class BitBoard:
         from_row, from_col = from_pos
         to_row, to_col = to_pos[:2]
         color, piece_type = self.get_piece_at(from_row, from_col)
+        # Read capture information before piece placement clears the destination.
         captured_color, captured_piece = self.get_piece_at(to_row, to_col)
         is_en_passant = piece_type == 0 and (to_row, to_col) == self.en_passant_target
         is_capture = captured_piece != -1 or is_en_passant
@@ -239,6 +244,7 @@ class BitBoard:
             passed_row = (from_row + to_row) // 2
             self.en_passant_target = (passed_row, from_col)
 
+        # Count each ply; the fifty-move rule counts 100 plies without progress.
         move_count = self.get_move_count() + 1
         self.state[17].fill(move_count / 200)
         if piece_type == 0 or is_capture:
@@ -246,6 +252,7 @@ class BitBoard:
         else:
             progress = self.get_moves_without_progress() + 1
         self.state[18].fill(progress / 100)
+        # Plane 12 is 1 for White to move and 0 for Black to move.
         self.state[12] = 1 - self.state[12]
 
     def _is_safe_move(self, from_pos, to_pos):

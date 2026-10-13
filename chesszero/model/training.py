@@ -9,7 +9,6 @@ from model.mcts import MCTS
 from model.self_play import (
     create_batches,
     generate_games,
-    get_policy_distribution,
 )
 from config.model_config import ModelConfig
 from pathlib import Path
@@ -117,7 +116,7 @@ class Trainer:
                         )
                         updated = True
                     else:
-                        win_rate, wins, losses, draws, _ = result
+                        win_rate, wins, losses, draws = result
 
                         self.logger.info(f"Win rate vs best: {win_rate:.2%}")
                         self.logger.info(
@@ -265,12 +264,11 @@ class Trainer:
         result_queue: mp.Queue,
         max_workers: int,
     ):
-        """Worker process that plays a single evaluation game and collects training data"""
+        """Worker process that plays a single evaluation game and reports its result."""
         try:
             model.eval()
             best_model.eval()
             game = ChessGame()
-            game_history = []
 
             pbar = tqdm(
                 desc=f"Evaluation game {game_id}",
@@ -290,11 +288,6 @@ class Trainer:
                 if not move:
                     break
 
-                policy = get_policy_distribution(
-                    mcts.root_node, config.policy_output_dim
-                )
-                state = mx.array(game.board.state, dtype=mx.float32)
-                game_history.append((state, policy, None))
                 game.make_move(move[0], move[1])
 
                 pbar.update(1)
@@ -305,7 +298,6 @@ class Trainer:
                 {
                     "game_id": game_id,
                     "result": game.board.get_game_result(player_color),
-                    "history": game_history,
                     "perspective_color": player_color,
                     "final_board": str(game.board),
                 }
@@ -318,8 +310,8 @@ class Trainer:
 
     def evaluate_against_best(
         self, n_games: int = 40, max_workers: int = 10
-    ) -> Tuple[float, int, int, int]:
-        """Evaluate current model against best model and collect training data"""
+    ) -> Optional[Tuple[float, int, int, int]]:
+        """Evaluate current model against best model and return score counts."""
         self.logger.info("\nEvaluating against best model...")
 
         if self.best_model is None:
@@ -328,7 +320,6 @@ class Trainer:
         wins = 0
         losses = 0
         draws = 0
-        evaluation_games_data = []
         total_games = 0
 
         ctx = mp.get_context("spawn")
@@ -373,17 +364,6 @@ class Trainer:
                             else:
                                 draws += 1
 
-                            evaluation_games_data.append(
-                                (
-                                    result["history"],
-                                    (
-                                        game_result
-                                        if result["perspective_color"] == 0
-                                        else -game_result
-                                    ),
-                                )
-                            )
-
                             self.logger.info(
                                 f"Evaluation game {result['game_id']} completed with result for {result['perspective_color']}: {game_result} and board:\n{result['final_board']}"
                             )
@@ -407,4 +387,4 @@ class Trainer:
         total_games = wins + losses + draws
         win_rate = wins / (total_games - draws) if (total_games - draws) > 0 else 0
 
-        return win_rate, wins, losses, draws, evaluation_games_data
+        return win_rate, wins, losses, draws

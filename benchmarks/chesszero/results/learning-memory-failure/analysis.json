@@ -1,0 +1,87 @@
+{
+  "generations": 19,
+  "positions": 25731,
+  "games": 76,
+  "all_parameters_finite": true,
+  "one_adam_update_per_generation": true,
+  "self_play_seconds": 2081.378387874,
+  "learning_seconds": 44.001758271999876,
+  "self_play_draws": 30,
+  "draw_position_fraction": 0.5939139559286464,
+  "first_ten_mean_losses": [
+    7.543569707870484,
+    6.946036243438721,
+    0.5700115852057934,
+    0.027521842904388905
+  ],
+  "last_ten_mean_losses": [
+    6.259078598022461,
+    5.744807291030884,
+    0.4674765199422836,
+    0.04679495356976986
+  ],
+  "evaluations": {
+    "0": {
+      "random": {
+        "games": 32,
+        "completed": 32,
+        "censored": 0,
+        "wins": 21,
+        "draws": 10,
+        "losses": 1,
+        "score": 0.8125,
+        "complete_pairs": 16,
+        "pair_bootstrap_95_percent": [
+          0.734375,
+          0.890625
+        ],
+        "censored_score_bounds": [
+          0.8125,
+          0.8125
+        ]
+      }
+    },
+    "10": {
+      "initial": {
+        "games": 8,
+        "completed": 8,
+        "censored": 0,
+        "wins": 0,
+        "draws": 6,
+        "losses": 2,
+        "score": 0.375,
+        "complete_pairs": 4,
+        "pair_bootstrap_95_percent": [
+          0.125,
+          0.5
+        ],
+        "censored_score_bounds": [
+          0.375,
+          0.375
+        ]
+      },
+      "random": {
+        "games": 8,
+        "completed": 7,
+        "censored": 1,
+        "wins": 2,
+        "draws": 4,
+        "losses": 1,
+        "score": 0.5714285714285714,
+        "complete_pairs": 3,
+        "pair_bootstrap_95_percent": [
+          0.25,
+          0.75
+        ],
+        "censored_score_bounds": [
+          0.5,
+          0.625
+        ]
+      }
+    }
+  },
+  "oracle": {
+    "games_verified": 48,
+    "errors": []
+  }
+}

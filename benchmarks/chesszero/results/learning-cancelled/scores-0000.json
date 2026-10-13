@@ -1,0 +1,20 @@
+{
+  "random": {
+    "games": 32,
+    "completed": 32,
+    "censored": 0,
+    "wins": 21,
+    "draws": 10,
+    "losses": 1,
+    "score": 0.8125,
+    "complete_pairs": 16,
+    "pair_bootstrap_95_percent": [
+      0.734375,
+      0.890625
+    ],
+    "censored_score_bounds": [
+      0.8125,
+      0.8125
+    ]
+  }
+}

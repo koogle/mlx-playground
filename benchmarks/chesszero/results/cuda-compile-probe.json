@@ -1,0 +1,42 @@
+{
+  "eager": {
+    "returncode": 0,
+    "stdout": "{\"positions\": 87, \"seconds\": 1.8667465940000003, \"loss\": [8.452778816223145, 8.450193405151367, 0.0001797097356757149, 0.0024053570814430714]}\n{\"positions\": 84, \"seconds\": 0.06642280700000036, \"loss\": [8.99425220489502, 8.452139854431152, 0.5397392511367798, 0.0023723384365439415]}\n{\"positions\": 95, \"seconds\": 0.05651355899999988, \"loss\": [8.453498840332031, 8.45048713684082, 0.0006952080293558538, 0.002316633239388466]}\n{\"positions\": 87, \"seconds\": 0.03495577700000041, \"loss\": [8.452832221984863, 8.450547218322754, 2.021393083850853e-05, 0.002263592090457678]}\n{\"mode\": \"eager\", \"results\": [{\"positions\": 87, \"seconds\": 1.8667465940000003, \"loss\": [8.452778816223145, 8.450193405151367, 0.0001797097356757149, 0.0024053570814430714]}, {\"positions\": 84, \"seconds\": 0.06642280700000036, \"loss\": [8.99425220489502, 8.452139854431152, 0.5397392511367798, 0.0023723384365439415]}, {\"positions\": 95, \"seconds\": 0.05651355899999988, \"loss\": [8.453498840332031, 8.45048713684082, 0.0006952080293558538, 0.002316633239388466]}, {\"positions\": 87, \"seconds\": 0.03495577700000041, \"loss\": [8.452832221984863, 8.450547218322754, 2.021393083850853e-05, 0.002263592090457678]}]}\n",
+    "stderr": ""
+  },
+  "shapeless": {
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Gradient accumulation failed; generation was not completed\nTraceback (most recent call last):\n  File \"/opt/chesszero/candidate/chesszero/model/training.py\", line 228, in train_on_batches\n    (loss, components), grads = self._compute_gradients(batch)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/chesszero/candidate/chesszero/model/training.py\", line 210, in _compute_gradients\n    return self._loss_and_grad(*batch)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: [Primitive::output_shapes] Pad cannot infer output shapes.\nTraceback (most recent call last):\n  File \"/opt/probe.py\", line 63, in <module>\n    main()\n  File \"/opt/probe.py\", line 47, in main\n    loss = trainer.train_on_batches(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/chesszero/candidate/chesszero/model/training.py\", line 228, in train_on_batches\n    (loss, components), grads = self._compute_gradients(batch)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/chesszero/candidate/chesszero/model/training.py\", line 210, in _compute_gradients\n    return self._loss_and_grad(*batch)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: [Primitive::output_shapes] Pad cannot infer output shapes.\n"
+  },
+  "compiled": {
+    "returncode": 0,
+    "stdout": "{\"positions\": 87, \"seconds\": 169.13073357000002, \"loss\": [8.452778816223145, 8.450194358825684, 0.0001797116274246946, 0.0024053570814430714]}\n{\"positions\": 84, \"seconds\": 32.14549695299999, \"loss\": [8.994254112243652, 8.452139854431152, 0.539741039276123, 0.0023723391350358725]}\n{\"positions\": 95, \"seconds\": 31.648862045999977, \"loss\": [8.453498840332031, 8.45048713684082, 0.0006947930669412017, 0.0023165533784776926]}\n{\"positions\": 87, \"seconds\": 0.02409614399999782, \"loss\": [8.452829360961914, 8.450546264648438, 2.0259316443116404e-05, 0.002263446571305394]}\n{\"mode\": \"compiled\", \"results\": [{\"positions\": 87, \"seconds\": 169.13073357000002, \"loss\": [8.452778816223145, 8.450194358825684, 0.0001797116274246946, 0.0024053570814430714]}, {\"positions\": 84, \"seconds\": 32.14549695299999, \"loss\": [8.994254112243652, 8.452139854431152, 0.539741039276123, 0.0023723391350358725]}, {\"positions\": 95, \"seconds\": 31.648862045999977, \"loss\": [8.453498840332031, 8.45048713684082, 0.0006947930669412017, 0.0023165533784776926]}, {\"positions\": 87, \"seconds\": 0.02409614399999782, \"loss\": [8.452829360961914, 8.450546264648438, 2.0259316443116404e-05, 0.002263446571305394]}]}\n",
+    "stderr": ""
+  },
+  "provenance": {
+    "candidate_commit": "618863b52318c6dcf2c82953be01ade2f3cfd180",
+    "gpu": "NVIDIA L4",
+    "mlx": "0.32.3",
+    "cpu_allocation": 4,
+    "container_memory_mib": 16384,
+    "modal_app": "ap-R7rIUAKReUvLtG3spa8JSR",
+    "variant_order": [
+      "eager",
+      "shapeless",
+      "compiled"
+    ],
+    "seed": 2026,
+    "network": {
+      "residual_blocks": 2,
+      "filters": 64
+    },
+    "generation_sizes": [
+      87,
+      84,
+      95,
+      87
+    ],
+    "microbatch_size": 64
+  }
+}

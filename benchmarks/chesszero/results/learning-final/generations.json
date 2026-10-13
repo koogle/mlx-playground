@@ -1,0 +1,569 @@
+[
+  {
+    "generation": 1,
+    "positions": 1021,
+    "game_plies": [
+      124,
+      290,
+      274,
+      333
+    ],
+    "outcomes_white": [
+      -1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      8.590916633605957,
+      8.448309898376465,
+      0.12087336927652359,
+      0.021734360605478287
+    ],
+    "self_play_seconds": 52.484811893000014,
+    "learning_seconds": 5.5986752039999885,
+    "optimizer_step": 1,
+    "finite_parameters": true,
+    "elapsed_seconds": 164.593052509
+  },
+  {
+    "generation": 2,
+    "positions": 810,
+    "game_plies": [
+      88,
+      180,
+      200,
+      342
+    ],
+    "outcomes_white": [
+      -1.0,
+      -1.0,
+      -1.0,
+      0.0
+    ],
+    "losses": [
+      8.682100296020508,
+      8.162352561950684,
+      0.4977312386035919,
+      0.022015748545527458
+    ],
+    "self_play_seconds": 55.71442375699999,
+    "learning_seconds": 1.310049154000012,
+    "optimizer_step": 2,
+    "finite_parameters": true,
+    "elapsed_seconds": 221.649070784
+  },
+  {
+    "generation": 3,
+    "positions": 605,
+    "game_plies": [
+      15,
+      99,
+      118,
+      373
+    ],
+    "outcomes_white": [
+      1.0,
+      1.0,
+      -1.0,
+      1.0
+    ],
+    "losses": [
+      10.036136627197266,
+      7.707149028778076,
+      2.306365728378296,
+      0.02262209542095661
+    ],
+    "self_play_seconds": 62.964283592999976,
+    "learning_seconds": 0.9680576499999916,
+    "optimizer_step": 3,
+    "finite_parameters": true,
+    "elapsed_seconds": 285.611785478
+  },
+  {
+    "generation": 4,
+    "positions": 1054,
+    "game_plies": [
+      89,
+      228,
+      323,
+      414
+    ],
+    "outcomes_white": [
+      1.0,
+      -1.0,
+      1.0,
+      0.0
+    ],
+    "losses": [
+      8.128771781921387,
+      7.222616672515869,
+      0.8825092911720276,
+      0.023646799847483635
+    ],
+    "self_play_seconds": 78.338367317,
+    "learning_seconds": 1.6707407229999944,
+    "optimizer_step": 4,
+    "finite_parameters": true,
+    "elapsed_seconds": 365.650737968
+  },
+  {
+    "generation": 5,
+    "positions": 693,
+    "game_plies": [
+      33,
+      154,
+      173,
+      333
+    ],
+    "outcomes_white": [
+      1.0,
+      -1.0,
+      1.0,
+      0.0
+    ],
+    "losses": [
+      7.676600456237793,
+      7.131259441375732,
+      0.5201678276062012,
+      0.02517351694405079
+    ],
+    "self_play_seconds": 52.265429014999995,
+    "learning_seconds": 1.1200683969999545,
+    "optimizer_step": 5,
+    "finite_parameters": true,
+    "elapsed_seconds": 419.069419513
+  },
+  {
+    "generation": 6,
+    "positions": 1492,
+    "game_plies": [
+      94,
+      378,
+      498,
+      522
+    ],
+    "outcomes_white": [
+      -1.0,
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      6.659646511077881,
+      6.30848503112793,
+      0.32401689887046814,
+      0.027144169434905052
+    ],
+    "self_play_seconds": 104.59273465799998,
+    "learning_seconds": 2.284620216999997,
+    "optimizer_step": 6,
+    "finite_parameters": true,
+    "elapsed_seconds": 525.9797208040001
+  },
+  {
+    "generation": 7,
+    "positions": 1922,
+    "game_plies": [
+      340,
+      334,
+      549,
+      699
+    ],
+    "outcomes_white": [
+      0.0,
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      6.380977630615234,
+      6.181905269622803,
+      0.16962671279907227,
+      0.029444340616464615
+    ],
+    "self_play_seconds": 168.6588226,
+    "learning_seconds": 3.114930999999956,
+    "optimizer_step": 7,
+    "finite_parameters": true,
+    "elapsed_seconds": 697.7858646960001
+  },
+  {
+    "generation": 8,
+    "positions": 1635,
+    "game_plies": [
+      168,
+      331,
+      583,
+      553
+    ],
+    "outcomes_white": [
+      -1.0,
+      1.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      6.412686824798584,
+      6.066127300262451,
+      0.31463372707366943,
+      0.031925737857818604
+    ],
+    "self_play_seconds": 113.84684927300009,
+    "learning_seconds": 2.555253552999943,
+    "optimizer_step": 8,
+    "finite_parameters": true,
+    "elapsed_seconds": 814.2205982470001
+  },
+  {
+    "generation": 9,
+    "positions": 1372,
+    "game_plies": [
+      181,
+      290,
+      410,
+      491
+    ],
+    "outcomes_white": [
+      1.0,
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      6.406869888305664,
+      6.034577369689941,
+      0.33780816197395325,
+      0.03448351100087166
+    ],
+    "self_play_seconds": 105.47908471599999,
+    "learning_seconds": 2.181084929000008,
+    "optimizer_step": 9,
+    "finite_parameters": true,
+    "elapsed_seconds": 921.9141053100001
+  },
+  {
+    "generation": 10,
+    "positions": 1554,
+    "game_plies": [
+      147,
+      175,
+      609,
+      623
+    ],
+    "outcomes_white": [
+      1.0,
+      1.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      6.4609904289245605,
+      6.197579860687256,
+      0.22638289630413055,
+      0.037028148770332336
+    ],
+    "self_play_seconds": 144.14737153,
+    "learning_seconds": 2.4321742350000477,
+    "optimizer_step": 10,
+    "finite_parameters": true,
+    "elapsed_seconds": 1068.5270888300001
+  },
+  {
+    "generation": 11,
+    "positions": 1333,
+    "game_plies": [
+      85,
+      261,
+      490,
+      497
+    ],
+    "outcomes_white": [
+      1.0,
+      1.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      6.373999118804932,
+      6.068909645080566,
+      0.265590637922287,
+      0.03949873894453049
+    ],
+    "self_play_seconds": 154.910968078,
+    "learning_seconds": 7.785234655000011,
+    "optimizer_step": 11,
+    "finite_parameters": true,
+    "elapsed_seconds": 1231.2924383680001
+  },
+  {
+    "generation": 12,
+    "positions": 1329,
+    "game_plies": [
+      195,
+      325,
+      319,
+      490
+    ],
+    "outcomes_white": [
+      1.0,
+      0.0,
+      1.0,
+      0.0
+    ],
+    "losses": [
+      6.337996959686279,
+      5.908944606781006,
+      0.38717368245124817,
+      0.041878823190927505
+    ],
+    "self_play_seconds": 143.04408247799998,
+    "learning_seconds": 2.3364322639999955,
+    "optimizer_step": 12,
+    "finite_parameters": true,
+    "elapsed_seconds": 1378.459314985
+  },
+  {
+    "generation": 13,
+    "positions": 1756,
+    "game_plies": [
+      229,
+      390,
+      495,
+      642
+    ],
+    "outcomes_white": [
+      1.0,
+      -1.0,
+      0.0,
+      0.0
+    ],
+    "losses": [
+      6.176831245422363,
+      5.777609348297119,
+      0.35506221652030945,
+      0.0441586934030056
+    ],
+    "self_play_seconds": 193.342218297,
+    "learning_seconds": 3.1879033829999344,
+    "optimizer_step": 13,
+    "finite_parameters": true,
+    "elapsed_seconds": 1576.709663149
+  },
+  {
+    "generation": 14,
+    "positions": 1168,
+    "game_plies": [
+      125,
+      165,
+      287,
+      591
+    ],
+    "outcomes_white": [
+      1.0,
+      1.0,
+      1.0,
+      0.0
+    ],
+    "losses": [
+      6.188479423522949,
+      5.659256935119629,
+      0.4829000234603882,
+      0.04632200300693512
+    ],
+    "self_play_seconds": 172.7670784479999,
+    "learning_seconds": 2.238353624999945,
+    "optimizer_step": 14,
+    "finite_parameters": true,
+    "elapsed_seconds": 1753.600503201
+  },
+  {
+    "generation": 15,
+    "positions": 900,
+    "game_plies": [
+      226,
+      205,
+      232,
+      237
+    ],
+    "outcomes_white": [
+      0.0,
+      1.0,
+      -1.0,
+      1.0
+    ],
+    "losses": [
+      6.146008014678955,
+      5.357858180999756,
+      0.7397967576980591,
+      0.048352956771850586
+    ],
+    "self_play_seconds": 71.78757405700003,
+    "learning_seconds": 2.012325160000046,
+    "optimizer_step": 15,
+    "finite_parameters": true,
+    "elapsed_seconds": 1829.196125932
+  },
+  {
+    "generation": 16,
+    "positions": 1202,
+    "game_plies": [
+      212,
+      253,
+      334,
+      403
+    ],
+    "outcomes_white": [
+      -1.0,
+      0.0,
+      -1.0,
+      1.0
+    ],
+    "losses": [
+      6.176051616668701,
+      5.325697898864746,
+      0.8001113533973694,
+      0.050241872668266296
+    ],
+    "self_play_seconds": 120.32963316300004,
+    "learning_seconds": 2.153245384999991,
+    "optimizer_step": 16,
+    "finite_parameters": true,
+    "elapsed_seconds": 1953.5490818790001
+  },
+  {
+    "generation": 17,
+    "positions": 1500,
+    "game_plies": [
+      209,
+      272,
+      434,
+      585
+    ],
+    "outcomes_white": [
+      1.0,
+      -1.0,
+      -1.0,
+      0.0
+    ],
+    "losses": [
+      6.650648593902588,
+      5.961377143859863,
+      0.637281596660614,
+      0.051990263164043427
+    ],
+    "self_play_seconds": 190.17357524600004,
+    "learning_seconds": 2.9480903180001405,
+    "optimizer_step": 17,
+    "finite_parameters": true,
+    "elapsed_seconds": 2148.4861133060003
+  },
+  {
+    "generation": 18,
+    "positions": 1434,
+    "game_plies": [
+      199,
+      288,
+      350,
+      597
+    ],
+    "outcomes_white": [
+      1.0,
+      -1.0,
+      -1.0,
+      0.0
+    ],
+    "losses": [
+      6.232213020324707,
+      5.580846786499023,
+      0.597769558429718,
+      0.05359635874629021
+    ],
+    "self_play_seconds": 191.29742977,
+    "learning_seconds": 2.66243775199996,
+    "optimizer_step": 18,
+    "finite_parameters": true,
+    "elapsed_seconds": 2344.5196484890002
+  },
+  {
+    "generation": 19,
+    "positions": 1206,
+    "game_plies": [
+      102,
+      191,
+      416,
+      497
+    ],
+    "outcomes_white": [
+      -1.0,
+      1.0,
+      0.0,
+      1.0
+    ],
+    "losses": [
+      6.130108833312988,
+      5.423850059509277,
+      0.6511933207511902,
+      0.05506449565291405
+    ],
+    "self_play_seconds": 154.32299153999998,
+    "learning_seconds": 2.2051870770001187,
+    "optimizer_step": 19,
+    "finite_parameters": true,
+    "elapsed_seconds": 2503.0314440750003
+  },
+  {
+    "generation": 20,
+    "positions": 1099,
+    "game_plies": [
+      114,
+      248,
+      325,
+      412
+    ],
+    "outcomes_white": [
+      -1.0,
+      -1.0,
+      1.0,
+      0.0
+    ],
+    "losses": [
+      6.234340667724609,
+      5.5523176193237305,
+      0.6256241202354431,
+      0.05639917030930519
+    ],
+    "self_play_seconds": 108.16671048600006,
+    "learning_seconds": 2.5650322159999632,
+    "optimizer_step": 20,
+    "finite_parameters": true,
+    "elapsed_seconds": 2615.5530899320006
+  },
+  {
+    "generation": 21,
+    "positions": 1216,
+    "game_plies": [
+      121,
+      194,
+      345,
+      556
+    ],
+    "outcomes_white": [
+      1.0,
+      -1.0,
+      1.0,
+      0.0
+    ],
+    "losses": [
+      6.025424480438232,
+      5.4269118309021,
+      0.5409031510353088,
+      0.05760950967669487
+    ],
+    "self_play_seconds": 165.86729838099996,
+    "learning_seconds": 2.1461763170000268,
+    "optimizer_step": 21,
+    "finite_parameters": true,
+    "elapsed_seconds": 2785.3193843850004
+  }
+]

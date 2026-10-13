@@ -1,0 +1,38 @@
+[
+  {
+    "label": "baseline",
+    "task": "copy",
+    "status": "complete",
+    "result": "baseline-copy.json"
+  },
+  {
+    "label": "candidate",
+    "task": "copy",
+    "status": "complete",
+    "result": "candidate-copy.json"
+  },
+  {
+    "label": "baseline",
+    "task": "search",
+    "status": "complete",
+    "result": "baseline-search.json"
+  },
+  {
+    "label": "candidate",
+    "task": "search",
+    "status": "complete",
+    "result": "candidate-search.json"
+  },
+  {
+    "label": "baseline",
+    "task": "train",
+    "status": "complete",
+    "result": "baseline-train.json"
+  },
+  {
+    "label": "candidate",
+    "task": "train",
+    "status": "complete",
+    "result": "candidate-train.json"
+  }
+]

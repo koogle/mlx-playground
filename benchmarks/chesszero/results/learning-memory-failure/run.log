@@ -1,0 +1,93 @@
+{"evaluation_generation": 0, "opponent": "random", "games": 32, "completed": 32, "censored": 0, "wins": 21, "draws": 10, "losses": 1, "score": 0.8125, "complete_pairs": 16, "pair_bootstrap_95_percent": [0.734375, 0.890625], "censored_score_bounds": [0.8125, 0.8125]}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1021
+Creating batches of size 64 from 1021 samples
+{"generation": 1, "positions": 1021, "game_plies": [124, 290, 274, 333], "outcomes_white": [-1.0, 0.0, 0.0, 0.0], "losses": [8.590916633605957, 8.448309898376465, 0.12087336927652359, 0.021734360605478287], "self_play_seconds": 52.484811893000014, "learning_seconds": 5.5986752039999885, "optimizer_step": 1, "finite_parameters": true, "elapsed_seconds": 164.593052509}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 810
+Creating batches of size 64 from 810 samples
+{"generation": 2, "positions": 810, "game_plies": [88, 180, 200, 342], "outcomes_white": [-1.0, -1.0, -1.0, 0.0], "losses": [8.682100296020508, 8.162352561950684, 0.4977312386035919, 0.022015748545527458], "self_play_seconds": 55.71442375699999, "learning_seconds": 1.310049154000012, "optimizer_step": 2, "finite_parameters": true, "elapsed_seconds": 221.649070784}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 605
+Creating batches of size 64 from 605 samples
+{"generation": 3, "positions": 605, "game_plies": [15, 99, 118, 373], "outcomes_white": [1.0, 1.0, -1.0, 1.0], "losses": [10.036136627197266, 7.707149028778076, 2.306365728378296, 0.02262209542095661], "self_play_seconds": 62.964283592999976, "learning_seconds": 0.9680576499999916, "optimizer_step": 3, "finite_parameters": true, "elapsed_seconds": 285.611785478}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1054
+Creating batches of size 64 from 1054 samples
+{"generation": 4, "positions": 1054, "game_plies": [89, 228, 323, 414], "outcomes_white": [1.0, -1.0, 1.0, 0.0], "losses": [8.128771781921387, 7.222616672515869, 0.8825092911720276, 0.023646799847483635], "self_play_seconds": 78.338367317, "learning_seconds": 1.6707407229999944, "optimizer_step": 4, "finite_parameters": true, "elapsed_seconds": 365.650737968}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 693
+Creating batches of size 64 from 693 samples
+{"generation": 5, "positions": 693, "game_plies": [33, 154, 173, 333], "outcomes_white": [1.0, -1.0, 1.0, 0.0], "losses": [7.676600456237793, 7.131259441375732, 0.5201678276062012, 0.02517351694405079], "self_play_seconds": 52.265429014999995, "learning_seconds": 1.1200683969999545, "optimizer_step": 5, "finite_parameters": true, "elapsed_seconds": 419.069419513}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1492
+Creating batches of size 64 from 1492 samples
+{"generation": 6, "positions": 1492, "game_plies": [94, 378, 498, 522], "outcomes_white": [-1.0, -1.0, 0.0, 0.0], "losses": [6.659646511077881, 6.30848503112793, 0.32401689887046814, 0.027144169434905052], "self_play_seconds": 104.59273465799998, "learning_seconds": 2.284620216999997, "optimizer_step": 6, "finite_parameters": true, "elapsed_seconds": 525.9797208040001}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1922
+Creating batches of size 64 from 1922 samples
+{"generation": 7, "positions": 1922, "game_plies": [340, 334, 549, 699], "outcomes_white": [0.0, -1.0, 0.0, 0.0], "losses": [6.380977630615234, 6.181905269622803, 0.16962671279907227, 0.029444340616464615], "self_play_seconds": 168.6588226, "learning_seconds": 3.114930999999956, "optimizer_step": 7, "finite_parameters": true, "elapsed_seconds": 697.7858646960001}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1635
+Creating batches of size 64 from 1635 samples
+{"generation": 8, "positions": 1635, "game_plies": [168, 331, 583, 553], "outcomes_white": [-1.0, 1.0, 0.0, 0.0], "losses": [6.412686824798584, 6.066127300262451, 0.31463372707366943, 0.031925737857818604], "self_play_seconds": 113.84684927300009, "learning_seconds": 2.555253552999943, "optimizer_step": 8, "finite_parameters": true, "elapsed_seconds": 814.2205982470001}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1372
+Creating batches of size 64 from 1372 samples
+{"generation": 9, "positions": 1372, "game_plies": [181, 290, 410, 491], "outcomes_white": [1.0, -1.0, 0.0, 0.0], "losses": [6.406869888305664, 6.034577369689941, 0.33780816197395325, 0.03448351100087166], "self_play_seconds": 105.47908471599999, "learning_seconds": 2.181084929000008, "optimizer_step": 9, "finite_parameters": true, "elapsed_seconds": 921.9141053100001}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1554
+Creating batches of size 64 from 1554 samples
+{"generation": 10, "positions": 1554, "game_plies": [147, 175, 609, 623], "outcomes_white": [1.0, 1.0, 0.0, 0.0], "losses": [6.4609904289245605, 6.197579860687256, 0.22638289630413055, 0.037028148770332336], "self_play_seconds": 144.14737153, "learning_seconds": 2.4321742350000477, "optimizer_step": 10, "finite_parameters": true, "elapsed_seconds": 1068.5270888300001}
+{"evaluation_generation": 10, "opponent": "initial", "games": 8, "completed": 8, "censored": 0, "wins": 0, "draws": 6, "losses": 2, "score": 0.375, "complete_pairs": 4, "pair_bootstrap_95_percent": [0.125, 0.5], "censored_score_bounds": [0.375, 0.375]}
+{"evaluation_generation": 10, "opponent": "random", "games": 8, "completed": 7, "censored": 1, "wins": 2, "draws": 4, "losses": 1, "score": 0.5714285714285714, "complete_pairs": 3, "pair_bootstrap_95_percent": [0.25, 0.75], "censored_score_bounds": [0.5, 0.625]}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1233
+Creating batches of size 64 from 1233 samples
+{"generation": 11, "positions": 1233, "game_plies": [147, 217, 363, 506], "outcomes_white": [1.0, 1.0, 1.0, 0.0], "losses": [6.858100414276123, 6.215550422668457, 0.6030515432357788, 0.03949873894453049], "self_play_seconds": 101.21099214600008, "learning_seconds": 1.903768725000191, "optimizer_step": 11, "finite_parameters": true, "elapsed_seconds": 1283.8162782900001}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1613
+Creating batches of size 64 from 1613 samples
+{"generation": 12, "positions": 1613, "game_plies": [141, 367, 510, 595], "outcomes_white": [1.0, 0.0, 0.0, 0.0], "losses": [6.130857467651367, 6.002330780029297, 0.08664251863956451, 0.041883762925863266], "self_play_seconds": 123.91874108800016, "learning_seconds": 2.452169837000156, "optimizer_step": 12, "finite_parameters": true, "elapsed_seconds": 1410.218525645}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1626
+Creating batches of size 64 from 1626 samples
+{"generation": 13, "positions": 1626, "game_plies": [181, 240, 326, 879], "outcomes_white": [1.0, -1.0, -1.0, 0.0], "losses": [6.153910160064697, 5.643614292144775, 0.46613743901252747, 0.044158391654491425], "self_play_seconds": 234.72738309600004, "learning_seconds": 2.4175934419999976, "optimizer_step": 13, "finite_parameters": true, "elapsed_seconds": 1647.3984304150001}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 775
+Creating batches of size 64 from 775 samples
+{"generation": 14, "positions": 775, "game_plies": [75, 155, 250, 295], "outcomes_white": [1.0, 1.0, -1.0, 1.0], "losses": [6.318475723266602, 5.277393341064453, 0.9947680830955505, 0.04631507769227028], "self_play_seconds": 54.127991888999986, "learning_seconds": 1.2642439139999624, "optimizer_step": 14, "finite_parameters": true, "elapsed_seconds": 1702.8230678950001}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1754
+Creating batches of size 64 from 1754 samples
+{"generation": 15, "positions": 1754, "game_plies": [39, 449, 584, 682], "outcomes_white": [1.0, 1.0, 0.0, 0.0], "losses": [6.101442337036133, 5.782395362854004, 0.270714670419693, 0.04833276569843292], "self_play_seconds": 150.789591921, "learning_seconds": 2.634675432999984, "optimizer_step": 15, "finite_parameters": true, "elapsed_seconds": 1856.281443481}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1864
+Creating batches of size 64 from 1864 samples
+{"generation": 16, "positions": 1864, "game_plies": [328, 340, 518, 678], "outcomes_white": [-1.0, -1.0, 0.0, 0.0], "losses": [6.221717357635498, 5.793417930603027, 0.37808626890182495, 0.050213657319545746], "self_play_seconds": 152.0047819869999, "learning_seconds": 2.7708266330000697, "optimizer_step": 16, "finite_parameters": true, "elapsed_seconds": 2011.090919959}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1465
+Creating batches of size 64 from 1465 samples
+{"generation": 17, "positions": 1465, "game_plies": [73, 368, 509, 515], "outcomes_white": [1.0, -1.0, 0.0, 0.0], "losses": [6.038270473480225, 5.67572546005249, 0.31059375405311584, 0.05195140093564987], "self_play_seconds": 103.28111387900003, "learning_seconds": 2.1435508199997457, "optimizer_step": 17, "finite_parameters": true, "elapsed_seconds": 2116.549410954}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1543
+Creating batches of size 64 from 1543 samples
+{"generation": 18, "positions": 1543, "game_plies": [310, 345, 344, 544], "outcomes_white": [-1.0, 1.0, -1.0, 0.0], "losses": [6.043365478515625, 5.336763381958008, 0.6530504822731018, 0.053551435470581055], "self_play_seconds": 106.47165464599993, "learning_seconds": 2.4724094529997274, "optimizer_step": 18, "finite_parameters": true, "elapsed_seconds": 2225.5258006940003}
+Creating batches from 4 game instances with batch_size 64
+Total positions collected: 1700
+Creating batches of size 64 from 1700 samples
+{"generation": 19, "positions": 1700, "game_plies": [221, 454, 493, 532], "outcomes_white": [1.0, -1.0, 1.0, 0.0], "losses": [6.263656139373779, 5.52330207824707, 0.6853375434875488, 0.055016156286001205], "self_play_seconds": 116.35395887000004, "learning_seconds": 2.7068649530001494, "optimizer_step": 19, "finite_parameters": true, "elapsed_seconds": 2344.6194362270003}
+Error in game 2: cudaMallocAsync(&data, size, stream) failed: out of memory
+Traceback (most recent call last):
+  File "/opt/chesszero/chesszero/model/self_play.py", line 41, in play_single_game
+    move = mcts.get_move(game.board, temperature=1.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/chesszero/chesszero/model/mcts.py", line 232, in get_move
+    simulations_completed += self._batch_simulate(
+                             ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/chesszero/chesszero/model/mcts.py", line 382, in _batch_simulate
+    mx.eval(policies, values)
+RuntimeError: cudaMallocAsync(&data, size, stream) failed: out of memory
+
+/usr/local/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 3 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

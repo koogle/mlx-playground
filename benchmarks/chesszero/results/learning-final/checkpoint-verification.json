@@ -1,0 +1,8 @@
+{
+  "completed_epochs": 21,
+  "adam_step": 21,
+  "residual_blocks": 19,
+  "filters": 256,
+  "trainable_parameters": 32601345,
+  "finite_parameters": true
+}

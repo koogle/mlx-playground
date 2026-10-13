@@ -1,0 +1,233 @@
+{
+  "commit": "618863b52318c6dcf2c82953be01ade2f3cfd180",
+  "platform": "Linux-4.19.0-gvisor-x86_64-with-glibc2.39",
+  "machine": "x86_64",
+  "chip": "NVIDIA L4, 23034 MiB, 610.57.04",
+  "backend": "cuda",
+  "host_memory_bytes": 703187619840,
+  "python": "3.12.1 (main, Jan  8 2024, 04:46:10) [Clang 17.0.6 ]",
+  "mlx": "0.32.3",
+  "device": "Device(gpu, 0)",
+  "config": {
+    "n_residual_blocks": 2,
+    "n_filters": 64,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 32,
+    "mcts_batch_size": 8,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 3,
+    "learning_rate": 0.001,
+    "n_games_per_iteration": 2,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "eval_interval_epochs": 4
+  },
+  "seed": 2026,
+  "task": "search",
+  "workers": 2,
+  "status": "complete",
+  "parameters": 10261377,
+  "searches": [
+    {
+      "repeat": 0,
+      "opening_plies": 0,
+      "seconds": 0.10963919499999975,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 695,
+      "materialized_boards": 33,
+      "move": [
+        [
+          1,
+          0
+        ],
+        [
+          3,
+          0
+        ]
+      ]
+    },
+    {
+      "repeat": 0,
+      "opening_plies": 2,
+      "seconds": 0.07683325000002128,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 964,
+      "materialized_boards": 33,
+      "move": [
+        [
+          1,
+          2
+        ],
+        [
+          3,
+          2
+        ]
+      ]
+    },
+    {
+      "repeat": 0,
+      "opening_plies": 3,
+      "seconds": 0.06127570300000684,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 925,
+      "materialized_boards": 33,
+      "move": [
+        [
+          6,
+          0
+        ],
+        [
+          4,
+          0
+        ]
+      ]
+    },
+    {
+      "repeat": 1,
+      "opening_plies": 0,
+      "seconds": 0.0538357739999924,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 703,
+      "materialized_boards": 33,
+      "move": [
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ]
+    },
+    {
+      "repeat": 1,
+      "opening_plies": 2,
+      "seconds": 0.07755086099999176,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 953,
+      "materialized_boards": 33,
+      "move": [
+        [
+          1,
+          3
+        ],
+        [
+          3,
+          3
+        ]
+      ]
+    },
+    {
+      "repeat": 1,
+      "opening_plies": 3,
+      "seconds": 0.06284260999998992,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 922,
+      "materialized_boards": 33,
+      "move": [
+        [
+          6,
+          0
+        ],
+        [
+          4,
+          0
+        ]
+      ]
+    },
+    {
+      "repeat": 2,
+      "opening_plies": 0,
+      "seconds": 0.05131493999999748,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 688,
+      "materialized_boards": 33,
+      "move": [
+        [
+          1,
+          0
+        ],
+        [
+          3,
+          0
+        ]
+      ]
+    },
+    {
+      "repeat": 2,
+      "opening_plies": 2,
+      "seconds": 0.0714696629999878,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 964,
+      "materialized_boards": 33,
+      "move": [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ]
+      ]
+    },
+    {
+      "repeat": 2,
+      "opening_plies": 3,
+      "seconds": 0.06187148999998726,
+      "root_visits": 32,
+      "child_visits": 32,
+      "network_calls": 5,
+      "network_positions": 33,
+      "nodes": 921,
+      "materialized_boards": 33,
+      "move": [
+        [
+          6,
+          0
+        ],
+        [
+          4,
+          0
+        ]
+      ]
+    }
+  ],
+  "parent_peak_rss_bytes": 4681506816,
+  "parent_gpu_peak_bytes": 43920936
+}

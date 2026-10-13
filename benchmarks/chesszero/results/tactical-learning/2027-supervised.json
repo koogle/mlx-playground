@@ -1,0 +1,570 @@
+{
+  "seed": 2027,
+  "mode": "supervised",
+  "rows": [
+    {
+      "step": 0,
+      "losses": null,
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.040015995502471924,
+              "mate_probability_full": 0.00021413704962469637,
+              "greedy_mate": false,
+              "mate_rank": 9,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.040007222443819046,
+              "mate_probability_full": 0.00021409506734926254,
+              "greedy_mate": false,
+              "mate_rank": 6,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            4.569400698528625e-05,
+            0.0006107851513661444,
+            0.0005401365924626589,
+            6.999599281698465e-05
+          ],
+          "value_mse": 0.9999526926759876
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.04013584181666374,
+              "mate_probability_full": 0.0002124938473571092,
+              "greedy_mate": false,
+              "mate_rank": 12,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.03756190091371536,
+              "mate_probability_full": 0.0001991182507481426,
+              "greedy_mate": false,
+              "mate_rank": 24,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            0.01031031459569931,
+            0.016686055809259415,
+            0.027789000421762466,
+            0.02304239571094513
+          ],
+          "value_mse": 0.9996074086461466
+        }
+      },
+      "optimizer_step": 0,
+      "elapsed_seconds": 0.03422420999999787
+    },
+    {
+      "step": 1,
+      "losses": [
+        9.502344131469727,
+        8.48099136352539,
+        0.9996074438095093,
+        0.02174520492553711
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.04064352065324783,
+              "mate_probability_full": 0.0002176574053009972,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.04062819108366966,
+              "mate_probability_full": 0.00021753643522970378,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.004303123336285353,
+            -0.004464989528059959,
+            -0.004879157058894634,
+            -0.004285984672605991
+          ],
+          "value_mse": 0.999804504112781
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.0706438347697258,
+              "mate_probability_full": 0.00039111849036999047,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.05454379320144653,
+              "mate_probability_full": 0.0002989916829392314,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            0.04155752435326576,
+            0.05566029995679855,
+            0.051517900079488754,
+            0.07734312117099762
+          ],
+          "value_mse": 0.9834012889631603
+        }
+      },
+      "optimizer_step": 1,
+      "elapsed_seconds": 0.17051597900000104
+    },
+    {
+      "step": 5,
+      "losses": [
+        6.886920928955078,
+        5.417034149169922,
+        1.443999171257019,
+        0.025887491181492805
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.11115828901529312,
+              "mate_probability_full": 0.0006407223991118371,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.13105246424674988,
+              "mate_probability_full": 0.0007743266760371625,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.06718865036964417,
+            -0.07208850979804993,
+            -0.07123953104019165,
+            -0.06331474334001541
+          ],
+          "value_mse": 1.0031862597367238
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.8137108087539673,
+              "mate_probability_full": 0.021488042548298836,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.8383181691169739,
+              "mate_probability_full": 0.025208132341504097,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.06734868139028549,
+            0.005864568054676056,
+            -0.2550007700920105,
+            0.571476936340332
+          ],
+          "value_mse": 0.64919990195133
+        }
+      },
+      "optimizer_step": 5,
+      "elapsed_seconds": 0.5120595180000009
+    },
+    {
+      "step": 10,
+      "losses": [
+        0.6317130327224731,
+        0.5857394933700562,
+        0.004400753416121006,
+        0.041572801768779755
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.9770848155021667,
+              "mate_probability_full": 0.06170263886451721,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.9970880746841431,
+              "mate_probability_full": 0.3443519175052643,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.09296461194753647,
+            -0.26164138317108154,
+            -0.21635150909423828,
+            -0.0022185957059264183
+          ],
+          "value_mse": 1.00824981144674
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.999996542930603,
+              "mate_probability_full": 0.7451390624046326,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 0.9999966025352478,
+              "mate_probability_full": 0.6484323740005493,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9525327682495117,
+            0.9974645972251892,
+            -0.9105937480926514,
+            0.9854418039321899
+          ],
+          "value_mse": 0.0026162463275385406
+        }
+      },
+      "optimizer_step": 10,
+      "elapsed_seconds": 0.9289977739999955
+    },
+    {
+      "step": 20,
+      "losses": [
+        0.07366781681776047,
+        0.0021308264695107937,
+        1.998230436583981e-05,
+        0.07151700556278229
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.9999791979789734,
+              "mate_probability_full": 0.0006184008670970798,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.857072651386261,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9204205274581909,
+            -0.9719446897506714,
+            0.5007038712501526,
+            0.9729812145233154
+          ],
+          "value_mse": 1.5369352189599335
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9990869760513306,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9985968470573425,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.998439371585846,
+            0.9999985098838806,
+            -0.9944947361946106,
+            0.9999576807022095
+          ],
+          "value_mse": 8.186320939351788e-06
+        }
+      },
+      "optimizer_step": 20,
+      "elapsed_seconds": 1.7580264429999986
+    },
+    {
+      "step": 40,
+      "losses": [
+        0.08747079968452454,
+        4.196045847493224e-05,
+        3.0003253215227232e-09,
+        0.08742883801460266
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.8629773259162903,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999793767929077,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999668002128601,
+            0.9999186396598816,
+            -0.968553364276886,
+            0.9999990463256836
+          ],
+          "value_mse": 0.00024722465523563386
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999247789382935,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999556541442871,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999855756759644,
+            0.9999997615814209,
+            -0.9998959302902222,
+            0.9999986290931702
+          ],
+          "value_mse": 2.7601254615206017e-09
+        }
+      },
+      "optimizer_step": 40,
+      "elapsed_seconds": 3.4051751219999957
+    },
+    {
+      "step": 60,
+      "losses": [
+        0.08582752197980881,
+        2.0771931303897873e-05,
+        2.2599282445412427e-09,
+        0.08580674976110458
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999005794525146,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999840259552002,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999890327453613,
+            0.9999997019767761,
+            -0.9997686743736267,
+            0.9999994039535522
+          ],
+          "value_mse": 1.3408067545128688e-08
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.999962329864502,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999772310256958,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999882578849792,
+            0.9999998807907104,
+            -0.9999052286148071,
+            0.9999992847442627
+          ],
+          "value_mse": 2.2800046295401444e-09
+        }
+      },
+      "optimizer_step": 60,
+      "elapsed_seconds": 4.953865858999997
+    },
+    {
+      "step": 80,
+      "losses": [
+        0.08234034478664398,
+        1.662952490733005e-05,
+        2.672980947693304e-09,
+        0.08232371509075165
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999634027481079,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999816417694092,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999875426292419,
+            0.9999998211860657,
+            -0.9998711347579956,
+            0.9999992847442627
+          ],
+          "value_mse": 4.1904950620619275e-09
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999721050262451,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999812841415405,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999874234199524,
+            0.9999998807907104,
+            -0.9998970627784729,
+            0.9999993443489075
+          ],
+          "value_mse": 2.6886715076557266e-09
+        }
+      },
+      "optimizer_step": 80,
+      "elapsed_seconds": 6.521484113999996
+    },
+    {
+      "step": 100,
+      "losses": [
+        0.07902698963880539,
+        1.4811623259447515e-05,
+        3.0918423377102044e-09,
+        0.0790121778845787
+      ],
+      "probe": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999704360961914,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999823570251465,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999863505363464,
+            0.9999998807907104,
+            -0.9998705387115479,
+            0.9999992251396179
+          ],
+          "value_mse": 4.236786921296698e-09
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999765157699585,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999833106994629,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.999986469745636,
+            0.9999998807907104,
+            -0.9998891353607178,
+            0.9999993443489075
+          ],
+          "value_mse": 3.1186200288857435e-09
+        }
+      },
+      "optimizer_step": 100,
+      "elapsed_seconds": 8.147374163000002
+    }
+  ],
+  "games": [],
+  "finite_parameters": true
+}

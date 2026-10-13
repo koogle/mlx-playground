@@ -1,0 +1,6884 @@
+[
+  {
+    "seed": 2026,
+    "mode": "supervised",
+    "rows": [
+      {
+        "step": 0,
+        "losses": null,
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.039986465126276016,
+                "mate_probability_full": 0.0002140374417649582,
+                "greedy_mate": false,
+                "mate_rank": 16,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.0400254912674427,
+                "mate_probability_full": 0.0002141856384696439,
+                "greedy_mate": false,
+                "mate_rank": 2,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.2125448847655207e-05,
+              2.741233038250357e-05,
+              -5.729947588406503e-05,
+              -6.363661668729037e-05
+            ],
+            "value_mse": 0.9999834017386144
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.03890453279018402,
+                "mate_probability_full": 0.00020887514983769506,
+                "greedy_mate": false,
+                "mate_rank": 19,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.038807690143585205,
+                "mate_probability_full": 0.00020700680033769459,
+                "greedy_mate": false,
+                "mate_rank": 20,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.007148528937250376,
+              -0.02384568564593792,
+              -0.028021536767482758,
+              0.0033088847994804382
+            ],
+            "value_mse": 0.9930373359286919
+          }
+        },
+        "optimizer_step": 0,
+        "elapsed_seconds": 6.032087477999999
+      },
+      {
+        "step": 1,
+        "losses": [
+          9.484293937683105,
+          8.469522476196289,
+          0.9930373430252075,
+          0.021734364330768585
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.04095173254609108,
+                "mate_probability_full": 0.00021946504421066493,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.04069419950246811,
+                "mate_probability_full": 0.00021781586110591888,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.008801420219242573,
+              0.010389300063252449,
+              0.009996423497796059,
+              0.008713704533874989
+            ],
+            "value_mse": 0.9999377344807383
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.08254757523536682,
+                "mate_probability_full": 0.00046517359442077577,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.059138957411050797,
+                "mate_probability_full": 0.00032053759787231684,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.04875246062874794,
+              0.13646633923053741,
+              0.050145093351602554,
+              0.057963818311691284
+            ],
+            "value_mse": 0.9589522479142742
+          }
+        },
+        "optimizer_step": 1,
+        "elapsed_seconds": 6.822341700999999
+      },
+      {
+        "step": 5,
+        "losses": [
+          6.105289936065674,
+          5.118622779846191,
+          0.9608325362205505,
+          0.025834335014224052
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.11359763145446777,
+                "mate_probability_full": 0.0006585245137102902,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.1098795160651207,
+                "mate_probability_full": 0.000631998700555414,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.016029220074415207,
+              0.008848673664033413,
+              0.007684255484491587,
+              0.016378510743379593
+            ],
+            "value_mse": 0.9994087801553291
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.8966640830039978,
+                "mate_probability_full": 0.039926979690790176,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.8167416453361511,
+                "mate_probability_full": 0.021496331319212914,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.14685390889644623,
+              0.17141950130462646,
+              -0.019811255857348442,
+              0.4393376111984253
+            ],
+            "value_mse": 0.8192329548824921
+          }
+        },
+        "optimizer_step": 5,
+        "elapsed_seconds": 7.248873102999999
+      },
+      {
+        "step": 10,
+        "losses": [
+          1.4999523162841797,
+          0.8576945662498474,
+          0.6014304161071777,
+          0.04082721844315529
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9962976574897766,
+                "mate_probability_full": 0.3241264224052429,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9816222190856934,
+                "mate_probability_full": 0.1636616289615631,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.5539529919624329,
+              0.7120180130004883,
+              0.5336498022079468,
+              0.6901415586471558
+            ],
+            "value_mse": 1.236449373888818
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9999983906745911,
+                "mate_probability_full": 0.5544366240501404,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9999709725379944,
+                "mate_probability_full": 0.4907620847225189,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.7431740760803223,
+              0.8635744452476501,
+              -0.5053267478942871,
+              0.6408843994140625
+            ],
+            "value_mse": 0.11455928202993082
+          }
+        },
+        "optimizer_step": 10,
+        "elapsed_seconds": 7.663578084999999
+      },
+      {
+        "step": 20,
+        "losses": [
+          0.07649300992488861,
+          0.007622848264873028,
+          0.00010285107418894768,
+          0.06876730918884277
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.6956552267074585,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999779462814331,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.9999912977218628,
+              -0.3491763770580292,
+              -0.994429349899292,
+              1.0
+            ],
+            "value_mse": 1.4550682798792887
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9971899390220642,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.997550904750824,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9977074861526489,
+              0.9863912463188171,
+              -0.996213436126709,
+              0.9963604807853699
+            ],
+            "value_mse": 5.4509490643894765e-05
+          }
+        },
+        "optimizer_step": 20,
+        "elapsed_seconds": 8.465707066
+      },
+      {
+        "step": 40,
+        "losses": [
+          0.08377033472061157,
+          7.232677307911217e-05,
+          1.145153660786491e-07,
+          0.08369789272546768
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9998822212219238,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999849796295166,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9978859424591064,
+              0.9995467066764832,
+              -0.999940812587738,
+              0.9999834299087524
+            ],
+            "value_mse": 1.1696229602620178e-06
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999908447265625,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9998866319656372,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999085664749146,
+              0.9994456768035889,
+              -0.9999063014984131,
+              0.9996941685676575
+            ],
+            "value_mse": 1.044866424493307e-07
+          }
+        },
+        "optimizer_step": 40,
+        "elapsed_seconds": 10.124333858
+      },
+      {
+        "step": 60,
+        "losses": [
+          0.08233257383108139,
+          2.7954092729487456e-05,
+          7.74929844737926e-08,
+          0.08230454474687576
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999655485153198,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999693632125854,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.999904990196228,
+              0.9995419979095459,
+              -0.9999438524246216,
+              0.9998322129249573
+            ],
+            "value_mse": 6.252445761134595e-08
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999668598175049,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999954342842102,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.999937891960144,
+              0.9995196461677551,
+              -0.9999366402626038,
+              0.999727725982666
+            ],
+            "value_mse": 7.818620240129803e-08
+          }
+        },
+        "optimizer_step": 60,
+        "elapsed_seconds": 11.66568902
+      },
+      {
+        "step": 80,
+        "losses": [
+          0.0792355164885521,
+          2.1457404727698304e-05,
+          8.370582094130441e-08,
+          0.07921397686004639
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999701976776123,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999649524688721,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999390244483948,
+              0.9993802309036255,
+              -0.9999397397041321,
+              0.9997108578681946
+            ],
+            "value_mse": 1.1876655658937807e-07
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999755620956421,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999669790267944,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999407529830933,
+              0.9994950294494629,
+              -0.999937117099762,
+              0.9997319579124451
+            ],
+            "value_mse": 8.357657144131281e-08
+          }
+        },
+        "optimizer_step": 80,
+        "elapsed_seconds": 13.188665621999998
+      },
+      {
+        "step": 100,
+        "losses": [
+          0.07630947977304459,
+          1.880506897578016e-05,
+          7.994073314421257e-08,
+          0.07629059255123138
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999727010726929,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999674558639526,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999418258666992,
+              0.9993441104888916,
+              -0.9999359250068665,
+              0.9996784329414368
+            ],
+            "value_mse": 1.3527156461634604e-07
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999788999557495,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999724626541138,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999400973320007,
+              0.999508261680603,
+              -0.9999338984489441,
+              0.999736487865448
+            ],
+            "value_mse": 7.98007411262347e-08
+          }
+        },
+        "optimizer_step": 100,
+        "elapsed_seconds": 14.737913183
+      }
+    ],
+    "games": [],
+    "finite_parameters": true
+  },
+  {
+    "seed": 2026,
+    "mode": "self_play",
+    "rows": [
+      {
+        "step": 0,
+        "losses": null,
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.039986465126276016,
+                "mate_probability_full": 0.0002140374417649582,
+                "greedy_mate": false,
+                "mate_rank": 16,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.0400254912674427,
+                "mate_probability_full": 0.0002141856384696439,
+                "greedy_mate": false,
+                "mate_rank": 2,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.2125448847655207e-05,
+              2.741233038250357e-05,
+              -5.729947588406503e-05,
+              -6.363661668729037e-05
+            ],
+            "value_mse": 0.9999834017386144
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.03890453279018402,
+                "mate_probability_full": 0.00020887514983769506,
+                "greedy_mate": false,
+                "mate_rank": 19,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.038807690143585205,
+                "mate_probability_full": 0.00020700680033769459,
+                "greedy_mate": false,
+                "mate_rank": 20,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.007148528937250376,
+              -0.02384568564593792,
+              -0.028021536767482758,
+              0.0033088847994804382
+            ],
+            "value_mse": 0.9930373359286919
+          }
+        },
+        "optimizer_step": 0,
+        "elapsed_seconds": 0.03733782599999813
+      },
+      {
+        "step": 1,
+        "losses": [
+          9.481184959411621,
+          8.466413497924805,
+          0.9930373430252075,
+          0.021734364330768585
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.040420837700366974,
+                "mate_probability_full": 0.00021915811521466821,
+                "greedy_mate": false,
+                "mate_rank": 2,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.0406404584646225,
+                "mate_probability_full": 0.00021764806297142059,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.008912086486816406,
+              0.010536148212850094,
+              0.010152718052268028,
+              0.008877203799784184
+            ],
+            "value_mse": 0.999918805797191
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.05976272001862526,
+                "mate_probability_full": 0.00042744554230012,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.05898090824484825,
+                "mate_probability_full": 0.0003224854008294642,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.05476146936416626,
+              0.141149640083313,
+              0.056684307754039764,
+              0.06552720814943314
+            ],
+            "value_mse": 0.9599917057367262
+          }
+        },
+        "optimizer_step": 1,
+        "elapsed_seconds": 7.227905551999999
+      },
+      {
+        "step": 5,
+        "losses": [
+          6.472644805908203,
+          5.277436256408691,
+          1.169392704963684,
+          0.02581605687737465
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.08386990427970886,
+                "mate_probability_full": 0.0006977393059059978,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.10997188091278076,
+                "mate_probability_full": 0.0006491394015029073,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.0635993629693985,
+              -0.05820776894688606,
+              -0.05928534269332886,
+              -0.0630083680152893
+            ],
+            "value_mse": 1.0028951730582498
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.552025318145752,
+                "mate_probability_full": 0.04725133255124092,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.7334244251251221,
+                "mate_probability_full": 0.01561710238456726,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.014530351385474205,
+              -0.16795438528060913,
+              -0.23800626397132874,
+              0.07351946085691452
+            ],
+            "value_mse": 0.9580974807840834
+          }
+        },
+        "optimizer_step": 5,
+        "elapsed_seconds": 8.091128137999998
+      },
+      {
+        "step": 10,
+        "losses": [
+          0.8399376273155212,
+          0.7276365160942078,
+          0.07101798057556152,
+          0.04128313809633255
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.8904699087142944,
+                "mate_probability_full": 0.13263927400112152,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9954663515090942,
+                "mate_probability_full": 0.3671446442604065,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.9032164812088013,
+              -0.4198123514652252,
+              -0.39825502038002014,
+              0.9153655767440796
+            ],
+            "value_mse": 1.501840023453934
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9997804164886475,
+                "mate_probability_full": 0.6674008965492249,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9999940395355225,
+                "mate_probability_full": 0.6005082130432129,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.8706623315811157,
+              0.8605037331581116,
+              -0.8893014192581177,
+              0.9713983535766602
+            ],
+            "value_mse": 0.012314917722812346
+          }
+        },
+        "optimizer_step": 10,
+        "elapsed_seconds": 9.161060057
+      },
+      {
+        "step": 20,
+        "losses": [
+          0.0730043277144432,
+          0.0027642815839499235,
+          2.8107294269830163e-08,
+          0.07024002075195312
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.999997079372406,
+                "mate_probability_full": 0.9799605011940002,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999696016311646,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              1.0,
+              0.9991557002067566,
+              -0.9998868107795715,
+              1.0
+            ],
+            "value_mse": 1.0000001814134851
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9989984631538391,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9978773593902588,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999856352806091,
+              0.9997974038124084,
+              -0.9999446272850037,
+              0.9999540448188782
+            ],
+            "value_mse": 1.1607394156953887e-08
+          }
+        },
+        "optimizer_step": 20,
+        "elapsed_seconds": 11.160966246999998
+      },
+      {
+        "step": 40,
+        "losses": [
+          0.08550354093313217,
+          2.3126063751988113e-05,
+          8.411049634560186e-12,
+          0.08548041433095932
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999303817749023,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999996423721313,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.944227933883667,
+              0.9999985694885254,
+              -0.9999997615814209,
+              1.0
+            ],
+            "value_mse": 0.945005564723914
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999397993087769,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999942779541016,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.0,
+              0.9999945163726807,
+              -0.9999997019767761,
+              0.9999997019767761
+            ],
+            "value_mse": 7.561951065326866e-12
+          }
+        },
+        "optimizer_step": 40,
+        "elapsed_seconds": 15.175842968000001
+      },
+      {
+        "step": 60,
+        "losses": [
+          0.08389677852392197,
+          1.317243277298985e-05,
+          2.7968738436356944e-12,
+          0.0838836058974266
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999624490737915,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999998927116394,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999999403953552,
+              0.9999974370002747,
+              -0.9999998807907104,
+              1.0
+            ],
+            "value_mse": 1.6466827901240322e-12
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999620914459229,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999972581863403,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.0,
+              0.9999966621398926,
+              -0.9999998211860657,
+              0.9999998807907104
+            ],
+            "value_mse": 2.7968738436356944e-12
+          }
+        },
+        "optimizer_step": 60,
+        "elapsed_seconds": 19.199727563
+      },
+      {
+        "step": 80,
+        "losses": [
+          0.08056505024433136,
+          1.123534093494527e-05,
+          2.4087398742267396e-12,
+          0.0805538147687912
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999635219573975,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999997615814209,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.0,
+              0.9999959468841553,
+              -0.9999998807907104,
+              0.9999998807907104
+            ],
+            "value_mse": 4.11404244005098e-12
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999682903289795,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999997615814209,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.0,
+              0.9999969005584717,
+              -0.9999998807907104,
+              0.9999998807907104
+            ],
+            "value_mse": 2.4087398742267396e-12
+          }
+        },
+        "optimizer_step": 80,
+        "elapsed_seconds": 23.289386410000002
+      },
+      {
+        "step": 100,
+        "losses": [
+          0.07742095738649368,
+          1.0222091077594087e-05,
+          2.3216983890961274e-12,
+          0.0774107351899147
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999656677246094,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999970197677612,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.0,
+              0.9999952912330627,
+              -0.9999998807907104,
+              0.9999998211860657
+            ],
+            "value_mse": 5.554667836804583e-12
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999719858169556,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999997615814209,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.0,
+              0.9999969601631165,
+              -0.9999998211860657,
+              0.9999998807907104
+            ],
+            "value_mse": 2.3216983890961274e-12
+          }
+        },
+        "optimizer_step": 100,
+        "elapsed_seconds": 27.291502921
+      }
+    ],
+    "games": [
+      {
+        "step": 1,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.765625
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 0.984375
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.984375
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 16,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 17,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 18,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 19,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 20,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 21,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 22,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 23,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 24,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 25,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 26,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 27,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 28,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 29,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 30,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 31,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 32,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 33,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 34,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 35,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 36,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 37,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 38,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 39,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 40,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 41,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 42,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 43,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 44,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 45,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 46,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 47,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 48,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 49,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 50,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 51,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 52,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 53,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 54,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 55,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 56,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 57,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 58,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 59,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 60,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 61,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 62,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 63,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 64,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 65,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 66,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 67,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 68,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 69,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 70,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 71,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 72,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 73,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 74,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 75,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 76,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 77,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 78,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 79,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 80,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 81,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 82,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 83,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 84,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 85,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 86,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 87,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 88,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 89,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 90,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 91,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 92,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 93,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 94,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 95,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 96,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 97,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 98,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 99,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 100,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      }
+    ],
+    "finite_parameters": true
+  },
+  {
+    "seed": 2027,
+    "mode": "supervised",
+    "rows": [
+      {
+        "step": 0,
+        "losses": null,
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.040015995502471924,
+                "mate_probability_full": 0.00021413704962469637,
+                "greedy_mate": false,
+                "mate_rank": 9,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.040007222443819046,
+                "mate_probability_full": 0.00021409506734926254,
+                "greedy_mate": false,
+                "mate_rank": 6,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              4.569400698528625e-05,
+              0.0006107851513661444,
+              0.0005401365924626589,
+              6.999599281698465e-05
+            ],
+            "value_mse": 0.9999526926759876
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.04013584181666374,
+                "mate_probability_full": 0.0002124938473571092,
+                "greedy_mate": false,
+                "mate_rank": 12,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.03756190091371536,
+                "mate_probability_full": 0.0001991182507481426,
+                "greedy_mate": false,
+                "mate_rank": 24,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.01031031459569931,
+              0.016686055809259415,
+              0.027789000421762466,
+              0.02304239571094513
+            ],
+            "value_mse": 0.9996074086461466
+          }
+        },
+        "optimizer_step": 0,
+        "elapsed_seconds": 0.03422420999999787
+      },
+      {
+        "step": 1,
+        "losses": [
+          9.502344131469727,
+          8.48099136352539,
+          0.9996074438095093,
+          0.02174520492553711
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.04064352065324783,
+                "mate_probability_full": 0.0002176574053009972,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.04062819108366966,
+                "mate_probability_full": 0.00021753643522970378,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.004303123336285353,
+              -0.004464989528059959,
+              -0.004879157058894634,
+              -0.004285984672605991
+            ],
+            "value_mse": 0.999804504112781
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.0706438347697258,
+                "mate_probability_full": 0.00039111849036999047,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.05454379320144653,
+                "mate_probability_full": 0.0002989916829392314,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.04155752435326576,
+              0.05566029995679855,
+              0.051517900079488754,
+              0.07734312117099762
+            ],
+            "value_mse": 0.9834012889631603
+          }
+        },
+        "optimizer_step": 1,
+        "elapsed_seconds": 0.17051597900000104
+      },
+      {
+        "step": 5,
+        "losses": [
+          6.886920928955078,
+          5.417034149169922,
+          1.443999171257019,
+          0.025887491181492805
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.11115828901529312,
+                "mate_probability_full": 0.0006407223991118371,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.13105246424674988,
+                "mate_probability_full": 0.0007743266760371625,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.06718865036964417,
+              -0.07208850979804993,
+              -0.07123953104019165,
+              -0.06331474334001541
+            ],
+            "value_mse": 1.0031862597367238
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.8137108087539673,
+                "mate_probability_full": 0.021488042548298836,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.8383181691169739,
+                "mate_probability_full": 0.025208132341504097,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.06734868139028549,
+              0.005864568054676056,
+              -0.2550007700920105,
+              0.571476936340332
+            ],
+            "value_mse": 0.64919990195133
+          }
+        },
+        "optimizer_step": 5,
+        "elapsed_seconds": 0.5120595180000009
+      },
+      {
+        "step": 10,
+        "losses": [
+          0.6317130327224731,
+          0.5857394933700562,
+          0.004400753416121006,
+          0.041572801768779755
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9770848155021667,
+                "mate_probability_full": 0.06170263886451721,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9970880746841431,
+                "mate_probability_full": 0.3443519175052643,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.09296461194753647,
+              -0.26164138317108154,
+              -0.21635150909423828,
+              -0.0022185957059264183
+            ],
+            "value_mse": 1.00824981144674
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.999996542930603,
+                "mate_probability_full": 0.7451390624046326,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9999966025352478,
+                "mate_probability_full": 0.6484323740005493,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9525327682495117,
+              0.9974645972251892,
+              -0.9105937480926514,
+              0.9854418039321899
+            ],
+            "value_mse": 0.0026162463275385406
+          }
+        },
+        "optimizer_step": 10,
+        "elapsed_seconds": 0.9289977739999955
+      },
+      {
+        "step": 20,
+        "losses": [
+          0.07366781681776047,
+          0.0021308264695107937,
+          1.998230436583981e-05,
+          0.07151700556278229
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9999791979789734,
+                "mate_probability_full": 0.0006184008670970798,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.857072651386261,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9204205274581909,
+              -0.9719446897506714,
+              0.5007038712501526,
+              0.9729812145233154
+            ],
+            "value_mse": 1.5369352189599335
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9990869760513306,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9985968470573425,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.998439371585846,
+              0.9999985098838806,
+              -0.9944947361946106,
+              0.9999576807022095
+            ],
+            "value_mse": 8.186320939351788e-06
+          }
+        },
+        "optimizer_step": 20,
+        "elapsed_seconds": 1.7580264429999986
+      },
+      {
+        "step": 40,
+        "losses": [
+          0.08747079968452454,
+          4.196045847493224e-05,
+          3.0003253215227232e-09,
+          0.08742883801460266
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.8629773259162903,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999793767929077,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999668002128601,
+              0.9999186396598816,
+              -0.968553364276886,
+              0.9999990463256836
+            ],
+            "value_mse": 0.00024722465523563386
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999247789382935,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999556541442871,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999855756759644,
+              0.9999997615814209,
+              -0.9998959302902222,
+              0.9999986290931702
+            ],
+            "value_mse": 2.7601254615206017e-09
+          }
+        },
+        "optimizer_step": 40,
+        "elapsed_seconds": 3.4051751219999957
+      },
+      {
+        "step": 60,
+        "losses": [
+          0.08582752197980881,
+          2.0771931303897873e-05,
+          2.2599282445412427e-09,
+          0.08580674976110458
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999005794525146,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999840259552002,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999890327453613,
+              0.9999997019767761,
+              -0.9997686743736267,
+              0.9999994039535522
+            ],
+            "value_mse": 1.3408067545128688e-08
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999962329864502,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999772310256958,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999882578849792,
+              0.9999998807907104,
+              -0.9999052286148071,
+              0.9999992847442627
+            ],
+            "value_mse": 2.2800046295401444e-09
+          }
+        },
+        "optimizer_step": 60,
+        "elapsed_seconds": 4.953865858999997
+      },
+      {
+        "step": 80,
+        "losses": [
+          0.08234034478664398,
+          1.662952490733005e-05,
+          2.672980947693304e-09,
+          0.08232371509075165
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999634027481079,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999816417694092,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999875426292419,
+              0.9999998211860657,
+              -0.9998711347579956,
+              0.9999992847442627
+            ],
+            "value_mse": 4.1904950620619275e-09
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999721050262451,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999812841415405,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999874234199524,
+              0.9999998807907104,
+              -0.9998970627784729,
+              0.9999993443489075
+            ],
+            "value_mse": 2.6886715076557266e-09
+          }
+        },
+        "optimizer_step": 80,
+        "elapsed_seconds": 6.521484113999996
+      },
+      {
+        "step": 100,
+        "losses": [
+          0.07902698963880539,
+          1.4811623259447515e-05,
+          3.0918423377102044e-09,
+          0.0790121778845787
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999704360961914,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999823570251465,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999863505363464,
+              0.9999998807907104,
+              -0.9998705387115479,
+              0.9999992251396179
+            ],
+            "value_mse": 4.236786921296698e-09
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999765157699585,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999833106994629,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.999986469745636,
+              0.9999998807907104,
+              -0.9998891353607178,
+              0.9999993443489075
+            ],
+            "value_mse": 3.1186200288857435e-09
+          }
+        },
+        "optimizer_step": 100,
+        "elapsed_seconds": 8.147374163000002
+      }
+    ],
+    "games": [],
+    "finite_parameters": true
+  },
+  {
+    "seed": 2027,
+    "mode": "self_play",
+    "rows": [
+      {
+        "step": 0,
+        "losses": null,
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.040015995502471924,
+                "mate_probability_full": 0.00021413704962469637,
+                "greedy_mate": false,
+                "mate_rank": 9,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.040007222443819046,
+                "mate_probability_full": 0.00021409506734926254,
+                "greedy_mate": false,
+                "mate_rank": 6,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              4.569400698528625e-05,
+              0.0006107851513661444,
+              0.0005401365924626589,
+              6.999599281698465e-05
+            ],
+            "value_mse": 0.9999526926759876
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.04013584181666374,
+                "mate_probability_full": 0.0002124938473571092,
+                "greedy_mate": false,
+                "mate_rank": 12,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.03756190091371536,
+                "mate_probability_full": 0.0001991182507481426,
+                "greedy_mate": false,
+                "mate_rank": 24,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.01031031459569931,
+              0.016686055809259415,
+              0.027789000421762466,
+              0.02304239571094513
+            ],
+            "value_mse": 0.9996074086461466
+          }
+        },
+        "optimizer_step": 0,
+        "elapsed_seconds": 0.048554430999999454
+      },
+      {
+        "step": 1,
+        "losses": [
+          9.5008544921875,
+          8.479501724243164,
+          0.9996074438095093,
+          0.02174520492553711
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.040412917733192444,
+                "mate_probability_full": 0.00021752940665464848,
+                "greedy_mate": false,
+                "mate_rank": 5,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.040527209639549255,
+                "mate_probability_full": 0.00021773247863166034,
+                "greedy_mate": false,
+                "mate_rank": 2,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.0043614525347948074,
+              -0.004499122500419617,
+              -0.004856289364397526,
+              -0.004284536466002464
+            ],
+            "value_mse": 0.9998032598262665
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.06080706790089607,
+                "mate_probability_full": 0.0003784390864893794,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.05255260691046715,
+                "mate_probability_full": 0.0003000060096383095,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.0403616726398468,
+              0.05459750443696976,
+              0.05249543860554695,
+              0.07985047996044159
+            ],
+            "value_mse": 0.9826400190073243
+          }
+        },
+        "optimizer_step": 1,
+        "elapsed_seconds": 0.4493797829999977
+      },
+      {
+        "step": 5,
+        "losses": [
+          7.034693717956543,
+          5.6086320877075195,
+          1.4001574516296387,
+          0.025904417037963867
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.09142094105482101,
+                "mate_probability_full": 0.00071699422551319,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.1165618821978569,
+                "mate_probability_full": 0.0008552430081181228,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.06828086823225021,
+              -0.08061347156763077,
+              -0.08088834583759308,
+              -0.06563843041658401
+            ],
+            "value_mse": 1.0040443781583432
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.2997625768184662,
+                "mate_probability_full": 0.01156480424106121,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.49690863490104675,
+                "mate_probability_full": 0.018655134364962578,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.08105790615081787,
+              -0.24795666337013245,
+              -0.5879347324371338,
+              0.35572895407676697
+            ],
+            "value_mse": 0.7466833427111266
+          }
+        },
+        "optimizer_step": 5,
+        "elapsed_seconds": 1.561833484999994
+      },
+      {
+        "step": 10,
+        "losses": [
+          0.6803818345069885,
+          0.5909557342529297,
+          0.04764818027615547,
+          0.04177792742848396
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.8979085087776184,
+                "mate_probability_full": 0.06203288212418556,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.985339343547821,
+                "mate_probability_full": 0.37592819333076477,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.20756816864013672,
+              -0.11723566800355911,
+              -0.06969407200813293,
+              -0.11594489961862564
+            ],
+            "value_mse": 0.9967414709633348
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9980776309967041,
+                "mate_probability_full": 0.6789323091506958,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.999577522277832,
+                "mate_probability_full": 0.6230621337890625,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.8960337042808533,
+              0.9369004368782043,
+              -0.9664819240570068,
+              0.9664747714996338
+            ],
+            "value_mse": 0.004259486968161141
+          }
+        },
+        "optimizer_step": 10,
+        "elapsed_seconds": 2.9613824559999955
+      },
+      {
+        "step": 20,
+        "losses": [
+          0.07398238778114319,
+          0.0016269672196358442,
+          3.443295645411126e-05,
+          0.07232099026441574
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.999966025352478,
+                "mate_probability_full": 5.7656965509522706e-05,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.5322940349578857,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9909577369689941,
+              -0.9553672671318054,
+              0.9609622955322266,
+              0.6450843811035156
+            ],
+            "value_mse": 1.9487202832317303
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9986423850059509,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9987610578536987,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9928931593894958,
+              0.9958855509757996,
+              -0.9999843239784241,
+              0.9997068047523499
+            ],
+            "value_mse": 1.6880520856688008e-05
+          }
+        },
+        "optimizer_step": 20,
+        "elapsed_seconds": 5.607200642999999
+      },
+      {
+        "step": 40,
+        "losses": [
+          0.08854155987501144,
+          2.0831546862609684e-05,
+          1.1304896219144211e-07,
+          0.08852061629295349
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9999998807907104,
+                "mate_probability_full": 0.8799161911010742,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9998432397842407,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.999988853931427,
+              -0.04664327949285507,
+              -0.9989013671875,
+              0.9999963045120239
+            ],
+            "value_mse": 0.2738658404098767
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999964714050293,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999877214431763,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9998140335083008,
+              0.9993735551834106,
+              -0.9999974966049194,
+              0.9999850988388062
+            ],
+            "value_mse": 1.0681123896461031e-07
+          }
+        },
+        "optimizer_step": 40,
+        "elapsed_seconds": 10.222922963999999
+      },
+      {
+        "step": 60,
+        "losses": [
+          0.08677856624126434,
+          1.1712223567883484e-05,
+          7.146647362787917e-08,
+          0.08676677942276001
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999691247940063,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999943971633911,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999305605888367,
+              0.9981836080551147,
+              -0.9999957084655762,
+              0.999995231628418
+            ],
+            "value_mse": 8.260356709755001e-07
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999794960021973,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999929666519165,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9998577237129211,
+              0.9994857907295227,
+              -0.9999977350234985,
+              0.9999895095825195
+            ],
+            "value_mse": 7.1192223671801e-08
+          }
+        },
+        "optimizer_step": 60,
+        "elapsed_seconds": 14.199988193999992
+      },
+      {
+        "step": 80,
+        "losses": [
+          0.08312612771987915,
+          1.05499502751627e-05,
+          7.036318550035503e-08,
+          0.08311551064252853
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999791383743286,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999935626983643,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9998641610145569,
+              0.999289870262146,
+              -0.9999971389770508,
+              0.9999903440475464
+            ],
+            "value_mse": 1.307094743552284e-07
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999815225601196,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999935626983643,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9998620748519897,
+              0.9994872808456421,
+              -0.9999977946281433,
+              0.9999897480010986
+            ],
+            "value_mse": 7.050356121141022e-08
+          }
+        },
+        "optimizer_step": 80,
+        "elapsed_seconds": 18.226195275000002
+      },
+      {
+        "step": 100,
+        "losses": [
+          0.07966044545173645,
+          1.0102921805810183e-05,
+          7.213837704966863e-08,
+          0.07965026795864105
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999802112579346,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.999992847442627,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9998438954353333,
+              0.9993311166763306,
+              -0.9999971985816956,
+              0.9999886751174927
+            ],
+            "value_mse": 1.1797740917529609e-07
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999822378158569,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999936819076538,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9998599290847778,
+              0.9994813203811646,
+              -0.9999978542327881,
+              0.9999896287918091
+            ],
+            "value_mse": 7.219014364068244e-08
+          }
+        },
+        "optimizer_step": 100,
+        "elapsed_seconds": 22.313958175000003
+      }
+    ],
+    "games": [
+      {
+        "step": 1,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.875
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 0.921875
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.9375
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 0.984375
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.96875
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 0.984375
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.984375
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 0.984375
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 16,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 17,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 18,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 19,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 20,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 21,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 22,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 23,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 24,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 25,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 26,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 27,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 28,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 29,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 30,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 31,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 32,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 33,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 34,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 35,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 36,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 37,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 38,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 39,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 40,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 41,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 42,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 43,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 44,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 45,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 46,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 47,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 48,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 49,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 50,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 51,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 52,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 53,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 54,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 55,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 56,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 57,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 58,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 59,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 60,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 61,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 62,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 63,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 64,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 65,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 66,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 67,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 68,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 69,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 70,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 71,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 72,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 73,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 74,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 75,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 76,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 77,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 78,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 79,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 80,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 81,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 82,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 83,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 84,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 85,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 86,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 87,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 88,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 89,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 90,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 91,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 92,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 93,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 94,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 95,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 96,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 97,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 98,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 99,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 100,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      }
+    ],
+    "finite_parameters": true
+  }
+]

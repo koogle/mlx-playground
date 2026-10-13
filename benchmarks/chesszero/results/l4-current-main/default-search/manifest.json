@@ -1,0 +1,14 @@
+[
+  {
+    "label": "baseline",
+    "task": "search",
+    "status": "complete",
+    "result": "baseline-search.json"
+  },
+  {
+    "label": "candidate",
+    "task": "search",
+    "status": "complete",
+    "result": "candidate-search.json"
+  }
+]

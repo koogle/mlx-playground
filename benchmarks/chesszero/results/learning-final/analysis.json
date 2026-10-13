@@ -1,0 +1,125 @@
+{
+  "generations": 21,
+  "positions": 26301,
+  "games": 84,
+  "all_parameters_finite": true,
+  "one_adam_update_per_generation": true,
+  "self_play_seconds": 2604.501738296,
+  "learning_seconds": 55.476073214000024,
+  "self_play_draws": 31,
+  "draw_position_fraction": 0.548952511311357,
+  "first_ten_mean_losses": [
+    7.543569707870484,
+    6.946036243438721,
+    0.5700115852057934,
+    0.027521842904388905
+  ],
+  "last_ten_mean_losses": [
+    6.229810285568237,
+    5.597467041015625,
+    0.5817815780639648,
+    0.050561414659023286
+  ],
+  "evaluations": {
+    "0": {
+      "random": {
+        "games": 32,
+        "completed": 32,
+        "censored": 0,
+        "wins": 21,
+        "draws": 10,
+        "losses": 1,
+        "score": 0.8125,
+        "complete_pairs": 16,
+        "pair_bootstrap_95_percent": [
+          0.734375,
+          0.890625
+        ],
+        "censored_score_bounds": [
+          0.8125,
+          0.8125
+        ]
+      }
+    },
+    "10": {
+      "initial": {
+        "games": 8,
+        "completed": 8,
+        "censored": 0,
+        "wins": 0,
+        "draws": 6,
+        "losses": 2,
+        "score": 0.375,
+        "complete_pairs": 4,
+        "pair_bootstrap_95_percent": [
+          0.125,
+          0.5
+        ],
+        "censored_score_bounds": [
+          0.375,
+          0.375
+        ]
+      },
+      "random": {
+        "games": 8,
+        "completed": 7,
+        "censored": 1,
+        "wins": 2,
+        "draws": 4,
+        "losses": 1,
+        "score": 0.5714285714285714,
+        "complete_pairs": 3,
+        "pair_bootstrap_95_percent": [
+          0.25,
+          0.75
+        ],
+        "censored_score_bounds": [
+          0.5,
+          0.625
+        ]
+      }
+    },
+    "21": {
+      "initial": {
+        "games": 32,
+        "completed": 32,
+        "censored": 0,
+        "wins": 0,
+        "draws": 19,
+        "losses": 13,
+        "score": 0.296875,
+        "complete_pairs": 16,
+        "pair_bootstrap_95_percent": [
+          0.203125,
+          0.375
+        ],
+        "censored_score_bounds": [
+          0.296875,
+          0.296875
+        ]
+      },
+      "random": {
+        "games": 32,
+        "completed": 23,
+        "censored": 9,
+        "wins": 2,
+        "draws": 14,
+        "losses": 7,
+        "score": 0.391304347826087,
+        "complete_pairs": 7,
+        "pair_bootstrap_95_percent": [
+          0.2857142857142857,
+          0.6428571428571429
+        ],
+        "censored_score_bounds": [
+          0.28125,
+          0.5625
+        ]
+      }
+    }
+  },
+  "oracle": {
+    "games_verified": 112,
+    "errors": []
+  }
+}

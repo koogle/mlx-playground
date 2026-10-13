@@ -1,0 +1,253 @@
+{
+  "verified_games": 400,
+  "runs": [
+    {
+      "seed": 2026,
+      "mode": "supervised",
+      "seconds": 14.737913183,
+      "steps": 100,
+      "initial": {
+        "finishes": [
+          {
+            "mate_probability_legal": 0.039986465126276016,
+            "mate_probability_full": 0.0002140374417649582,
+            "greedy_mate": false,
+            "mate_rank": 16,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 0.0400254912674427,
+            "mate_probability_full": 0.0002141856384696439,
+            "greedy_mate": false,
+            "mate_rank": 2,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          -1.2125448847655207e-05,
+          2.741233038250357e-05,
+          -5.729947588406503e-05,
+          -6.363661668729037e-05
+        ],
+        "value_mse": 0.9999834017386144
+      },
+      "final": {
+        "finishes": [
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999727010726929,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999674558639526,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          -0.9999418258666992,
+          0.9993441104888916,
+          -0.9999359250068665,
+          0.9996784329414368
+        ],
+        "value_mse": 1.3527156461634604e-07
+      },
+      "finite_parameters": true,
+      "bn_recalibration": null,
+      "first_probe_greedy_both": 1,
+      "games": 0,
+      "positions": 0,
+      "all_two_plies": true
+    },
+    {
+      "seed": 2026,
+      "mode": "self_play",
+      "seconds": 27.291502921,
+      "steps": 100,
+      "initial": {
+        "finishes": [
+          {
+            "mate_probability_legal": 0.039986465126276016,
+            "mate_probability_full": 0.0002140374417649582,
+            "greedy_mate": false,
+            "mate_rank": 16,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 0.0400254912674427,
+            "mate_probability_full": 0.0002141856384696439,
+            "greedy_mate": false,
+            "mate_rank": 2,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          -1.2125448847655207e-05,
+          2.741233038250357e-05,
+          -5.729947588406503e-05,
+          -6.363661668729037e-05
+        ],
+        "value_mse": 0.9999834017386144
+      },
+      "final": {
+        "finishes": [
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999656677246094,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999970197677612,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          -1.0,
+          0.9999952912330627,
+          -0.9999998807907104,
+          0.9999998211860657
+        ],
+        "value_mse": 5.554667836804583e-12
+      },
+      "finite_parameters": true,
+      "bn_recalibration": null,
+      "first_probe_greedy_both": 5,
+      "games": 200,
+      "positions": 400,
+      "all_two_plies": true
+    },
+    {
+      "seed": 2027,
+      "mode": "supervised",
+      "seconds": 8.147374163000002,
+      "steps": 100,
+      "initial": {
+        "finishes": [
+          {
+            "mate_probability_legal": 0.040015995502471924,
+            "mate_probability_full": 0.00021413704962469637,
+            "greedy_mate": false,
+            "mate_rank": 9,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 0.040007222443819046,
+            "mate_probability_full": 0.00021409506734926254,
+            "greedy_mate": false,
+            "mate_rank": 6,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          4.569400698528625e-05,
+          0.0006107851513661444,
+          0.0005401365924626589,
+          6.999599281698465e-05
+        ],
+        "value_mse": 0.9999526926759876
+      },
+      "final": {
+        "finishes": [
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999704360961914,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999823570251465,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          -0.9999863505363464,
+          0.9999998807907104,
+          -0.9998705387115479,
+          0.9999992251396179
+        ],
+        "value_mse": 4.236786921296698e-09
+      },
+      "finite_parameters": true,
+      "bn_recalibration": null,
+      "first_probe_greedy_both": 1,
+      "games": 0,
+      "positions": 0,
+      "all_two_plies": true
+    },
+    {
+      "seed": 2027,
+      "mode": "self_play",
+      "seconds": 22.313958175000003,
+      "steps": 100,
+      "initial": {
+        "finishes": [
+          {
+            "mate_probability_legal": 0.040015995502471924,
+            "mate_probability_full": 0.00021413704962469637,
+            "greedy_mate": false,
+            "mate_rank": 9,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 0.040007222443819046,
+            "mate_probability_full": 0.00021409506734926254,
+            "greedy_mate": false,
+            "mate_rank": 6,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          4.569400698528625e-05,
+          0.0006107851513661444,
+          0.0005401365924626589,
+          6.999599281698465e-05
+        ],
+        "value_mse": 0.9999526926759876
+      },
+      "final": {
+        "finishes": [
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999802112579346,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.999992847442627,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          -0.9998438954353333,
+          0.9993311166763306,
+          -0.9999971985816956,
+          0.9999886751174927
+        ],
+        "value_mse": 1.1797740917529609e-07
+      },
+      "finite_parameters": true,
+      "bn_recalibration": null,
+      "first_probe_greedy_both": 5,
+      "games": 200,
+      "positions": 400,
+      "all_two_plies": true
+    }
+  ]
+}

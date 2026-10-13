@@ -1,0 +1,38 @@
+{
+  "initial": {
+    "games": 32,
+    "completed": 32,
+    "censored": 0,
+    "wins": 0,
+    "draws": 19,
+    "losses": 13,
+    "score": 0.296875,
+    "complete_pairs": 16,
+    "pair_bootstrap_95_percent": [
+      0.203125,
+      0.375
+    ],
+    "censored_score_bounds": [
+      0.296875,
+      0.296875
+    ]
+  },
+  "random": {
+    "games": 32,
+    "completed": 23,
+    "censored": 9,
+    "wins": 2,
+    "draws": 14,
+    "losses": 7,
+    "score": 0.391304347826087,
+    "complete_pairs": 7,
+    "pair_bootstrap_95_percent": [
+      0.2857142857142857,
+      0.6428571428571429
+    ],
+    "censored_score_bounds": [
+      0.28125,
+      0.5625
+    ]
+  }
+}

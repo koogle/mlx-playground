@@ -1,0 +1,20 @@
+Creating batches from 1 game instances with batch_size 3
+Total positions collected: 5
+Creating batches of size 3 from 5 samples
+Accumulating gradients:   0%|          | 0/2 [00:00<?, ?it/s]Accumulating gradients: 100%|██████████| 2/2 [00:00<00:00, 322.04it/s]
+----------------------------------------------------------------------
+Ran 87 tests in 16.033s
+
+OK
+Creating batches from 1 game instances with batch_size 2
+Total positions collected: 2
+Creating batches of size 2 from 2 samples
+Creating batches from 1 game instances with batch_size 2
+Total positions collected: 2
+Creating batches of size 2 from 2 samples
+Creating batches from 1 game instances with batch_size 2
+Total positions collected: 2
+Creating batches of size 2 from 2 samples
+Creating batches from 1 game instances with batch_size 2
+Total positions collected: 2
+Creating batches of size 2 from 2 samples

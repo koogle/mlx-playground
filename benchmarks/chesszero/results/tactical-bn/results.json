@@ -1,0 +1,890 @@
+[
+  {
+    "seed": 2026,
+    "mode": "self_play",
+    "rows": [
+      {
+        "step": 0,
+        "losses": null,
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.039986465126276016,
+                "mate_probability_full": 0.0002140374417649582,
+                "greedy_mate": false,
+                "mate_rank": 16,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.0400254912674427,
+                "mate_probability_full": 0.0002141856384696439,
+                "greedy_mate": false,
+                "mate_rank": 2,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -1.2125448847655207e-05,
+              2.741233038250357e-05,
+              -5.729947588406503e-05,
+              -6.363661668729037e-05
+            ],
+            "value_mse": 0.9999834017386144
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.03890453279018402,
+                "mate_probability_full": 0.00020887514983769506,
+                "greedy_mate": false,
+                "mate_rank": 19,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.038807690143585205,
+                "mate_probability_full": 0.00020700680033769459,
+                "greedy_mate": false,
+                "mate_rank": 20,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.007148528937250376,
+              -0.02384568564593792,
+              -0.028021536767482758,
+              0.0033088847994804382
+            ],
+            "value_mse": 0.9930373359286919
+          }
+        },
+        "optimizer_step": 0,
+        "elapsed_seconds": 5.295468041
+      },
+      {
+        "step": 1,
+        "losses": [
+          9.481184959411621,
+          8.466413497924805,
+          0.9930373430252075,
+          0.021734364330768585
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.040420807898044586,
+                "mate_probability_full": 0.00021915801335126162,
+                "greedy_mate": false,
+                "mate_rank": 2,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.040640443563461304,
+                "mate_probability_full": 0.00021764800476375967,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.008912102319300175,
+              0.01053479965776205,
+              0.010151000693440437,
+              0.008877688087522984
+            ],
+            "value_mse": 0.9999183735668369
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.059761893004179,
+                "mate_probability_full": 0.00042743695667013526,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.058980606496334076,
+                "mate_probability_full": 0.0003224829852115363,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.05475807189941406,
+              0.1411670446395874,
+              0.056674033403396606,
+              0.0655486211180687
+            ],
+            "value_mse": 0.9599670069533538
+          }
+        },
+        "optimizer_step": 1,
+        "elapsed_seconds": 12.838065546
+      },
+      {
+        "step": 5,
+        "losses": [
+          6.4290337562561035,
+          5.246081829071045,
+          1.1571365594863892,
+          0.025815555825829506
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.08170294761657715,
+                "mate_probability_full": 0.0006686694687232375,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.10761398077011108,
+                "mate_probability_full": 0.0006330701871775091,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.06367824226617813,
+              -0.05541081354022026,
+              -0.05652545019984245,
+              -0.06305743753910065
+            ],
+            "value_mse": 1.002706440242798
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.5253316164016724,
+                "mate_probability_full": 0.038558922708034515,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.7676229476928711,
+                "mate_probability_full": 0.018804538995027542,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.013227839022874832,
+              -0.2058672308921814,
+              -0.2694033086299896,
+              0.06807354092597961
+            ],
+            "value_mse": 0.9707512207183976
+          }
+        },
+        "optimizer_step": 5,
+        "elapsed_seconds": 13.703795079000002
+      },
+      {
+        "step": 10,
+        "losses": [
+          0.8621243834495544,
+          0.7500080466270447,
+          0.07091454416513443,
+          0.04120178893208504
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9058392643928528,
+                "mate_probability_full": 0.1545594334602356,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9949429631233215,
+                "mate_probability_full": 0.3621862232685089,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              0.9009067416191101,
+              -0.40647658705711365,
+              -0.3842009902000427,
+              0.9100242853164673
+            ],
+            "value_mse": 1.4947317199940573
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9998388290405273,
+                "mate_probability_full": 0.6755162477493286,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 0.9999881386756897,
+                "mate_probability_full": 0.5836770534515381,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.6581517457962036,
+              0.8402315974235535,
+              -0.8910745978355408,
+              0.9486393332481384
+            ],
+            "value_mse": 0.03922220817247446
+          }
+        },
+        "optimizer_step": 10,
+        "elapsed_seconds": 14.700220309000002
+      },
+      {
+        "step": 20,
+        "losses": [
+          0.0735938772559166,
+          0.0037014286499470472,
+          1.3348398830714814e-08,
+          0.06989243626594543
+        ],
+        "probe": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9999755024909973,
+                "mate_probability_full": 0.1441786140203476,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999933242797852,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              1.0,
+              -0.9874667525291443,
+              -0.9998907446861267,
+              1.0
+            ],
+            "value_mse": 1.9875060260863666
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9988266825675964,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9972348809242249,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999817609786987,
+              0.9999099373817444,
+              -0.9999303817749023,
+              0.9999217391014099
+            ],
+            "value_mse": 4.853850654740199e-09
+          }
+        },
+        "optimizer_step": 20,
+        "elapsed_seconds": 16.671838450000003
+      }
+    ],
+    "games": [
+      {
+        "step": 1,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.765625
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 0.984375
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 0.984375
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 16,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 17,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 18,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 19,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      },
+      {
+        "step": 20,
+        "games": [
+          {
+            "mirror": false,
+            "moves": [
+              "h8h7",
+              "g5g7"
+            ],
+            "white_result": 1.0,
+            "mate_target_probability": 1.0
+          },
+          {
+            "mirror": true,
+            "moves": [
+              "h1h2",
+              "g4g2"
+            ],
+            "white_result": -1.0,
+            "mate_target_probability": 1.0
+          }
+        ]
+      }
+    ],
+    "bn_recalibration": {
+      "passes": 100,
+      "before": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 0.9999755024909973,
+              "mate_probability_full": 0.1441786140203476,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9999933242797852,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            1.0,
+            -0.9874667525291443,
+            -0.9998907446861267,
+            1.0
+          ],
+          "value_mse": 1.9875060260863666
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9988266825675964,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9972348809242249,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999817609786987,
+            0.9999099373817444,
+            -0.9999303817749023,
+            0.9999217391014099
+          ],
+          "value_mse": 4.853850654740199e-09
+        }
+      },
+      "after": {
+        "eval": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9986497759819031,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9970581531524658,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999821782112122,
+            0.9998835921287537,
+            -0.9999308586120605,
+            0.9999096989631653
+          ],
+          "value_mse": 6.700804355830314e-09
+        },
+        "train": {
+          "finishes": [
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9988266825675964,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            },
+            {
+              "mate_probability_legal": 1.0,
+              "mate_probability_full": 0.9972348809242249,
+              "greedy_mate": true,
+              "mate_rank": 1,
+              "legal_moves": 25
+            }
+          ],
+          "values": [
+            -0.9999817609786987,
+            0.9999099373817444,
+            -0.9999303817749023,
+            0.9999217391014099
+          ],
+          "value_mse": 4.853850654740199e-09
+        }
+      },
+      "learned_weights_unchanged": true,
+      "optimizer_step_unchanged": 20
+    },
+    "finite_parameters": true
+  }
+]

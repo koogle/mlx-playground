@@ -1,0 +1,14 @@
+{
+  "run_id": "learning-parallel-20261013-164630",
+  "function_call_id": "fc-01M4V2H4CR7NHV13GKF0X2TCE5",
+  "source_revision": "a035232",
+  "deployment": "https://modal.com/apps/radiantai/main/deployed/chesszero-convergence",
+  "target_updates": 500,
+  "games_per_update": 12,
+  "workers": 8,
+  "gpu": "L40S",
+  "hard_timeout_seconds": 43200,
+  "superseded_launch": "learning-parallel-20261013-164331",
+  "paused": true,
+  "resume_manifest": "learning-parallel-20261013-164630/checkpoints/state_epoch_3.json"
+}

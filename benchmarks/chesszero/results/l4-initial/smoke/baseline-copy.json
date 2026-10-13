@@ -1,0 +1,49 @@
+{
+  "commit": "6a334ec3092fc9f0421ec7984157d1e997b47d5c",
+  "platform": "Linux-4.19.0-gvisor-x86_64-with-glibc2.39",
+  "machine": "x86_64",
+  "chip": "NVIDIA L4, 23034 MiB, 610.57.04",
+  "backend": "cuda",
+  "host_memory_bytes": 703187619840,
+  "python": "3.12.1 (main, Jan  8 2024, 04:46:10) [Clang 17.0.6 ]",
+  "mlx": "0.32.3",
+  "device": "Device(gpu, 0)",
+  "config": {
+    "n_residual_blocks": 2,
+    "n_filters": 64,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 32,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 3,
+    "learning_rate": 0.2,
+    "n_games_per_iteration": 2,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "eval_interval_epochs": 4
+  },
+  "seed": 2026,
+  "task": "copy",
+  "workers": 2,
+  "status": "complete",
+  "seconds_per_copy": [
+    0.00017576342360000013,
+    0.00017738355579999734,
+    0.00017720630540000003,
+    0.00017705244840000205,
+    0.00017718840779999708,
+    0.00017715170239999907,
+    0.00017669207640000196
+  ],
+  "parent_peak_rss_bytes": 3106242560,
+  "parent_gpu_peak_bytes": 16
+}

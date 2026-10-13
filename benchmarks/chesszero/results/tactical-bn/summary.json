@@ -1,0 +1,175 @@
+{
+  "verified_games": 40,
+  "runs": [
+    {
+      "seed": 2026,
+      "mode": "self_play",
+      "seconds": 16.671838450000003,
+      "steps": 20,
+      "initial": {
+        "finishes": [
+          {
+            "mate_probability_legal": 0.039986465126276016,
+            "mate_probability_full": 0.0002140374417649582,
+            "greedy_mate": false,
+            "mate_rank": 16,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 0.0400254912674427,
+            "mate_probability_full": 0.0002141856384696439,
+            "greedy_mate": false,
+            "mate_rank": 2,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          -1.2125448847655207e-05,
+          2.741233038250357e-05,
+          -5.729947588406503e-05,
+          -6.363661668729037e-05
+        ],
+        "value_mse": 0.9999834017386144
+      },
+      "final": {
+        "finishes": [
+          {
+            "mate_probability_legal": 0.9999755024909973,
+            "mate_probability_full": 0.1441786140203476,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          },
+          {
+            "mate_probability_legal": 1.0,
+            "mate_probability_full": 0.9999933242797852,
+            "greedy_mate": true,
+            "mate_rank": 1,
+            "legal_moves": 25
+          }
+        ],
+        "values": [
+          1.0,
+          -0.9874667525291443,
+          -0.9998907446861267,
+          1.0
+        ],
+        "value_mse": 1.9875060260863666
+      },
+      "finite_parameters": true,
+      "bn_recalibration": {
+        "passes": 100,
+        "before": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 0.9999755024909973,
+                "mate_probability_full": 0.1441786140203476,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9999933242797852,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              1.0,
+              -0.9874667525291443,
+              -0.9998907446861267,
+              1.0
+            ],
+            "value_mse": 1.9875060260863666
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9988266825675964,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9972348809242249,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999817609786987,
+              0.9999099373817444,
+              -0.9999303817749023,
+              0.9999217391014099
+            ],
+            "value_mse": 4.853850654740199e-09
+          }
+        },
+        "after": {
+          "eval": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9986497759819031,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9970581531524658,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999821782112122,
+              0.9998835921287537,
+              -0.9999308586120605,
+              0.9999096989631653
+            ],
+            "value_mse": 6.700804355830314e-09
+          },
+          "train": {
+            "finishes": [
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9988266825675964,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              },
+              {
+                "mate_probability_legal": 1.0,
+                "mate_probability_full": 0.9972348809242249,
+                "greedy_mate": true,
+                "mate_rank": 1,
+                "legal_moves": 25
+              }
+            ],
+            "values": [
+              -0.9999817609786987,
+              0.9999099373817444,
+              -0.9999303817749023,
+              0.9999217391014099
+            ],
+            "value_mse": 4.853850654740199e-09
+          }
+        },
+        "learned_weights_unchanged": true,
+        "optimizer_step_unchanged": 20
+      },
+      "first_probe_greedy_both": 5,
+      "games": 40,
+      "positions": 80,
+      "all_two_plies": true
+    }
+  ]
+}

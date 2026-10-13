@@ -138,6 +138,10 @@ class Trainer:
         mx.clear_cache()
 
     def _accept_current_model(self, score=0.0):
+        if self.best_model is None:
+            self.logger.info("No best model yet, accepting current model as best")
+        else:
+            self.logger.info("Accepting new best model with win rate %.2f%%", score * 100)
         self.best_model = ChessNet(self.config)
         self.best_model.load_weights(tree_flatten(self.model.parameters()))
         # Arrays are immutable; copy containers so future Adam updates cannot
@@ -146,13 +150,17 @@ class Trainer:
         self.best_model_win_rate = score
 
     def _revert_to_best(self):
+        self.logger.info("Reverting to best model and its optimizer state")
         self.model.load_weights(tree_flatten(self.best_model.parameters()))
         if self.best_optimizer_state is not None:
             self.optimizer.state = tree_map(lambda x: x, self.best_optimizer_state)
         else:
             self.optimizer = optim.Adam(learning_rate=self.optimizer.learning_rate)
+            self.logger.info("No saved best optimizer state; initialized fresh Adam")
 
     def _save_checkpoint(self, epoch, interrupted=False, completed_epochs=None):
+        kind = "interrupted" if interrupted else "regular"
+        self.logger.info("Saving %s checkpoint for epoch %d...", kind, epoch)
         self.model.save_checkpoint(
             self.checkpoint_dir,
             epoch,
@@ -162,6 +170,9 @@ class Trainer:
             best_model=self.best_model,
             best_optimizer_state=self.best_optimizer_state,
             completed_epochs=completed_epochs,
+        )
+        self.logger.info(
+            "Saved %s checkpoint for epoch %d in %s", kind, epoch, self.checkpoint_dir
         )
 
     @staticmethod

@@ -27,6 +27,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", type=int, help="Resume from epoch number")
     parser.add_argument(
+        "--resume-interrupted",
+        action="store_true",
+        help="Load the separate interrupted checkpoint for --resume",
+    )
+    parser.add_argument(
         "--checkpoint-dir", default="checkpoints", help="Directory for checkpoints"
     )
     parser.add_argument(
@@ -40,13 +45,19 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.resume_interrupted and args.resume is None:
+        parser.error("--resume-interrupted requires --resume")
+
     # Setup logging
     logger = setup_logging(args.checkpoint_dir)
 
     # Initialize
     config = ModelConfig()
     trainer = Trainer(
-        config, checkpoint_dir=args.checkpoint_dir, resume_epoch=args.resume
+        config,
+        checkpoint_dir=args.checkpoint_dir,
+        resume_epoch=args.resume,
+        resume_interrupted=args.resume_interrupted,
     )
 
     if args.profile:

@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Tuple, Set, Dict
 import mlx.core as mx
 from chess_engine.bitboard import BitBoard
-from chess_engine.cache import LRUCache
+from cachetools import LRUCache
 from config.model_config import ModelConfig
 from model.move_encoding import MoveDestination, encode_move
 
@@ -72,12 +72,61 @@ class Node:
         return moves[selected_idx], children[selected_idx]
 
 
+class GameSearchCache:
+    """Bounded reuse for one game's fixed model snapshot; never stores Nodes.
+
+    Clear the cache or advance model_version before changing model weights.
+    Self-play workers create a new owner for each game and never train mid-game.
+    """
+
+    def __init__(self, model, maxsize=10_000, model_version=0):
+        self.model = model
+        self.model_version = model_version
+        self.all_moves = LRUCache(maxsize=maxsize)
+        self.boards = LRUCache(maxsize=maxsize)
+        self.positions = LRUCache(maxsize=maxsize)
+        self.board_states = LRUCache(maxsize=maxsize)
+        self.move_lists = LRUCache(maxsize=maxsize)
+        self.evaluations = LRUCache(maxsize=maxsize)
+        self.rules = tuple(LRUCache(maxsize=maxsize) for _ in range(3))
+
+    def bind(self, model, model_version=None):
+        if model is not self.model:
+            raise ValueError("A game cache belongs to one model snapshot")
+        if model_version is not None and model_version != self.model_version:
+            self.clear()
+            self.model_version = model_version
+
+    def clear(self):
+        """Discard game data, or invalidate before changing a model's weights."""
+        for cache in (
+            self.all_moves,
+            self.boards,
+            self.positions,
+            self.board_states,
+            self.move_lists,
+            self.evaluations,
+            *self.rules,
+        ):
+            cache.clear()
+
+
 class MCTS:
-    # Rule-only results may be shared; each search owns its mutable Node tree.
-    _all_moves_cache = LRUCache()
+    # Geometry/encoding tables are constant; position caches have explicit owners.
     _move_encoding_table = None  # Will be initialized in __init__
 
-    def __init__(self, model, config: ModelConfig):
+    def __init__(self, model, config: ModelConfig, cache=None, model_version=None):
+        self._owns_cache = cache is None
+        self.cache = cache if cache is not None else GameSearchCache(model)
+        self.cache.bind(model, model_version)
+        self.model_version = model_version
+        self._all_moves_cache = self.cache.all_moves
+        self._board_cache = self.cache.boards
+        self._position_cache = self.cache.positions
+        self._board_state_cache = self.cache.board_states
+        self._move_list_cache = self.cache.move_lists
+        self._evaluation_cache = self.cache.evaluations
+        self._rule_caches = self.cache.rules
         self.model = model
         self.config = config
         self.debug = config.debug
@@ -142,26 +191,23 @@ class MCTS:
         board = node.board
         policy_np = np.array(policy)
 
-        all_valid_moves = self._get_all_valid_moves(board)
+        moves = self._get_move_list(board)
 
-        if not all_valid_moves:
+        if not moves:
             return
 
         children = {}
         total_prior = 0.0
+        position_key = self._board_key(board)
 
-        for from_pos, valid_moves in all_valid_moves.items():
-            for to_pos in valid_moves:
-                move_idx = MCTS._move_encoding_table[(from_pos, to_pos)]
-                prior = max(float(policy_np[move_idx]), 1e-8)
-                total_prior += prior
-
-                child_board = board.copy()
-                child_board.make_move(from_pos, to_pos)
-
-                children[(from_pos, to_pos)] = Node(
-                    board=child_board, parent=node, prior=prior
-                )
+        for from_pos, to_pos in moves:
+            move_idx = MCTS._move_encoding_table[(from_pos, to_pos)]
+            prior = max(float(policy_np[move_idx]), 1e-8)
+            total_prior += prior
+            child_board = self._get_child_board(board, from_pos, to_pos, position_key)
+            children[(from_pos, to_pos)] = Node(
+                board=child_board, parent=node, prior=prior
+            )
 
         # Normalize priors
         if total_prior > 0:
@@ -171,17 +217,114 @@ class MCTS:
         node.children = children
         node.is_expanded = True
 
+    @staticmethod
+    def _board_key(board):
+        if isinstance(board, BitBoard):
+            return (
+                board.get_hash(),
+                tuple(sorted(board.king_positions.items())),
+                getattr(board, "en_passant_target", None),
+            )
+        return board.get_hash()
+
+    def _attach_rule_caches(self, board):
+        if isinstance(board, BitBoard):
+            board._valid_moves_cache, board._pin_cache, board._game_over_cache = (
+                self._rule_caches
+            )
+
+    def _get_child_board(self, board, source, target, position_key=None):
+        # Looking up the transition BEFORE copy/make_move avoids reconstructing
+        # successors already built for the same physical parent position.
+        # Repetition history is attached separately and never merged between paths.
+        key = (
+            self._board_key(board) if position_key is None else position_key,
+            source,
+            target,
+        )
+        if key not in self._board_cache:
+            child = board.copy()
+            self._attach_rule_caches(child)
+            if not child.make_move(source, target):
+                raise ValueError("Cannot cache a board produced by an illegal move")
+            if isinstance(child, BitBoard):
+                child.freeze()
+            self._board_cache[key] = child
+            self._position_cache[self._board_key(child)] = child
+            return child
+        child = self._board_cache[key]
+        return (
+            child._with_search_history(board) if isinstance(child, BitBoard) else child
+        )
+
+    def _get_board_state(self, board):
+        """Reuse the network input tensor for a physical position."""
+        key = self._board_key(board)
+        if key not in self._board_state_cache:
+            self._board_state_cache[key] = mx.array(board.state, dtype=mx.float32)[
+                None, ...
+            ]
+        return self._board_state_cache[key]
+
+    def _get_move_list(self, board):
+        """Reuse an immutable expansion skeleton, without Node objects or priors."""
+        key = self._board_key(board)
+        if key not in self._move_list_cache:
+            self._move_list_cache[key] = tuple(
+                (source, target)
+                for source, targets in self._get_all_valid_moves(board).items()
+                for target in targets
+            )
+        return self._move_list_cache[key]
+
+    def _evaluate_board(self, board):
+        """Cache policy/value together while one fixed model runs in eval mode."""
+        key = self._board_key(board)
+        cacheable = not getattr(self.model, "training", False)
+        if not cacheable:
+            # Training-mode calls may change BatchNorm state or use stochastic
+            # layers. Preserve their behavior rather than reusing an evaluation.
+            self._evaluation_cache.clear()
+        if cacheable and key in self._evaluation_cache:
+            return self._evaluation_cache[key]
+        policies, values = self.model(self._get_board_state(board))
+        mx.eval(policies, values)
+        policy = np.array(policies[0])
+        policy.flags.writeable = False
+        result = policy, float(values[0].item())
+        if cacheable:
+            self._evaluation_cache[key] = result
+        return result
+
+    def _clear_caches(self):
+        self.cache.clear()
+
+    def _get_root_board(self, board):
+        key = self._board_key(board)
+        if key in self._position_cache and isinstance(board, BitBoard):
+            return self._position_cache[key]._with_position_history(
+                board.position_history.copy()
+            )
+        root = board.copy()
+        self._attach_rule_caches(root)
+        if isinstance(root, BitBoard):
+            root.freeze()
+        self._position_cache[key] = root
+        return root
+
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-        # Search predicts fixed-network targets; mode does not control autodiff.
+        # Mode controls BatchNorm/dropout, not whether autodiff accumulates gradients.
         was_training = self.model.training
         self.model.eval()
-
         try:
-            # Create root and do initial evaluation
-            self.root_node = Node(board)
-            board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
-            policies, values = self.model(board_state)
-            self._expand_node(self.root_node, policies[0], values[0].item())
+            self.cache.bind(self.model, self.model_version)
+            if self._owns_cache:
+                self._clear_caches()
+            # A played move often selects a snapshot built in the previous search.
+            root_board = self._get_root_board(board)
+            self.root_node = Node(root_board)
+            policy, value = self._evaluate_board(root_board)
+            self._expand_node(self.root_node, policy, value)
 
             if not self.root_node.children:
                 return None
@@ -203,6 +346,8 @@ class MCTS:
             return move
 
         finally:
+            if self._owns_cache:
+                self._clear_caches()
             self.model.train(was_training)
 
     def _select_move_with_temperature(
@@ -259,9 +404,10 @@ class MCTS:
         self, board: BitBoard
     ) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
         """Get all valid moves for current player with caching"""
+        self._attach_rule_caches(board)
         board_hash = board.get_hash()
-        if board_hash in MCTS._all_moves_cache:
-            return MCTS._all_moves_cache[board_hash]
+        if board_hash in self._all_moves_cache:
+            return self._all_moves_cache[board_hash]
 
         moves = {}
         pieces = board.get_all_pieces(board.get_current_turn())
@@ -270,7 +416,7 @@ class MCTS:
             if valid_moves:
                 moves[pos] = valid_moves
 
-        MCTS._all_moves_cache[board_hash] = moves
+        self._all_moves_cache[board_hash] = moves
         return moves
 
     def _simulate(self, root: Node):
@@ -293,9 +439,8 @@ class MCTS:
                 break
 
             if not node.is_expanded:
-                state = mx.array(node.board.state, dtype=mx.float32)[None, ...]
-                policies, values = self.model(state)
-                self._expand_node(node, policies[0], values[0].item())
+                policy, value = self._evaluate_board(node.board)
+                self._expand_node(node, policy, value)
                 value = node.evaluation
                 break
 

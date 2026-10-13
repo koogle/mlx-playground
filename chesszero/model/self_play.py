@@ -3,7 +3,7 @@ from chess_engine.game import ChessGame
 from chess_engine.bitboard import BitBoard
 from model.network import ChessNet
 from config.model_config import ModelConfig
-from model.mcts import MCTS
+from model.mcts import MCTS, GameSearchCache
 from model.move_encoding import encode_move
 from typing import List, Tuple
 import mlx.core as mx
@@ -23,6 +23,7 @@ def play_single_game(
 ):
     """Worker process that plays a single complete game"""
     logger = logging.getLogger(__name__)
+    game_cache = GameSearchCache(model)
     try:
         model.eval()
         game = ChessGame()
@@ -37,7 +38,7 @@ def play_single_game(
         )
 
         while not game.board.is_game_over():
-            mcts = MCTS(model, config)
+            mcts = MCTS(model, config, cache=game_cache)
             move = mcts.get_move(game.board, temperature=1.0)
             if not move:
                 break
@@ -74,6 +75,8 @@ def play_single_game(
         logger.error(f"Error in game {game_id}: {str(e)}")
         logger.error(traceback.format_exc())
         result_queue.put(None)
+    finally:
+        game_cache.clear()
 
 
 def generate_games(

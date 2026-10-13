@@ -1,7 +1,8 @@
-from chess_engine.cache import LRUCache
+from cachetools import LRUCache
 import numpy as np
 from typing import List, Tuple, Set, Optional, Union
 from dataclasses import dataclass
+from types import MappingProxyType
 
 
 @dataclass
@@ -41,13 +42,15 @@ class BitBoard:
     18: No-progress count (normalized by dividing by 50)
     """
 
-    _game_over_cache = LRUCache()
-    _pin_cache = LRUCache()
     _attack_pattern_cache = {}  # New cache for attack patterns
     _ray_cache = {}  # New cache for ray calculations
-    _valid_moves_cache = LRUCache()
 
     def __init__(self):
+        # Copies share rule results within their owning game/search, never globally.
+        self._game_over_cache = LRUCache(maxsize=10_000)
+        self._pin_cache = LRUCache(maxsize=10_000)
+        self._valid_moves_cache = LRUCache(maxsize=10_000)
+        self._read_only = False
         # Use contiguous memory layout
         self.state = np.zeros((19, 8, 8), dtype=np.float32, order="C")
         # Add pre-computed attack tables
@@ -66,7 +69,8 @@ class BitBoard:
         # Pre-compute attack patterns for all squares
         self._init_attack_patterns()
 
-        self.position_history = {}  # Track position repetitions
+        # Count the initial position as its first occurrence.
+        self.position_history = {self.get_repetition_hash(): 1}
 
     def initialize_board(self):
         """Set up the initial chess position"""
@@ -141,12 +145,8 @@ class BitBoard:
     ) -> bool:
         """Make a move on the board. Returns True if successful.
         For pawn promotion, to_pos should be (row, col, promotion_piece_type)"""
-        # Update position history before making the move
-        current_hash = self.get_hash()
-        self.position_history[current_hash] = (
-            self.position_history.get(current_hash, 0) + 1
-        )
-
+        if self._read_only:
+            raise ValueError("Cached search boards are read-only; copy before moving")
         # First validate current board state
         white_king_count = np.sum(self.state[5])
         black_king_count = np.sum(self.state[11])
@@ -254,11 +254,8 @@ class BitBoard:
         # Update turn
         self.state[12] = 1 - self.state[12]
 
-        # Clear caches that depend on board state
-        # self._valid_moves_cache.clear()
-        # BitBoard._pin_cache.clear()
-        # BitBoard._game_over_cache.clear()
-
+        # Record the resulting position only after a successful move.
+        self._record_position(self.position_history, self.get_repetition_hash())
         return True
 
     def get_move_count(self) -> int:
@@ -279,6 +276,9 @@ class BitBoard:
             color: (row, col) for color, (row, col) in self.king_positions.items()
         }
         new_board.position_history = self.position_history.copy()
+        new_board._game_over_cache = self._game_over_cache
+        new_board._pin_cache = self._pin_cache
+        new_board._valid_moves_cache = self._valid_moves_cache
         return new_board
 
     def get_valid_moves(self, pos: Tuple[int, int]) -> Set[Tuple[int, int]]:
@@ -286,8 +286,8 @@ class BitBoard:
         board_hash = self.get_hash()
         cache_key = (board_hash, pos)
 
-        if cache_key in BitBoard._valid_moves_cache:
-            return BitBoard._valid_moves_cache[cache_key].copy()
+        if cache_key in self._valid_moves_cache:
+            return self._valid_moves_cache[cache_key].copy()
 
         row, col = pos
         color, piece_type = self.get_piece_at(row, col)
@@ -330,7 +330,7 @@ class BitBoard:
         if self.is_in_check(color):
             moves = self._get_check_resolving_moves(pos, moves)
 
-        BitBoard._valid_moves_cache[cache_key] = moves
+        self._valid_moves_cache[cache_key] = moves
         return moves.copy()
 
     def _get_pawn_moves(self, row: int, col: int, color: int) -> Set[Tuple[int, int]]:
@@ -632,12 +632,9 @@ class BitBoard:
         if self.get_moves_without_progress() >= 50:
             return True
 
-        # Check for threefold repetition using the position history
-        # The position hash includes piece positions, castling rights, en passant squares, and side to move
-        current_hash = self.get_hash()
-        if current_hash in self.position_history:
-            if self.position_history[current_hash] >= 3:
-                return True
+        # Move counters do not affect repetition identity.
+        if self.position_history.get(self.get_repetition_hash(), 0) >= 3:
+            return True
 
         # Get all pieces for insufficient material check
         white_pieces = self.get_all_pieces(0)
@@ -717,29 +714,29 @@ class BitBoard:
 
     def is_game_over(self) -> bool:
         """Check if the game is over (checkmate or draw)"""
+        # Draws can depend on history, which is deliberately not in the board
+        # hash. Check them before lookup and never store them in this cache.
+        if self.is_draw():
+            return True
+
         cache_key = self.get_hash()
 
-        if cache_key in BitBoard._game_over_cache:
-            return BitBoard._game_over_cache[cache_key]
+        if cache_key in self._game_over_cache:
+            return self._game_over_cache[cache_key]
 
         current_turn = self.get_current_turn()
 
         # Check for checkmate
         if self.is_checkmate(current_turn):
-            BitBoard._game_over_cache[cache_key] = True
+            self._game_over_cache[cache_key] = True
             return True
 
         # Check for stalemate
         elif self.is_stalemate(current_turn):
-            BitBoard._game_over_cache[cache_key] = True
+            self._game_over_cache[cache_key] = True
             return True
 
-        # Check for draw
-        elif self.is_draw():
-            BitBoard._game_over_cache[cache_key] = True
-            return True
-
-        BitBoard._game_over_cache[cache_key] = False
+        self._game_over_cache[cache_key] = False
         return False
 
     def get_game_result(self, perspective_color: Optional[int] = None) -> float:
@@ -855,6 +852,42 @@ class BitBoard:
         collisions. Keeping only an integer digest loses that equality check.
         """
         return self.state.tobytes()
+
+    @staticmethod
+    def _record_position(history, position_key):
+        history[position_key] = history.get(position_key, 0) + 1
+
+    def _with_search_history(self, parent):
+        """Reuse physical state while keeping this path's repetition history."""
+        history = parent.position_history.copy()
+        self._record_position(history, self.get_repetition_hash())
+        return self._with_position_history(history)
+
+    def _with_position_history(self, history):
+        """Attach independent history to an already-frozen physical snapshot."""
+        if history == self.position_history:
+            return self
+        # Physical state and king coordinates are frozen; only the path context
+        # changes. Avoid allocating/copying the 19-plane state or replaying a move.
+        board = object.__new__(BitBoard)
+        board.__dict__ = self.__dict__.copy()
+        board.position_history = MappingProxyType(history)
+        return board
+
+    def freeze(self):
+        """Protect a shared search snapshot; copy() produces a writable board."""
+        self.state.flags.writeable = False
+        self.king_positions = MappingProxyType(self.king_positions)
+        self.position_history = MappingProxyType(self.position_history)
+        self._read_only = True
+
+    def get_repetition_hash(self) -> int:
+        """Hash pieces, side to move, and castling rights, excluding counters.
+
+        The engine does not yet represent en passant. Legal en-passant rights
+        must also be included here if that rule is implemented.
+        """
+        return hash(self.state[:17].tobytes())
 
     def __hash__(self) -> int:
         """Hash the board"""
@@ -1044,11 +1077,11 @@ class BitBoard:
         board_hash = self.get_hash()
         cache_key = (board_hash, pos)
 
-        if cache_key in BitBoard._pin_cache:
-            return BitBoard._pin_cache[cache_key]
+        if cache_key in self._pin_cache:
+            return self._pin_cache[cache_key]
 
         result = self._calculate_pin_info(pos)
-        BitBoard._pin_cache[cache_key] = result
+        self._pin_cache[cache_key] = result
         return result
 
     def _calculate_pin_info(self, pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:

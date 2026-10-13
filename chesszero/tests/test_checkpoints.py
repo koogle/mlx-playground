@@ -1,4 +1,3 @@
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -96,18 +95,6 @@ class TestCheckpoints(unittest.TestCase):
             Path(self.directory.name, "state_epoch_1.json").read_text(), manifest
         )
         self.trainer(resume_epoch=1)
-
-    def test_unsupported_checkpoint_formats_are_rejected_before_loading_weights(self):
-        for version in (None, 1, 3):
-            with self.subTest(version=version):
-                state = {} if version is None else {"version": version}
-                Path(self.directory.name, "state_epoch_5.json").write_text(
-                    json.dumps(state)
-                )
-                with self.assertRaisesRegex(
-                    ValueError, "Unsupported checkpoint format"
-                ):
-                    self.trainer(resume_epoch=5)
 
     def test_draws_contribute_half_a_point(self):
         self.assertEqual(Trainer._evaluation_score(0, 0, 40), 0.5)

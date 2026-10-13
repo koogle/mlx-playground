@@ -218,7 +218,6 @@ class ChessNet(nn.Module):
             return filename
 
         state = {
-            "version": 2,
             "epoch": epoch,
             "completed_epochs": (
                 epoch - int(interrupted)
@@ -252,8 +251,6 @@ class ChessNet(nn.Module):
         label = f"{'interrupted_' if interrupted else ''}epoch_{epoch}"
         with (directory / f"state_{label}.json").open() as handle:
             state = json.load(handle)
-        if state.get("version") != 2:
-            raise ValueError("Unsupported checkpoint format; expected version 2.")
         config = ModelConfig(**state["config"])
         model = cls(config)
         model.load_weights(str(directory / state["model_file"]))
@@ -265,10 +262,10 @@ class ChessNet(nn.Module):
                 else None
             )
 
-        state["optimizer_state"] = load_optimizer(state.get("optimizer_file"))
-        state["best_optimizer_state"] = load_optimizer(state.get("best_optimizer_file"))
+        state["optimizer_state"] = load_optimizer(state["optimizer_file"])
+        state["best_optimizer_state"] = load_optimizer(state["best_optimizer_file"])
         state["best_model"] = None
-        if state.get("best_model_file"):
+        if state["best_model_file"]:
             best = cls(config)
             best.load_weights(str(directory / state["best_model_file"]))
             state["best_model"] = best

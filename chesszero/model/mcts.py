@@ -59,15 +59,6 @@ class Node:
         if not np.any(visit_counts):
             priors = np.array([child.prior for child in children])
 
-            # Add less Dirichlet noise at root
-            if self.parent is None and self.exploration_noise:
-                alpha = 0.15  # Reduced from 0.3
-                noise = np.random.dirichlet([alpha] * len(priors))
-                priors = (
-                    0.9 * priors + 0.1 * noise
-                )  # More weight on priors (was 0.75/0.25)
-
-            # Sample from prior distribution with higher temperature for first move
             priors = priors / np.sum(priors)
             selected_idx = np.argmax(priors)  # More greedy selection
             return moves[selected_idx], children[selected_idx]
@@ -239,6 +230,13 @@ class MCTS:
         if total_prior > 0:
             for child in children.values():
                 child.prior /= total_prior
+
+        # Perturb root priors once and keep them for every simulation in this search.
+        if node.parent is None and self.exploration_noise:
+            noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(children))
+            epsilon = self.config.dirichlet_epsilon
+            for child, sample in zip(children.values(), noise):
+                child.prior = (1 - epsilon) * child.prior + epsilon * float(sample)
 
         node.children = children
         node.is_expanded = True

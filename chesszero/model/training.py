@@ -19,9 +19,12 @@ import gc
 import psutil
 import os
 import traceback
-import multiprocessing as mp
-from queue import Empty
+from model.game_workers import GameResultSender, run_game_workers
 from mlx.utils import tree_flatten, tree_map
+
+
+class IncompleteEvaluationError(RuntimeError):
+    """Some evaluation games failed, so no promotion decision is available."""
 
 
 class Trainer:
@@ -109,7 +112,12 @@ class Trainer:
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
 
-                    result = self.evaluate_against_best()
+                    try:
+                        result = self.evaluate_against_best(max_workers=n_workers)
+                    except IncompleteEvaluationError as error:
+                        self.logger.warning("Skipping model acceptance: %s", error)
+                        self._save_checkpoint(epoch + 1)
+                        continue
                     if result is None:
                         self._accept_current_model()
                     else:
@@ -141,7 +149,9 @@ class Trainer:
         if self.best_model is None:
             self.logger.info("No best model yet, accepting current model as best")
         else:
-            self.logger.info("Accepting new best model with win rate %.2f%%", score * 100)
+            self.logger.info(
+                "Accepting new best model with win rate %.2f%%", score * 100
+            )
         self.best_model = ChessNet(self.config)
         self.best_model.load_weights(tree_flatten(self.model.parameters()))
         # Arrays are immutable; copy containers so future Adam updates cannot
@@ -260,14 +270,14 @@ class Trainer:
             "system_percent": psutil.virtual_memory().percent,
         }
 
+    @staticmethod
     def play_evaluation_game_worker(
-        self,
         model: ChessNet,
         best_model: ChessNet,
         config: ModelConfig,
         game_id: int,
         player_color: int,
-        result_queue: mp.Queue,
+        result_queue: GameResultSender,
         max_workers: int,
     ):
         """Worker process that plays a single evaluation game and reports its result."""
@@ -286,24 +296,30 @@ class Trainer:
 
             while not game.board.is_game_over():
                 if game.board.get_current_turn() == player_color:
-                    mcts = MCTS(model, config, exploration_noise=False)
+                    mcts = MCTS(model, config, exploration_noise=True)
                 else:
-                    mcts = MCTS(best_model, config, exploration_noise=False)
+                    mcts = MCTS(best_model, config, exploration_noise=True)
 
                 move = mcts.get_move(game.board, temperature=0.0)
-                if not move:
-                    break
+                if move is None:
+                    raise RuntimeError(
+                        "Search returned no move for an ongoing evaluation"
+                    )
 
-                game.make_move(move[0], move[1])
+                if not game.make_move(move[0], move[1]):
+                    raise RuntimeError("Search returned an illegal evaluation move")
 
                 pbar.update(1)
 
             pbar.close()
 
+            result = game.board.get_game_result(player_color)
+            if result is None:
+                raise RuntimeError("Evaluation ended without a terminal result")
             result_queue.put(
                 {
                     "game_id": game_id,
-                    "result": game.board.get_game_result(player_color),
+                    "result": result,
                     "perspective_color": player_color,
                     "final_board": str(game.board),
                 }
@@ -329,74 +345,18 @@ class Trainer:
                 "Evaluation needs a positive worker count and an even n_games >= 2"
             )
 
-        wins = 0
-        losses = 0
-        draws = 0
-        total_games = 0
-
-        ctx = mp.get_context("spawn")
-        result_queue = ctx.Queue()
-        active_workers = []
-        game_id = 0
-        games_completed = 0
-
-        try:
-            for color in [0, 1]:
-                games_per_color = n_games // 2
-                while games_completed < total_games + games_per_color:
-                    while (
-                        len(active_workers) < max_workers and game_id < games_per_color
-                    ):
-                        p = ctx.Process(
-                            target=self.play_evaluation_game_worker,
-                            args=(
-                                self.model,
-                                self.best_model,
-                                self.config,
-                                game_id,
-                                color,
-                                result_queue,
-                                max_workers,
-                            ),
-                        )
-                        p.start()
-                        active_workers.append((p, game_id))
-                        game_id += 1
-
-                    try:
-                        result = result_queue.get(timeout=1)
-                        if result is not None:
-                            games_completed += 1
-                            game_result = result["result"]
-
-                            if game_result == 1:
-                                wins += 1
-                            elif game_result == -1:
-                                losses += 1
-                            else:
-                                draws += 1
-
-                            self.logger.info(
-                                f"Evaluation game {result['game_id']} completed with result for {result['perspective_color']}: {game_result} and board:\n{result['final_board']}"
-                            )
-
-                    except Empty:
-                        pass
-
-                    active_workers = [
-                        (p, gid) for p, gid in active_workers if p.is_alive()
-                    ]
-
-                game_id = 0
-                total_games = games_completed
-
-        finally:
-            for p, _ in active_workers:
-                if p.is_alive():
-                    p.terminate()
-                    p.join()
-
-        total_games = wins + losses + draws
-        win_rate = self._evaluation_score(wins, losses, draws)
-
-        return win_rate, wins, losses, draws
+        jobs = [
+            (self.model, self.best_model, self.config, game_id, color)
+            for color in (0, 1)
+            for game_id in range(n_games // 2)
+        ]
+        results, failures = run_game_workers(
+            self.play_evaluation_game_worker, jobs, max_workers
+        )
+        self.logger.info("Evaluation: %d completed, %d failed", len(results), failures)
+        if failures:
+            raise IncompleteEvaluationError(f"{failures} of {n_games} games failed")
+        wins = sum(result["result"] == 1 for result in results)
+        losses = sum(result["result"] == -1 for result in results)
+        draws = sum(result["result"] == 0 for result in results)
+        return self._evaluation_score(wins, losses, draws), wins, losses, draws

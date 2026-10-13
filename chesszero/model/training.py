@@ -68,7 +68,7 @@ class Trainer:
             self.start_epoch = 0
             self.optimizer = optim.Adam(learning_rate=config.learning_rate)
 
-    def train(self, n_epochs: Optional[int] = None, n_workers: int = 5):
+    def train(self, n_epochs: Optional[int] = None, n_workers: int = 8):
         """Main training loop with parallel game generation"""
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()

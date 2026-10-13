@@ -35,7 +35,7 @@ def main():
     parser.add_argument(
         "--workers",
         type=int,
-        default=5,
+        default=8,
         help="Number of parallel workers for game generation",
     )
     args = parser.parse_args()

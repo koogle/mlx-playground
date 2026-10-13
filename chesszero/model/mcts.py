@@ -11,7 +11,6 @@ class Node:
     def __init__(self, board: BitBoard, parent=None, prior=0.0):
         self.visit_count = 0
         self.value_sum = 0.0
-        self.pending_visits = 0  # Temporary reservations, never policy-target visits
         self.evaluation = 0.0  # Network value from this node's side-to-move perspective
         self.board = board
         self.parent = parent
@@ -32,10 +31,7 @@ class Node:
         moves = list(self.children.keys())
         children = list(self.children.values())
 
-        # Pending evaluations participate in selection, but not completed statistics.
-        visit_counts = np.array(
-            [child.visit_count + child.pending_visits for child in children]
-        )
+        visit_counts = np.array([child.visit_count for child in children])
         if not np.any(visit_counts):
             priors = np.array([child.prior for child in children])
 
@@ -57,13 +53,7 @@ class Node:
         total_visits = np.sum(visit_counts)
         sqrt_total = np.sqrt(total_visits)
 
-        # A virtual win for the child is a virtual loss for the selecting parent.
-        q_values = np.array(
-            [
-                -(child.value_sum + child.pending_visits) / visits if visits else 0.0
-                for child, visits in zip(children, visit_counts)
-            ]
-        )
+        q_values = np.array([-child.value() for child in children])
 
         priors = np.array([child.prior for child in children])
 
@@ -101,10 +91,6 @@ class MCTS:
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
         self.root_node = None  # Initialize root_node
-        self.max_batch_size = config.mcts_batch_size
-        if self.max_batch_size < 1:
-            raise ValueError("mcts_batch_size must be positive")
-
         # Initialize move encoding table if not already done
         if MCTS._move_encoding_table is None:
             MCTS._move_encoding_table = self._init_move_encoding_table()
@@ -150,16 +136,6 @@ class MCTS:
         board_hash = node.board.get_hash()
         node.evaluation = float(value)
 
-        # Check transposition table first
-        if board_hash in MCTS._transposition_table:
-            cached_node = MCTS._transposition_table[board_hash]
-            if cached_node.visit_count > node.visit_count:
-                node.children = cached_node.children
-                node.is_expanded = True
-                node.value_sum = cached_node.value_sum
-                node.visit_count = cached_node.visit_count
-                return
-
         # Check for cycles
         current = node
         path_positions = {board_hash}
@@ -171,12 +147,6 @@ class MCTS:
                 return
             path_positions.add(parent_hash)
             current = current.parent
-
-        # Use cached subtree if available
-        if board_hash in MCTS._tree_cache:
-            node.children = MCTS._tree_cache[board_hash]
-            node.is_expanded = True
-            return
 
         board = node.board
         policy_np = np.array(policy)
@@ -210,13 +180,6 @@ class MCTS:
         node.children = children
         node.is_expanded = True
 
-        if len(node.children) > 0:
-            MCTS._tree_cache[board_hash] = node.children
-
-        # Cache the expanded node
-        # if node.visit_count > 10:  # Only cache well-explored nodes
-        #    MCTS._transposition_table[board_hash] = node
-
     def get_move(self, board: BitBoard, temperature: float = 0.0):
         # Don't switch to eval mode during training
         if not self.training:
@@ -227,12 +190,6 @@ class MCTS:
             if len(MCTS._all_moves_cache) > self.cache_max_size:
                 self._prune_caches()
 
-            key = board.get_hash()
-            if key in MCTS._transposition_table:
-                cached_node = MCTS._transposition_table[key]
-                if cached_node.visit_count > self.config.n_simulations // 2:
-                    return self._select_move_with_temperature(cached_node, temperature)
-
             # Create root and do initial evaluation
             self.root_node = Node(board)
             board_state = mx.array(board.state, dtype=mx.float32)[None, ...]
@@ -242,13 +199,9 @@ class MCTS:
             if not self.root_node.children:
                 return None
 
-            # Batch process simulations with early stopping check
-            simulations_completed = 0
-            while simulations_completed < self.config.n_simulations:
-                batch_size = min(
-                    self.max_batch_size, self.config.n_simulations - simulations_completed
-                )
-                simulations_completed += self._batch_simulate(self.root_node, batch_size)
+            # Complete each simulation before selecting the next path.
+            for simulations_completed in range(1, self.config.n_simulations + 1):
+                self._simulate(self.root_node)
 
                 # Check if a move clearly dominates
                 if self.should_stop(self.root_node):
@@ -305,12 +258,17 @@ class MCTS:
         # Sample move based on visit count distribution
         return moves[np.random.choice(len(moves), p=probs)]
 
-    def backup(self, search_path: List[Node], value: float):
-        """Back up a leaf-side-to-move value, changing perspective at each edge."""
-        for node in reversed(search_path):
+    def backup(self, search_path: List[Node], value: float, value_player: int):
+        """Accumulate value in each node's side-to-move perspective.
+
+        value_player identifies whose outcome value estimates (0=White, 1=Black).
+        """
+        for node in search_path:
+            node_value = (
+                value if node.board.get_current_turn() == value_player else -value
+            )
             node.visit_count += 1
-            node.value_sum += value
-            value = -value
+            node.value_sum += node_value
 
     def _get_all_valid_moves(
         self, board: BitBoard
@@ -330,89 +288,42 @@ class MCTS:
         MCTS._all_moves_cache[board_hash] = moves
         return moves
 
-    def _batch_simulate(self, root: Node, batch_size: int) -> int:
-        """Evaluate a bounded batch and back up each completed traversal once.
+    def _simulate(self, root: Node):
+        """Select, evaluate, expand and back up one complete simulation."""
+        node = root
+        path = [node]
+        visited = set()
 
-        Pending paths have temporary virtual losses during selection. If selection
-        reaches a leaf already queued in this batch, flush the batch so the next
-        traversal can descend through that leaf after expansion. That collision
-        is not counted as a completed simulation.
-        """
-        pending_nodes = []
-        pending_paths = []
-        queued = set()
-        completed = 0
+        while True:
+            board_hash = node.board.get_hash()
+            if board_hash in visited:
+                value = 0.0
+                break
+            visited.add(board_hash)
 
-        try:
-            for _ in range(batch_size):
-                node = root
-                path = [node]
-                visited = set()
-                value = None
+            if node.board.is_game_over():
+                value = node.board.get_game_result()
+                if value is None:
+                    raise ValueError("Terminal board has no game result")
+                break
 
-                while True:
-                    board_hash = node.board.get_hash()
-                    if board_hash in visited:
-                        value = 0.0  # Treat a traversal cycle as a draw.
-                        break
-                    visited.add(board_hash)
+            if not node.is_expanded:
+                state = mx.array(node.board.state, dtype=mx.float32)[None, ...]
+                policies, values = self.model(state)
+                self._expand_node(node, policies[0], values[0].item())
+                value = node.evaluation
+                break
 
-                    if node.board.is_game_over():
-                        value = node.board.get_game_result()
-                        if value is None:
-                            raise ValueError("Terminal board has no game result")
-                        break
+            if len(path) - 1 >= 50 or not node.children:
+                value = node.evaluation
+                break
 
-                    if not node.is_expanded:
-                        break
+            _, node = node.select_child(self.config.c_puct)
+            path.append(node)
 
-                    if len(path) - 1 >= 50 or not node.children:
-                        value = node.evaluation
-                        break
-
-                    _, node = node.select_child(self.config.c_puct)
-                    path.append(node)
-
-                if node in queued:
-                    # Flush outstanding work; do not back up the same pending leaf twice.
-                    break
-
-                if self.debug:
-                    self.path_lengths.append(len(path) - 1)
-
-                if value is not None:
-                    # Terminal states can legitimately be revisited and backed up.
-                    self.backup(path, value)
-                    completed += 1
-                    continue
-
-                queued.add(node)
-                pending_nodes.append(node)
-                pending_paths.append(path)
-                for ancestor in path:
-                    ancestor.pending_visits += 1
-
-            if pending_nodes:
-                board_batch = mx.array(
-                    np.stack([node.board.state for node in pending_nodes]),
-                    dtype=mx.float32,
-                )
-                policies, values = self.model(board_batch)
-                mx.eval(policies, values)
-
-                for node, policy, value, path in zip(
-                    pending_nodes, policies, values, pending_paths
-                ):
-                    self._expand_node(node, policy, value.item())
-                    self.backup(path, node.evaluation)
-                    completed += 1
-
-            return completed
-        finally:
-            # Release every reservation, including when evaluation or expansion fails.
-            for path in pending_paths:
-                for node in path:
-                    node.pending_visits -= 1
+        if self.debug:
+            self.path_lengths.append(len(path) - 1)
+        self.backup(path, value, value_player=node.board.get_current_turn())
 
     def should_stop(self, root: Node) -> bool:
         """More conservative early stopping"""

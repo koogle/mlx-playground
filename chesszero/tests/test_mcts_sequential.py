@@ -74,17 +74,16 @@ class RecordingModel:
         pass
 
 
-class TestMCTSBatching(unittest.TestCase):
+class TestMCTSSequential(unittest.TestCase):
     def setUp(self):
         np.random.seed(42)
         for name in ("_tree_cache", "_transposition_table", "_all_moves_cache"):
             getattr(MCTS, name).clear()
 
-    def search(self, board, simulations=17, batch_size=8, model=None):
+    def search(self, board, simulations=17, model=None):
         model = model or RecordingModel()
         config = ModelConfig(n_simulations=simulations, debug=True)
         search = MCTS(model, config)
-        search.max_batch_size = batch_size
         with patch.object(search, "should_stop", return_value=False):
             move = search.get_move(board)
         return search, model, move
@@ -99,21 +98,31 @@ class TestMCTSBatching(unittest.TestCase):
             int(position) for batch in model.inputs for position in batch[:, 0, 0, 0]
         ]
         self.assertEqual(len(evaluated), len(set(evaluated)))
-        self.assertTrue(all(len(batch) <= 8 for batch in model.inputs))
-        self.assertTrue(any(len(batch) > 1 for batch in model.inputs))
-        stack = [root]
-        while stack:
-            node = stack.pop()
-            self.assertEqual(node.pending_visits, 0)
-            stack.extend(node.children.values())
+        self.assertTrue(all(len(batch) == 1 for batch in model.inputs))
 
-    def test_batch_size_one_preserves_sequential_search(self):
-        search, model, _ = self.search(ToyBoard(), simulations=12, batch_size=1)
+    def test_searches_do_not_share_mutable_nodes_or_visits(self):
+        first, _, _ = self.search(ToyBoard(), simulations=12)
+        first_counts = [
+            child.visit_count for child in first.root_node.children.values()
+        ]
+        second, _, _ = self.search(ToyBoard(), simulations=5)
+        self.assertEqual(second.root_node.visit_count, 5)
+        self.assertEqual(
+            sum(c.visit_count for c in second.root_node.children.values()), 5
+        )
+        self.assertEqual(
+            first_counts, [c.visit_count for c in first.root_node.children.values()]
+        )
+        for move, child in first.root_node.children.items():
+            self.assertIsNot(child, second.root_node.children[move])
+
+    def test_each_inference_evaluates_one_position(self):
+        search, model, _ = self.search(ToyBoard(), simulations=12)
         self.assertEqual(search.root_node.visit_count, 12)
         self.assertGreater(max(search.path_lengths), 1)
         self.assertTrue(all(len(batch) == 1 for batch in model.inputs))
 
-    def test_forced_line_flushes_pending_leaf_and_continues(self):
+    def test_forced_line_expands_before_the_next_simulation(self):
         search, model, _ = self.search(
             ToyBoard(width=1, terminal_depth=20), simulations=10
         )
@@ -144,16 +153,14 @@ class TestMCTSBatching(unittest.TestCase):
         self.assertEqual(root.visit_count, 0)
         self.assertEqual(root.value_sum, 0.0)
 
-    def test_pending_visits_are_released_on_inference_error(self):
+    def test_failed_inference_does_not_count_as_a_simulation(self):
         model = RecordingModel(fail_on_call=2)
         search = MCTS(model, ModelConfig(n_simulations=16))
         with self.assertRaisesRegex(RuntimeError, "inference failure"):
             search.get_move(ToyBoard())
         root = search.root_node
-        self.assertEqual(root.pending_visits, 0)
         self.assertEqual(root.visit_count, 0)
         for child in root.children.values():
-            self.assertEqual(child.pending_visits, 0)
             self.assertEqual(child.visit_count, 0)
 
     def test_early_stopping_happens_before_full_budget(self):
@@ -167,7 +174,7 @@ class TestMCTSBatching(unittest.TestCase):
     def test_real_chess_opening_deepens_and_preserves_input_board(self):
         board = BitBoard()
         original = board.state.copy()
-        search, _, move = self.search(board, simulations=32, batch_size=4)
+        search, _, move = self.search(board, simulations=32)
         self.assertEqual(search.root_node.visit_count, 32)
         self.assertGreater(max(search.path_lengths), 1)
         self.assertIn(move[1], board.get_valid_moves(move[0]))

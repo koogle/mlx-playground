@@ -336,6 +336,7 @@ def main():
         trainer = Trainer(config, checkpoint_dir=out / "checkpoints")
     # CLI generation size applies even when the checkpoint restores its config.
     config.n_games_per_iteration = args.games_per_generation
+    config.n_simulations = args.simulations
     mx.eval(trainer.model.parameters())
     metadata = {
         "revision": (Path(args.repo) / "REVISION").read_text().strip(),

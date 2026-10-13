@@ -46,6 +46,7 @@ def run(
     workers: int = 16,
     games_per_generation: int = 16,
     eval_every: int = 10,
+    simulations: int = 128,
 ):
     import json
     import signal
@@ -80,7 +81,7 @@ def run(
         "--eval-every",
         str(eval_every),
         "--simulations",
-        "32",
+        str(simulations),
     ]
     if resume_run:
         command.extend(
@@ -153,6 +154,7 @@ def main(
     workers: int = 16,
     games_per_generation: int = 16,
     eval_every: int = 10,
+    simulations: int = 128,
 ):
     result = run.remote(
         run_id,
@@ -163,6 +165,7 @@ def main(
         workers,
         games_per_generation,
         eval_every,
+        simulations,
     )
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)

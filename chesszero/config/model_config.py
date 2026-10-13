@@ -19,6 +19,7 @@ class ModelConfig:
 
     # MCTS
     n_simulations: int = 1600  # Fewer but higher quality simulations
+    mcts_batch_size: int = 8  # Evaluate pending leaves before selecting the next batch
     c_puct: float = 1  # Increased exploration
     dirichlet_alpha: float = 0.55  # More noise
     dirichlet_epsilon: float = 0.3  # Stronger noise influence

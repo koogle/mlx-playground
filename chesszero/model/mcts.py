@@ -11,6 +11,8 @@ class Node:
     def __init__(self, board: BitBoard, parent=None, prior=0.0):
         self.visit_count = 0
         self.value_sum = 0.0
+        self.pending_visits = 0  # Temporary reservations, never policy-target visits
+        self.evaluation = 0.0  # Network value from this node's side-to-move perspective
         self.board = board
         self.parent = parent
         self.prior = prior
@@ -30,8 +32,11 @@ class Node:
         moves = list(self.children.keys())
         children = list(self.children.values())
 
-        # If no visits yet, sample based on prior probability
-        if all(child.visit_count == 0 for child in children):
+        # Pending evaluations participate in selection, but not completed statistics.
+        visit_counts = np.array(
+            [child.visit_count + child.pending_visits for child in children]
+        )
+        if not np.any(visit_counts):
             priors = np.array([child.prior for child in children])
 
             # Add less Dirichlet noise at root
@@ -49,12 +54,15 @@ class Node:
 
         # Calculate UCB scores with lower temperature
         temperature = 0.5  # Reduced from 1.0 for less exploration
-        visit_counts = np.array([child.visit_count for child in children])
         total_visits = np.sum(visit_counts)
         sqrt_total = np.sqrt(total_visits)
 
+        # A virtual win for the child is a virtual loss for the selecting parent.
         q_values = np.array(
-            [-child.value() if child.visit_count > 0 else 0.0 for child in children]
+            [
+                -(child.value_sum + child.pending_visits) / visits if visits else 0.0
+                for child, visits in zip(children, visit_counts)
+            ]
         )
 
         priors = np.array([child.prior for child in children])
@@ -93,7 +101,9 @@ class MCTS:
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
         self.root_node = None  # Initialize root_node
-        self.max_batch_size = 2000
+        self.max_batch_size = config.mcts_batch_size
+        if self.max_batch_size < 1:
+            raise ValueError("mcts_batch_size must be positive")
 
         # Initialize move encoding table if not already done
         if MCTS._move_encoding_table is None:
@@ -138,6 +148,7 @@ class MCTS:
     def _expand_node(self, node: Node, policy, value):
         """Expand node with better caching"""
         board_hash = node.board.get_hash()
+        node.evaluation = float(value)
 
         # Check transposition table first
         if board_hash in MCTS._transposition_table:
@@ -156,8 +167,7 @@ class MCTS:
             parent_hash = current.parent.board.get_hash()
             if parent_hash in path_positions:
                 node.is_expanded = True
-                node.value_sum = 0.0
-                node.visit_count = 1
+                node.evaluation = 0.0
                 return
             path_positions.add(parent_hash)
             current = current.parent
@@ -166,8 +176,6 @@ class MCTS:
         if board_hash in MCTS._tree_cache:
             node.children = MCTS._tree_cache[board_hash]
             node.is_expanded = True
-            node.value_sum = value
-            node.visit_count = 1
             return
 
         board = node.board
@@ -201,8 +209,6 @@ class MCTS:
 
         node.children = children
         node.is_expanded = True
-        node.value_sum = float(value)
-        node.visit_count = 1
 
         if len(node.children) > 0:
             MCTS._tree_cache[board_hash] = node.children
@@ -236,26 +242,19 @@ class MCTS:
             if not self.root_node.children:
                 return None
 
-            # Pre-allocate buffers once
-            paths_buffer = [[] for _ in range(self.max_batch_size)]
-
             # Batch process simulations with early stopping check
-            for sim_start in range(0, self.config.n_simulations, self.max_batch_size):
+            simulations_completed = 0
+            while simulations_completed < self.config.n_simulations:
                 batch_size = min(
-                    self.max_batch_size, self.config.n_simulations - sim_start
+                    self.max_batch_size, self.config.n_simulations - simulations_completed
                 )
-
-                self._batch_simulate(
-                    self.root_node,
-                    batch_size,
-                    paths_buffer[:batch_size],
-                )
+                simulations_completed += self._batch_simulate(self.root_node, batch_size)
 
                 # Check if a move clearly dominates
                 if self.should_stop(self.root_node):
                     if self.debug:
                         print(
-                            f"Stopping simulations early at simulation {sim_start + batch_size} of {self.config.n_simulations}"
+                            f"Stopping simulations early at simulation {simulations_completed} of {self.config.n_simulations}"
                         )
                     break
 
@@ -331,97 +330,89 @@ class MCTS:
         MCTS._all_moves_cache[board_hash] = moves
         return moves
 
-    def _batch_simulate(
-        self,
-        root: Node,
-        batch_size: int,
-        paths_buffer: List[List[Node]],
-    ):
-        """Run batch of parallel MCTS simulations with memory cleanup"""
+    def _batch_simulate(self, root: Node, batch_size: int) -> int:
+        """Evaluate a bounded batch and back up each completed traversal once.
 
-        nodes_to_expand = []
-        board_states = []
-        paths = []
+        Pending paths have temporary virtual losses during selection. If selection
+        reaches a leaf already queued in this batch, flush the batch so the next
+        traversal can descend through that leaf after expansion. That collision
+        is not counted as a completed simulation.
+        """
+        pending_nodes = []
+        pending_paths = []
+        queued = set()
+        completed = 0
 
-        # Selection phase - find nodes to evaluate
-        for i in range(batch_size):
-            # Check time limit periodically (every 8 simulations)
+        try:
+            for _ in range(batch_size):
+                node = root
+                path = [node]
+                visited = set()
+                value = None
 
-            node = root
-            path = [node]
-            depth = 0
-            visited = set()  # Track visited positions to detect cycles
+                while True:
+                    board_hash = node.board.get_hash()
+                    if board_hash in visited:
+                        value = 0.0  # Treat a traversal cycle as a draw.
+                        break
+                    visited.add(board_hash)
 
-            # Keep selecting children until we either:
-            # 1. Find an unexpanded node
-            # 2. Reach a terminal state
-            # 3. Hit max depth
-            # 4. Detect a cycle
-            while depth < 50:  # Prevent infinite loops
-                # Check for cycles
-                board_hash = node.board.get_hash()
-                if board_hash in visited:
-                    if self.debug:
-                        print(f"Cycle detected at depth {depth}")
-                    break
-                visited.add(board_hash)
+                    if node.board.is_game_over():
+                        value = node.board.get_game_result()
+                        if value is None:
+                            raise ValueError("Terminal board has no game result")
+                        break
 
-                # Use cached game over check
-                if node.board.is_game_over():
-                    break
+                    if not node.is_expanded:
+                        break
 
-                if not node.is_expanded:
-                    # Found a new leaf - add it for expansion
-                    if node not in nodes_to_expand:
-                        nodes_to_expand.append(node)
-                        board_states.append(node.board.state)
-                        paths.append(path)
-                    break
+                    if len(path) - 1 >= 50 or not node.children:
+                        value = node.evaluation
+                        break
 
-                # Node is expanded - select child based on UCB
-                move, child = node.select_child(self.config.c_puct)
-                if not move or not child:
+                    _, node = node.select_child(self.config.c_puct)
+                    path.append(node)
+
+                if node in queued:
+                    # Flush outstanding work; do not back up the same pending leaf twice.
                     break
 
-                node = child
-                path.append(node)
-                depth += 1
+                if self.debug:
+                    self.path_lengths.append(len(path) - 1)
 
-            # Update statistics
-            if self.debug:
-                self.path_lengths.append(depth)
-            paths_buffer[i] = path
-
-        # Expansion and evaluation phase
-        if nodes_to_expand:
-            # Batch evaluate new leaf nodes
-            board_batch = mx.array(np.stack(board_states), dtype=mx.float32)
-            policies, values = self.model(board_batch)
-
-            # Evaluate tensors
-            mx.eval(policies, values)
-
-            # Expand new nodes
-            for node, policy, value, path in zip(
-                nodes_to_expand, policies, values, paths
-            ):
-                self._expand_node(node, policy, value.item())
-                self.backup(path, value.item())
-
-        # Always backup values for all paths
-        for path in paths_buffer[:batch_size]:
-            if not path:
-                continue
-            leaf_node = path[-1]
-
-            if leaf_node.board.is_game_over():
-                # Terminal state - use game result
-                value = leaf_node.board.get_game_result()
                 if value is not None:
+                    # Terminal states can legitimately be revisited and backed up.
                     self.backup(path, value)
-            elif leaf_node.is_expanded:
-                # Expanded node - use current value estimate
-                self.backup(path, leaf_node.value())
+                    completed += 1
+                    continue
+
+                queued.add(node)
+                pending_nodes.append(node)
+                pending_paths.append(path)
+                for ancestor in path:
+                    ancestor.pending_visits += 1
+
+            if pending_nodes:
+                board_batch = mx.array(
+                    np.stack([node.board.state for node in pending_nodes]),
+                    dtype=mx.float32,
+                )
+                policies, values = self.model(board_batch)
+                mx.eval(policies, values)
+
+                for node, policy, value, path in zip(
+                    pending_nodes, policies, values, pending_paths
+                ):
+                    self._expand_node(node, policy, value.item())
+                    self.backup(path, node.evaluation)
+                    completed += 1
+
+            return completed
+        finally:
+            # Release every reservation, including when evaluation or expansion fails.
+            for path in pending_paths:
+                for node in path:
+                    node.pending_visits -= 1
 
     def should_stop(self, root: Node) -> bool:
         """More conservative early stopping"""

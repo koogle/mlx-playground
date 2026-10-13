@@ -75,10 +75,14 @@ class TestSharedInference(unittest.TestCase):
         with BatchedInference([model], ModelConfig(inference_batch_size=2)) as service:
             args, connection = service.prepare_job((model,), mp.get_context("spawn"))
             try:
-                policies, values = args[0](mx.full((5, 19, 8, 8), 3))
+                policies, values = args[0](
+                    mx.broadcast_to(mx.arange(5)[:, None, None, None], (5, 19, 8, 8))
+                )
             finally:
                 connection.close()
-        np.testing.assert_array_equal(values, [[3]] * 5)
-        np.testing.assert_array_equal(policies, [[3, -3]] * 5)
+        np.testing.assert_array_equal(values, np.arange(5)[:, None])
+        np.testing.assert_array_equal(
+            policies, np.stack([np.arange(5), -np.arange(5)], axis=1)
+        )
         self.assertEqual(service.max_batch_size, 2)
         self.assertEqual(service.positions, 5)

@@ -26,6 +26,7 @@ class ModelConfig:
     # Cross-game inference: bounded batches and a short collection window.
     inference_batch_size: int = 64
     inference_wait_ms: float = 2.0
+    prediction_cache_size: int = 10_000
 
     # Training
     batch_size: int = 1024  # 2048

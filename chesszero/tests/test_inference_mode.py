@@ -87,8 +87,8 @@ class TestInferenceMode(unittest.TestCase):
             play_single_game(model, config, 0, connection, 1)
         self.assertEqual(
             [
-                search.get_move.call_args.kwargs["temperature"]
-                for search in self.searches
+                call.kwargs["temperature"]
+                for call in self.searches[0].get_move.call_args_list
             ],
             [0.7, 0.2],
         )

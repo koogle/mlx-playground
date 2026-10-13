@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from config.model_config import ModelConfig
 from model.network import ChessNet
+from cachetools import LRUCache
 import threading
 import time
 
@@ -52,14 +53,21 @@ class BatchedInference:
     """
 
     def __init__(self, models: Sequence[ChessNet], config: ModelConfig):
-        if config.inference_batch_size < 1 or config.inference_wait_ms < 0:
+        if (
+            config.inference_batch_size < 1
+            or config.inference_wait_ms < 0
+            or config.prediction_cache_size < 1
+        ):
             raise ValueError(
-                "Inference batch size must be positive and wait nonnegative"
+                "Inference/cache sizes must be positive and wait nonnegative"
             )
         self.models = list({id(model): model for model in models}.values())
         self.model_ids = {id(model): index for index, model in enumerate(self.models)}
         self.batch_size = config.inference_batch_size
         self.wait_seconds = config.inference_wait_ms / 1000
+        # This owner exists only while its model snapshots are immutable.
+        self.predictions = LRUCache(maxsize=config.prediction_cache_size)
+        self.cache_hits = 0
         self.device = mx.default_device()
         self.connections = set()
         self.lock = threading.Lock()
@@ -122,19 +130,38 @@ class BatchedInference:
             for start in range(0, len(group), self.batch_size):
                 batch = group[start : start + self.batch_size]
                 states = np.concatenate([request[2] for request in batch])
-                # Individual requests may contain multiple positions.
-                policies, values = [], []
-                for offset in range(0, len(states), self.batch_size):
-                    inputs = mx.array(states[offset : offset + self.batch_size])
-                    policy, value = model(inputs)
-                    mx.eval(policy, value)
-                    policies.append(np.array(policy))
-                    values.append(np.array(value))
+                # Exact NN inputs, rather than rule/history keys, identify predictions.
+                keys = [(model_id, row.shape, row.tobytes()) for row in states]
+                predictions, missing = {}, {}
+                for key, row in zip(keys, states):
+                    if key in predictions or key in missing:
+                        self.cache_hits += 1
+                    elif key in self.predictions:
+                        predictions[key] = self.predictions[key]
+                        self.cache_hits += 1
+                    else:
+                        missing[key] = row
+                # Deduplicate within a batch as well as across games and requests.
+                pending = list(missing)
+                for offset in range(0, len(pending), self.batch_size):
+                    batch_keys = pending[offset : offset + self.batch_size]
+                    inputs = mx.array(np.stack([missing[key] for key in batch_keys]))
+                    policies, values = model(inputs)
+                    mx.eval(policies, values)
+                    policies, values = np.array(policies), np.array(values)
                     self.forward_passes += 1
                     self.positions += len(inputs)
                     self.max_batch_size = max(self.max_batch_size, len(inputs))
-                policies = np.concatenate(policies)
-                values = np.concatenate(values)
+                    for key, policy, value in zip(batch_keys, policies, values):
+                        # Copies let LRU eviction release each entry independently.
+                        policy, value = policy.copy(), value.copy()
+                        policy.setflags(write=False)
+                        value.setflags(write=False)
+                        predictions[key] = policy, value
+                        self.predictions[key] = policy, value
+                # Local references remain valid even if this batch exceeds the LRU.
+                policies = np.stack([predictions[key][0] for key in keys])
+                values = np.stack([predictions[key][1] for key in keys])
                 offset = 0
                 for connection, _, inputs in batch:
                     end = offset + len(inputs)
@@ -171,13 +198,15 @@ class BatchedInference:
         self.stop.set()
         self.wakeup.set()
         self.thread.join()
+        self.predictions.clear()
         for model, training in zip(self.models, self.original_modes):
             model.train(training)
         logging.getLogger(__name__).info(
-            "Shared inference: %d forwards, %d positions, largest batch %d",
+            "Shared inference: %d forwards, %d positions, largest batch %d, %d cache hits",
             self.forward_passes,
             self.positions,
             self.max_batch_size,
+            self.cache_hits,
         )
         if exc_type is None and self.error is not None:
             raise RuntimeError("Shared inference failed") from self.error

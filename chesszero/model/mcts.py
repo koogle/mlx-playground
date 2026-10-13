@@ -32,6 +32,7 @@ class Node:
         self.move = move
         self.parent = parent
         self.prior = prior
+        self.base_prior = prior
         self.children = {}
         self.is_expanded = False
 
@@ -93,6 +94,7 @@ class GameSearchCache:
     def __init__(self, model, maxsize=10_000, model_version=0):
         self.model = model
         self.model_version = model_version
+        self.generation = 0
         self.all_moves = LRUCache(maxsize=maxsize)
         self.boards = LRUCache(maxsize=maxsize)
         self.positions = LRUCache(maxsize=maxsize)
@@ -120,9 +122,12 @@ class GameSearchCache:
             *self.rules,
         ):
             cache.clear()
+        self.generation += 1
 
 
 class MCTS:
+    """Search a fixed model snapshot; clear/bind the cache before changing weights."""
+
     # Geometry/encoding tables are constant; position caches have explicit owners.
     _move_encoding_table = None  # Will be initialized in __init__
 
@@ -134,7 +139,6 @@ class MCTS:
         model_version=None,
         exploration_noise=True,
     ):
-        self._owns_cache = cache is None
         self.cache = cache if cache is not None else GameSearchCache(model)
         self.cache.bind(model, model_version)
         self.model_version = model_version
@@ -151,7 +155,8 @@ class MCTS:
         self.debug = config.debug
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
-        self.root_node = None  # Initialize root_node
+        self.root_node = None
+        self._root_model_version = None
         # Initialize move encoding table if not already done
         if MCTS._move_encoding_table is None:
             MCTS._move_encoding_table = self._init_move_encoding_table()
@@ -230,16 +235,43 @@ class MCTS:
         if total_prior > 0:
             for child in children.values():
                 child.prior /= total_prior
-
-        # Perturb root priors once and keep them for every simulation in this search.
-        if node.parent is None and self.exploration_noise:
-            noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(children))
-            epsilon = self.config.dirichlet_epsilon
-            for child, sample in zip(children.values(), noise):
-                child.prior = (1 - epsilon) * child.prior + epsilon * float(sample)
+                child.base_prior = child.prior
 
         node.children = children
         node.is_expanded = True
+        if node.parent is None:
+            self._apply_root_noise(node)
+
+    def _apply_root_noise(self, root):
+        """Fresh search noise never modifies cached predictions or accumulates."""
+        children = list(root.children.values())
+        for child in children:
+            child.prior = child.base_prior
+        if self.exploration_noise and children:
+            noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(children))
+            epsilon = self.config.dirichlet_epsilon
+            for child, sample in zip(children, noise):
+                child.prior = (1 - epsilon) * child.base_prior + epsilon * float(sample)
+
+    def _same_position(self, first, second):
+        return self._board_key(first) == self._board_key(second) and getattr(
+            first, "position_history", None
+        ) == getattr(second, "position_history", None)
+
+    def advance_root(self, move, board):
+        """Keep the played child's descendants, visits and side-to-move values.
+
+        Materialize before detaching: lazy children still need their parent to
+        apply the move. A different path/history must start a fresh tree.
+        """
+        child = self.root_node.children.get(move) if self.root_node else None
+        if child is None or not self._same_position(child.board, board):
+            self.root_node = None
+            return
+        self.root_node.children.clear()  # Release siblings from the old root.
+        child.parent = None
+        child.move = None
+        self.root_node = child
 
     @staticmethod
     def _board_key(board):
@@ -303,7 +335,8 @@ class MCTS:
 
     def _evaluate_board(self, board):
         """Cache policy/value together while one fixed model runs in eval mode."""
-        key = self._board_key(board)
+        inputs = np.asarray(board.state, dtype=np.float32)
+        key = (self.cache.model_version, inputs.shape, inputs.tobytes())
         cacheable = not getattr(self.model, "training", False)
         if not cacheable:
             # Training-mode calls may change BatchNorm state or use stochastic
@@ -342,17 +375,24 @@ class MCTS:
         self.model.eval()
         try:
             self.cache.bind(self.model, self.model_version)
-            if self._owns_cache:
-                self._clear_caches()
-            # A played move often selects a snapshot built in the previous search.
-            root_board = self._get_root_board(board)
-            self.root_node = Node(
-                root_board,
-                exploration_noise=self.exploration_noise,
-                board_factory=self._get_child_board,
-            )
-            policy, value = self._evaluate_board(root_board)
-            self._expand_node(self.root_node, policy, value)
+            # Reuse is valid only within one fixed model and exact history path.
+            cache_version = (self.cache.model_version, self.cache.generation)
+            if (
+                self.root_node is None
+                or self._root_model_version != cache_version
+                or not self._same_position(self.root_node.board, board)
+            ):
+                self.root_node = Node(
+                    self._get_root_board(board),
+                    exploration_noise=self.exploration_noise,
+                    board_factory=self._get_child_board,
+                )
+                self._root_model_version = cache_version
+            if not self.root_node.is_expanded:
+                policy, value = self._evaluate_board(self.root_node.board)
+                self._expand_node(self.root_node, policy, value)
+            else:
+                self._apply_root_noise(self.root_node)
 
             if not self.root_node.children:
                 return None
@@ -362,7 +402,7 @@ class MCTS:
                 self._simulate(self.root_node)
 
                 # Check if a move clearly dominates
-                if self.should_stop(self.root_node):
+                if simulations_completed >= 70 and self.should_stop(self.root_node):
                     if self.debug:
                         print(
                             f"Stopping simulations early at simulation {simulations_completed} of {self.config.n_simulations}"
@@ -374,8 +414,6 @@ class MCTS:
             return move
 
         finally:
-            if self._owns_cache:
-                self._clear_caches()
             self.model.train(was_training)
 
     def _select_move_with_temperature(

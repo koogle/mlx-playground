@@ -26,6 +26,8 @@ class Node:
         self.value_sum = 0.0
         self.evaluation = 0.0  # Network value from this node's side-to-move perspective
         self._board = board
+        # Passing a factory is a little awkward, but keeps lazy boards tied to the
+        # owning search's cache without giving each node the whole MCTS object.
         self._board_factory = parent._board_factory if parent else board_factory
         self.move = move
         self.parent = parent

@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import mlx.core as mx
 import numpy as np
+from mlx.utils import tree_flatten
 
 from config.model_config import ModelConfig
 from model.network import ChessNet
@@ -83,7 +84,7 @@ class TestPolicyLoss(unittest.TestCase):
         expected = -np.mean(np.sum(np.array(self.targets) * log_probabilities, axis=-1))
         with tempfile.TemporaryDirectory() as directory:
             trainer = Trainer(self.config, checkpoint_dir=directory)
-            trainer.model = self.model
+            trainer.model.load_weights(tree_flatten(self.model.parameters()))
             loss, policy_loss, value_loss, l2_loss = trainer.train_on_batch(
                 (self.states, self.targets, mx.zeros(2))
             )

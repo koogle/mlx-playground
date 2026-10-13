@@ -5,16 +5,6 @@ import multiprocessing as mp
 from multiprocessing.connection import wait
 
 
-class GameResultSender:
-    """Keep the workers' put(result) interface with a pipe that signals dead workers."""
-
-    def __init__(self, connection):
-        self.connection = connection
-
-    def put(self, result):
-        self.connection.send(result)
-
-
 def run_game_workers(worker, jobs, max_workers):
     """Return successful results and a failure count after all jobs finish.
 
@@ -40,7 +30,7 @@ def run_game_workers(worker, jobs, max_workers):
                     break
                 receiver, sender = ctx.Pipe(duplex=False)
                 process = ctx.Process(
-                    target=worker, args=(*args, GameResultSender(sender), max_workers)
+                    target=worker, args=(*args, sender, max_workers)
                 )
                 try:
                     process.start()

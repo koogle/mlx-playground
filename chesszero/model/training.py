@@ -1,6 +1,7 @@
 import mlx.core as mx
 import mlx.optimizers as optim
 import mlx.nn.losses as mx_losses
+import mlx.nn as nn
 from typing import Tuple, Optional
 from chess_engine.game import ChessGame
 from model.network import ChessNet
@@ -21,7 +22,7 @@ import os
 import traceback
 import multiprocessing as mp
 from queue import Empty
-from mlx.utils import tree_flatten
+from mlx.utils import tree_flatten, tree_map
 
 
 class Trainer:
@@ -97,33 +98,9 @@ class Trainer:
                 gc.collect()
 
                 self.logger.info(f"Training on game data in epoch {epoch + 1}...")
-                total_loss = 0
-                n_batches = 0
-                policy_loss = 0
-                value_loss = 0
-                l2_total = 0
-
-                for batch_idx, batch in enumerate(
-                    tqdm(batches, desc="Training batches")
-                ):
-                    try:
-                        loss, p_loss, v_loss, l2_loss = self.train_on_batch(batch)
-                        total_loss += loss
-                        policy_loss += p_loss
-                        value_loss += v_loss
-                        l2_total += l2_loss
-                        n_batches += 1
-
-                    except Exception as e:
-                        self.logger.error(f"\nError in batch {batch_idx}:")
-                        self.logger.error(str(e))
-                        self.logger.error(traceback.format_exc())
-                        continue
-
-                avg_loss = total_loss / n_batches if n_batches > 0 else 0
-                avg_policy_loss = policy_loss / n_batches if n_batches > 0 else 0
-                avg_value_loss = value_loss / n_batches if n_batches > 0 else 0
-                avg_l2_loss = l2_total / n_batches if n_batches > 0 else 0
+                (avg_loss, avg_policy_loss, avg_value_loss, avg_l2_loss) = (
+                    self.train_on_batches(tqdm(batches, desc="Accumulating gradients"))
+                )
 
                 epoch_time = time.time() - epoch_start_time
 
@@ -194,67 +171,87 @@ class Trainer:
             self.logger.info(f"Final checkpoint saved at epoch {epoch + 1}")
             raise
 
-    def train_on_batch(self, batch):
-        """Train on a single batch of data with memory optimizations"""
+    def _compute_gradients(self, batch):
+        """Reuse a compiled gradient function while explicitly tracking model state."""
         self.model.train()
-        states, policies, values = batch
+        if getattr(self, "_gradient_model", None) is not self.model:
+            model = self.model
 
-        try:
-            mem_before = self._get_memory_usage()
-            self.logger.debug(f"Memory before training step: {mem_before}")
-
-            @mx.compile
-            def loss_fn(model_params, states, policies, values):
-                self.model.update(model_params)
-                policy_logits, pred_values = self.model.forward_logits(states)
-
+            def loss_fn(states, policies, values):
+                policy_logits, pred_values = model.forward_logits(states)
                 p_loss = mx_losses.cross_entropy(
                     logits=policy_logits, targets=policies, reduction="mean"
                 )
-
                 v_loss = mx_losses.mse_loss(
-                    predictions=pred_values.squeeze(), targets=values, reduction="mean"
+                    predictions=pred_values.reshape(-1), targets=values, reduction="mean"
                 )
-
-                l2_reg = 1e-6
-
                 l2_loss = sum(
-                    l2_reg * mx.sum(mx.square(p[1]))
-                    for p in tree_flatten(model_params)
-                    if len(p[1].shape) > 1
+                    1e-6 * mx.sum(mx.square(parameter))
+                    for _, parameter in tree_flatten(model.trainable_parameters())
+                    if len(parameter.shape) > 1
                 )
+                return p_loss + v_loss + l2_loss, (p_loss, v_loss, l2_loss)
 
-                total_loss = p_loss + v_loss + l2_loss
-                return total_loss, (p_loss, v_loss, l2_loss)
-
-            (loss, (p_loss, v_loss, l2_loss)), grads = mx.value_and_grad(loss_fn)(
-                self.model.parameters(), states, policies, values
+            # Include mutable BatchNorm running statistics in the compiled state,
+            # but differentiate only trainable parameters, not those statistics.
+            self._loss_and_grad = mx.compile(
+                nn.value_and_grad(model, loss_fn),
+                inputs=model.state,
+                outputs=model.state,
             )
+            self._gradient_model = model
+        return self._loss_and_grad(*batch)
 
-            self.optimizer.update(self.model, grads)
-            mx.eval(self.model.parameters(), self.optimizer.state)
+    def train_on_batches(self, batches):
+        """Average gradients over fresh positions and apply exactly one update.
 
-            del grads
-            gc.collect()
+        Learned parameters remain fixed across microbatches. BatchNorm still uses
+        each microbatch's statistics; this does not emulate one giant BN batch.
+        """
+        accumulated = None
+        weighted_losses = mx.zeros(4)
+        n_positions = 0
+        # MLX arrays are immutable; retaining references is enough for rollback.
+        original_parameters = self.model.parameters()
+        try:
+            for batch in batches:
+                batch_size = len(batch[0])
+                if batch_size == 0:
+                    continue
+                (loss, components), grads = self._compute_gradients(batch)
+                if accumulated is None:
+                    accumulated = tree_map(lambda g: g * batch_size, grads)
+                else:
+                    accumulated = tree_map(
+                        lambda total, g: total + g * batch_size, accumulated, grads
+                    )
+                weighted_losses = (
+                    weighted_losses + mx.stack([loss, *components]) * batch_size
+                )
+                n_positions += batch_size
+                # Materialize each contribution so previous activation graphs can
+                # be released instead of accumulating across the entire generation.
+                mx.eval(accumulated, weighted_losses, self.model.parameters())
 
-            mem_after = self._get_memory_usage()
-            self.logger.debug(f"Memory after training step: {mem_after}")
-
-            mem_diff = {k: mem_after[k] - mem_before[k] for k in mem_before}
-            self.logger.debug(f"Memory change during step: {mem_diff}")
-
-            return loss.item(), p_loss.item(), v_loss.item(), l2_loss.item()
-
-        except Exception as e:
-            self.logger.error("\nError in training step:")
-            self.logger.error(f"Exception type: {type(e).__name__}")
-            self.logger.error(f"Exception message: {str(e)}")
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            self.logger.error(f"Memory state: {self._get_memory_usage()}")
-            self.logger.error(
-                f"Batch shapes - States: {states.shape}, Policies: {policies.shape}, Values: {values.shape}"
+        except Exception:
+            # A failed microbatch must not result in a partial generation update.
+            self.model.update(original_parameters)
+            self.logger.exception(
+                "Gradient accumulation failed; generation was not completed"
             )
             raise
+
+        if not n_positions:
+            return 0.0, 0.0, 0.0, 0.0
+
+        averaged = tree_map(lambda total: total / n_positions, accumulated)
+        self.optimizer.update(self.model, averaged)
+        mx.eval(self.model.parameters(), self.optimizer.state)
+        return tuple((weighted_losses / n_positions).tolist())
+
+    def train_on_batch(self, batch):
+        """Compatibility wrapper for an update containing one microbatch."""
+        return self.train_on_batches((batch,))
 
     def _get_memory_usage(self):
         """Get current memory usage information"""

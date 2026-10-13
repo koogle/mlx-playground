@@ -184,6 +184,93 @@ class TestCaches(unittest.TestCase):
         np.testing.assert_array_equal(original.state, replacement.state)
         self.assertEqual(len(search._board_cache), 2)
 
+    def test_tensor_and_move_list_caches_reuse_prepared_search_data(self):
+        board = BitBoard()
+        search = MCTS(None, ModelConfig())
+        state = search._get_board_state(board)
+        moves = search._get_move_list(board)
+        with patch("model.mcts.mx.array", side_effect=AssertionError("rebuilt tensor")):
+            self.assertIs(search._get_board_state(board.copy()), state)
+        with patch.object(
+            search, "_get_all_valid_moves", side_effect=AssertionError("rebuilt moves")
+        ):
+            self.assertIs(search._get_move_list(board.copy()), moves)
+        self.assertIsInstance(moves, tuple)
+        self.assertEqual(len(moves), 20)
+
+    def test_policy_and_value_cache_avoids_inference_for_transposed_positions(self):
+        from tests.test_mcts_sequential import RecordingModel
+
+        model = RecordingModel()
+        model.training = False
+        search = MCTS(model, ModelConfig())
+        first = BitBoard()
+        second = first.copy()
+        second.position_history[b"different path"] = 2
+        policy, value = search._evaluate_board(first)
+        repeated_policy, repeated_value = search._evaluate_board(second)
+        self.assertEqual(len(model.inputs), 1)
+        self.assertIs(repeated_policy, policy)
+        self.assertEqual(repeated_value, value)
+        self.assertFalse(policy.flags.writeable)
+        self.assertEqual(len(search._evaluation_cache), 1)
+
+    def test_training_mode_bypasses_and_invalidates_neural_cache(self):
+        from tests.test_mcts_sequential import RecordingModel
+
+        model = RecordingModel()
+        model.training = False
+        board = BitBoard()
+        search = MCTS(model, ModelConfig())
+        search._evaluate_board(board)
+        model.training = True
+        search._evaluate_board(board)
+        search._evaluate_board(board)
+        self.assertEqual(len(model.inputs), 3)
+        self.assertEqual(len(search._evaluation_cache), 0)
+        model.training = False
+        search._evaluate_board(board)
+        self.assertEqual(len(model.inputs), 4)
+
+    def test_neural_caches_do_not_cross_models_or_successive_searches(self):
+        from tests.test_mcts_sequential import RecordingModel
+
+        board = BitBoard()
+        models = [RecordingModel(), RecordingModel()]
+        searches = [MCTS(model, ModelConfig(n_simulations=1)) for model in models]
+        for search in searches:
+            search._evaluate_board(board)
+            search._evaluate_board(board)
+        self.assertEqual([len(model.inputs) for model in models], [1, 1])
+        searches[0].get_move(board)
+        self.assertEqual(len(models[0].inputs), 3)
+        searches[0].get_move(board)
+        self.assertEqual(len(models[0].inputs), 5)
+        self.assertEqual(len(models[1].inputs), 1)
+
+    def test_restored_search_caches_are_bounded_and_evicted_results_recompute(self):
+        from tests.test_mcts_sequential import RecordingModel
+
+        model = RecordingModel()
+        search = MCTS(model, ModelConfig())
+        search._evaluation_cache = LRUCache(maxsize=2)
+        search._board_state_cache = LRUCache(maxsize=2)
+        search._move_list_cache = LRUCache(maxsize=2)
+        board = BitBoard()
+        for count in range(3):
+            board.state[17].fill(count / 200)
+            search._evaluate_board(board)
+            search._get_move_list(board)
+        board.state[17].fill(0)
+        search._evaluate_board(board)
+        self.assertEqual(len(model.inputs), 4)
+        for cache in (
+            search._evaluation_cache,
+            search._board_state_cache,
+            search._move_list_cache,
+        ):
+            self.assertLessEqual(len(cache), 2)
+
     def test_search_caches_are_isolated_and_cleared_on_success_and_failure(self):
         from tests.test_mcts_sequential import RecordingModel
 

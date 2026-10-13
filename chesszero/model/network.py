@@ -120,7 +120,12 @@ class ChessNet(nn.Module):
         self.update(tree_map_with_path(init_fn, self.parameters()))
 
     def __call__(self, x: mx.array) -> Tuple[mx.array, mx.array]:
-        """Forward pass with explicit evaluation of intermediate tensors"""
+        """Return policy probabilities and value for search and inference."""
+        logits, value = self.forward_logits(x)
+        return mx.softmax(logits, axis=-1), value
+
+    def forward_logits(self, x: mx.array) -> Tuple[mx.array, mx.array]:
+        """Return raw policy logits and value for stable cross-entropy training."""
         # Input comes as [batch_size, channels, height, width]
         x = mx.transpose(x, (0, 2, 3, 1))  # to [batch_size, height, width, channels]
 
@@ -138,7 +143,6 @@ class ChessNet(nn.Module):
         policy = self.relu(policy)
         policy = mx.reshape(policy, (-1, 32 * 8 * 8))
         policy = self.policy_fc(policy)
-        policy = mx.softmax(policy, axis=-1)
 
         # Value head
         value = self.value_conv(x)
@@ -157,18 +161,18 @@ class ChessNet(nn.Module):
         Calculate the combined policy and value loss
 
         Args:
-            states: Batch of board states [batch_size, 14, 8, 8]
+            states: Batch of board states [batch_size, 19, 8, 8]
             target_policies: Target move probabilities [batch_size, policy_output_dim]
-            target_values: Target game outcomes [batch_size, 1]
+            target_values: Target game outcomes [batch_size]
 
         Returns:
             Combined loss value
         """
-        policies, values = self(states)
+        logits, values = self.forward_logits(states)
 
         # Policy loss (cross entropy)
-        policy_loss = (
-            -mx.sum(target_policies * mx.log(policies + 1e-8)) / policies.shape[0]
+        policy_loss = nn.losses.cross_entropy(
+            logits=logits, targets=target_policies, reduction="mean"
         )
 
         # Value loss (mean squared error)

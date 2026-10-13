@@ -76,7 +76,7 @@ def play_single_game(
 
 
 def generate_games(
-    model: ChessNet, config: ModelConfig, max_workers: int = 5
+    model: ChessNet, config: ModelConfig, max_workers: int = 8
 ) -> List[Tuple]:
     logger = logging.getLogger(__name__)
     games_data = []

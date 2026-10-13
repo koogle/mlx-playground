@@ -37,15 +37,7 @@ class Node:
     def board(self):
         """Materialize a child position only when search actually visits it."""
         if self._board is None:
-            if self._board_factory is not None:
-                self._board = self._board_factory(self.parent.board, *self.move)
-                return self._board
-            board = self.parent.board.copy()
-            if not board.make_move(*self.move):
-                raise ValueError(
-                    f"Search tried to materialize an illegal move: {self.move}"
-                )
-            self._board = board
+            self._board = self._board_factory(self.parent.board, *self.move)
         return self._board
 
     def value(self):

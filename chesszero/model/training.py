@@ -21,6 +21,7 @@ import os
 import traceback
 from multiprocessing.connection import Connection
 from model.game_workers import run_game_workers
+from model.inference import BatchedInference, InferenceClient
 from mlx.utils import tree_flatten, tree_map
 
 
@@ -273,8 +274,8 @@ class Trainer:
 
     @staticmethod
     def play_evaluation_game_worker(
-        model: ChessNet,
-        best_model: ChessNet,
+        model: ChessNet | InferenceClient,
+        best_model: ChessNet | InferenceClient,
         config: ModelConfig,
         game_id: int,
         player_color: int,
@@ -283,6 +284,8 @@ class Trainer:
     ):
         """Worker process that plays a single evaluation game and reports its result."""
         try:
+            if isinstance(model, InferenceClient):
+                mx.set_default_device(mx.cpu)
             model.eval()
             best_model.eval()
             game = ChessGame()
@@ -351,9 +354,10 @@ class Trainer:
             for color in (0, 1)
             for game_id in range(n_games // 2)
         ]
-        results, failures = run_game_workers(
-            self.play_evaluation_game_worker, jobs, max_workers
-        )
+        with BatchedInference([self.model, self.best_model], self.config) as inference:
+            results, failures = run_game_workers(
+                self.play_evaluation_game_worker, jobs, max_workers, inference=inference
+            )
         self.logger.info("Evaluation: %d completed, %d failed", len(results), failures)
         if failures:
             raise IncompleteEvaluationError(f"{failures} of {n_games} games failed")

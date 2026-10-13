@@ -5,7 +5,7 @@ import multiprocessing as mp
 from multiprocessing.connection import wait
 
 
-def run_game_workers(worker, jobs, max_workers):
+def run_game_workers(worker, jobs, max_workers, inference=None):
     """Return successful results and a failure count after all jobs finish.
 
     Each worker owns a result pipe. EOF accounts for crashes even when no result
@@ -28,10 +28,11 @@ def run_game_workers(worker, jobs, max_workers):
                 except StopIteration:
                     exhausted = True
                     break
+                request_sender = None
+                if inference is not None:
+                    args, request_sender = inference.prepare_job(args, ctx)
                 receiver, sender = ctx.Pipe(duplex=False)
-                process = ctx.Process(
-                    target=worker, args=(*args, sender, max_workers)
-                )
+                process = ctx.Process(target=worker, args=(*args, sender, max_workers))
                 try:
                     process.start()
                 except Exception:
@@ -43,6 +44,8 @@ def run_game_workers(worker, jobs, max_workers):
                     active[receiver] = (process, job_id)
                 finally:
                     sender.close()
+                    if request_sender is not None:
+                        request_sender.close()
 
             for receiver in wait(active) if active else ():
                 process, job_id = active[receiver]

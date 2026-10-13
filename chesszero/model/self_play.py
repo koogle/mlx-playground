@@ -11,17 +11,20 @@ from tqdm import tqdm
 import logging
 from multiprocessing.connection import Connection
 from model.game_workers import run_game_workers
+from model.inference import BatchedInference, InferenceClient
 import traceback
 
 
 def play_single_game(
-    model: ChessNet,
+    model: ChessNet | InferenceClient,
     config: ModelConfig,
     game_id: int,
     result_connection: Connection,
     max_workers: int,
 ):
     """Worker process that plays a single complete game"""
+    if isinstance(model, InferenceClient):
+        mx.set_default_device(mx.cpu)
     logger = logging.getLogger(__name__)
     game_cache = GameSearchCache(model)
     try:
@@ -86,13 +89,16 @@ def play_single_game(
 
 
 def generate_games(
-    model: ChessNet, config: ModelConfig, max_workers: int = 8
+    model: ChessNet | InferenceClient, config: ModelConfig, max_workers: int = 8
 ) -> List[Tuple]:
     logger = logging.getLogger(__name__)
     if config.n_games_per_iteration < 1:
         raise ValueError("Games per iteration must be positive")
     jobs = [(model, config, game_id) for game_id in range(config.n_games_per_iteration)]
-    results, failures = run_game_workers(play_single_game, jobs, max_workers)
+    with BatchedInference([model], config) as inference:
+        results, failures = run_game_workers(
+            play_single_game, jobs, max_workers, inference=inference
+        )
     logger.info("Self-play generation: %d completed, %d failed", len(results), failures)
     if not results:
         raise RuntimeError("All self-play games failed; no training update can be made")

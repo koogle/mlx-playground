@@ -34,8 +34,11 @@ class TestValueTargets(unittest.TestCase):
                     "n_moves": 2,
                     "final_board": "test board",
                 }
-                with patch(
-                    "model.self_play.run_game_workers", return_value=([result], 0)
+                with (
+                    patch("model.self_play.BatchedInference"),
+                    patch(
+                        "model.self_play.run_game_workers", return_value=([result], 0)
+                    ),
                 ):
                     games = generate_games(
                         None, ModelConfig(n_games_per_iteration=1), max_workers=1

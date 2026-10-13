@@ -23,6 +23,10 @@ class ModelConfig:
     dirichlet_alpha: float = 0.55  # More noise
     dirichlet_epsilon: float = 0.3  # Stronger noise influence
 
+    # Cross-game inference: bounded batches and a short collection window.
+    inference_batch_size: int = 64
+    inference_wait_ms: float = 2.0
+
     # Training
     batch_size: int = 1024  # 2048
     n_epochs: int = 1000

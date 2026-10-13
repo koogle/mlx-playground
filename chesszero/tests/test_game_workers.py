@@ -41,7 +41,10 @@ class TestGameWorkers(unittest.TestCase):
                     trainer.evaluate_against_best(n_games=2)
 
     def test_all_failed_self_play_cannot_produce_an_update(self):
-        with patch("model.self_play.run_game_workers", return_value=([], 2)):
+        with (
+            patch("model.self_play.BatchedInference"),
+            patch("model.self_play.run_game_workers", return_value=([], 2)),
+        ):
             with self.assertRaisesRegex(RuntimeError, "All self-play games failed"):
                 generate_games(None, ModelConfig(n_games_per_iteration=2))
 

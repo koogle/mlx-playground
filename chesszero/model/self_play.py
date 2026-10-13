@@ -104,9 +104,8 @@ def generate_games(
                 if result is not None:
                     games_completed += 1
 
-                    # Store both white and black perspectives
+                    # Store each game once, with its outcome from White's perspective.
                     games_data.append((result["history"], result["white_result"]))
-                    games_data.append((result["history"], result["black_result"]))
 
                     logger.info(
                         f"Game {result['game_id']} completed with {result['n_moves']} moves"
@@ -133,8 +132,8 @@ def generate_games(
 def create_batches(games, batch_size: int):
     """Create training batches from games
     Args:
-        games: List of tuples (game_history, game_result) where each game appears twice:
-            once with white's perspective result and once with black's perspective result
+        games: List of tuples (game_history, white_result), one per game.
+            Value targets are converted to the side-to-move perspective of each state.
         batch_size: Size of training batches
     """
     print(
@@ -145,15 +144,13 @@ def create_batches(games, batch_size: int):
     all_policies = []
     all_values = []
 
-    for game_history, perspective_result in games:
-        for move_num, (state, policy, _) in enumerate(game_history):
+    for game_history, white_result in games:
+        for state, policy, _ in game_history:
             all_states.append(state)
             all_policies.append(policy)
 
-            is_perspective_move = move_num % 2 == 0
-            value_target = (
-                perspective_result if is_perspective_move else -perspective_result
-            )
+            # Plane 12 is 1 for White to move and 0 for Black to move.
+            value_target = white_result * (2 * state[12, 0, 0] - 1)
             all_values.append(value_target)
 
     print(f"Total positions collected: {len(all_states)}")

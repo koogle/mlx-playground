@@ -4,6 +4,8 @@ import logging
 import multiprocessing as mp
 from multiprocessing.connection import wait
 
+import mlx.core as mx
+
 
 def run_game_workers(worker, jobs, max_workers):
     """Return successful results and a failure count after all jobs finish.
@@ -13,13 +15,29 @@ def run_game_workers(worker, jobs, max_workers):
     """
     if max_workers < 1:
         raise ValueError("Worker count must be positive")
+    logger = logging.getLogger(__name__)
+    cuda = getattr(mx, "cuda", None)
+    if (
+        max_workers > 1
+        and cuda is not None
+        and cuda.is_available()
+        and mx.default_device() == mx.gpu
+    ):
+        # Each spawned game owns its model, CUDA context, and allocator. Unlike
+        # a shared inference server, these allocations multiply with workers.
+        logger.warning(
+            "Limiting CUDA game workers from %d to 1: this scheduler uses "
+            "a separate GPU model per game. Use shared inference for parallel "
+            "GPU self-play.",
+            max_workers,
+        )
+        max_workers = 1
     ctx = mp.get_context("spawn")
     pending = iter(enumerate(jobs))
     active = {}
     results = {}
     failures = 0
     exhausted = False
-    logger = logging.getLogger(__name__)
     try:
         while active or not exhausted:
             while not exhausted and len(active) < max_workers:

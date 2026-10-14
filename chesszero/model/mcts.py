@@ -1,6 +1,6 @@
 import numpy as np
-from typing import List, Tuple, Set, Dict
 import mlx.core as mx
+from typing import List, Tuple, Set, Dict
 from chess_engine.bitboard import BitBoard
 from cachetools import LRUCache
 from config.model_config import ModelConfig
@@ -47,7 +47,7 @@ class Node:
             return 0.0
         return self.value_sum / self.visit_count  # already a Python float
 
-    def select_child(self, c_puct):
+    def select_child(self, c_puct, priors=None):
         """Optimized child selection with exploration"""
         if not self.children:
             return None, None
@@ -55,10 +55,11 @@ class Node:
         moves = list(self.children.keys())
         children = list(self.children.values())
 
-        visit_counts = np.array([child.visit_count for child in children])
-        if not np.any(visit_counts):
+        if priors is None:
             priors = np.array([child.prior for child in children])
 
+        visit_counts = np.array([child.visit_count for child in children])
+        if not np.any(visit_counts):
             priors = priors / np.sum(priors)
             selected_idx = np.argmax(priors)  # More greedy selection
             return moves[selected_idx], children[selected_idx]
@@ -69,8 +70,6 @@ class Node:
         sqrt_total = np.sqrt(total_visits)
 
         q_values = np.array([-child.value() for child in children])
-
-        priors = np.array([child.prior for child in children])
 
         # UCB formula with reduced noise
         exploration = c_puct * priors * sqrt_total / (1 + visit_counts)
@@ -86,7 +85,8 @@ class Node:
 class GameSearchCache:
     """Bounded reuse for one game's fixed model snapshot; never stores Nodes.
 
-    Clear the cache or advance model_version before changing model weights.
+    Advance model_version before changing model weights. Clearing cached entries
+    only releases cached data; search trees remain valid for the same weights.
     Self-play workers create a new owner for each game and never train mid-game.
     """
 
@@ -109,7 +109,7 @@ class GameSearchCache:
             self.model_version = model_version
 
     def clear(self):
-        """Discard game data, or invalidate before changing a model's weights."""
+        """Release cached entries without invalidating retained search trees."""
         for cache in (
             self.all_moves,
             self.boards,
@@ -123,6 +123,8 @@ class GameSearchCache:
 
 
 class MCTS:
+    """Search a fixed model snapshot; advance model_version when weights change."""
+
     # Geometry/encoding tables are constant; position caches have explicit owners.
     _move_encoding_table = None  # Will be initialized in __init__
 
@@ -134,7 +136,6 @@ class MCTS:
         model_version=None,
         exploration_noise=True,
     ):
-        self._owns_cache = cache is None
         self.cache = cache if cache is not None else GameSearchCache(model)
         self.cache.bind(model, model_version)
         self.model_version = model_version
@@ -151,7 +152,8 @@ class MCTS:
         self.debug = config.debug
         self.training_prior_threshold = -1.0
         self.eval_prior_threshold = -1.0
-        self.root_node = None  # Initialize root_node
+        self.root_node = None
+        self._root_model_version = None
         # Initialize move encoding table if not already done
         if MCTS._move_encoding_table is None:
             MCTS._move_encoding_table = self._init_move_encoding_table()
@@ -231,15 +233,37 @@ class MCTS:
             for child in children.values():
                 child.prior /= total_prior
 
-        # Perturb root priors once and keep them for every simulation in this search.
-        if node.parent is None and self.exploration_noise:
-            noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(children))
-            epsilon = self.config.dirichlet_epsilon
-            for child, sample in zip(children.values(), noise):
-                child.prior = (1 - epsilon) * child.prior + epsilon * float(sample)
-
         node.children = children
         node.is_expanded = True
+
+    def _root_search_priors(self, root):
+        """Sample once per search, leaving the tree's model priors unchanged."""
+        priors = np.array([child.prior for child in root.children.values()])
+        if self.exploration_noise and len(priors):
+            noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(priors))
+            epsilon = self.config.dirichlet_epsilon
+            priors = (1 - epsilon) * priors + epsilon * noise
+        return priors
+
+    def _same_position(self, first, second):
+        return self._board_key(first) == self._board_key(second) and getattr(
+            first, "position_history", None
+        ) == getattr(second, "position_history", None)
+
+    def advance_root(self, move, board):
+        """Keep the played child's descendants, visits and side-to-move values.
+
+        Materialize before detaching: lazy children still need their parent to
+        apply the move. A different path/history must start a fresh tree.
+        """
+        child = self.root_node.children.get(move) if self.root_node else None
+        if child is None or not self._same_position(child.board, board):
+            self.root_node = None
+            return
+        self.root_node.children.clear()  # Release siblings from the old root.
+        child.parent = None
+        child.move = None
+        self.root_node = child
 
     @staticmethod
     def _board_key(board):
@@ -303,7 +327,8 @@ class MCTS:
 
     def _evaluate_board(self, board):
         """Cache policy/value together while one fixed model runs in eval mode."""
-        key = self._board_key(board)
+        inputs = np.asarray(board.state, dtype=np.float32)
+        key = (self.cache.model_version, inputs.shape, inputs.tobytes())
         cacheable = not getattr(self.model, "training", False)
         if not cacheable:
             # Training-mode calls may change BatchNorm state or use stochastic
@@ -337,32 +362,37 @@ class MCTS:
         return root
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-        # Mode controls BatchNorm/dropout, not whether autodiff accumulates gradients.
         was_training = self.model.training
         self.model.eval()
         try:
             self.cache.bind(self.model, self.model_version)
-            if self._owns_cache:
-                self._clear_caches()
-            # A played move often selects a snapshot built in the previous search.
-            root_board = self._get_root_board(board)
-            self.root_node = Node(
-                root_board,
-                exploration_noise=self.exploration_noise,
-                board_factory=self._get_child_board,
-            )
-            policy, value = self._evaluate_board(root_board)
-            self._expand_node(self.root_node, policy, value)
+            # Reuse is valid only within one fixed model and exact history path.
+            if (
+                self.root_node is None
+                or self._root_model_version != self.cache.model_version
+                or not self._same_position(self.root_node.board, board)
+            ):
+                self.root_node = Node(
+                    self._get_root_board(board),
+                    exploration_noise=self.exploration_noise,
+                    board_factory=self._get_child_board,
+                )
+                self._root_model_version = self.cache.model_version
+            if not self.root_node.is_expanded:
+                policy, value = self._evaluate_board(self.root_node.board)
+                self._expand_node(self.root_node, policy, value)
 
             if not self.root_node.children:
                 return None
 
+            root_priors = self._root_search_priors(self.root_node)
+
             # Complete each simulation before selecting the next path.
             for simulations_completed in range(1, self.config.n_simulations + 1):
-                self._simulate(self.root_node)
+                self._simulate(self.root_node, root_priors)
 
                 # Check if a move clearly dominates
-                if self.should_stop(self.root_node):
+                if simulations_completed >= 70 and self.should_stop(self.root_node):
                     if self.debug:
                         print(
                             f"Stopping simulations early at simulation {simulations_completed} of {self.config.n_simulations}"
@@ -372,10 +402,7 @@ class MCTS:
             # Select move based on temperature
             move = self._select_move_with_temperature(self.root_node, temperature)
             return move
-
         finally:
-            if self._owns_cache:
-                self._clear_caches()
             self.model.train(was_training)
 
     def _select_move_with_temperature(
@@ -447,7 +474,7 @@ class MCTS:
         self._all_moves_cache[board_hash] = moves
         return moves
 
-    def _simulate(self, root: Node):
+    def _simulate(self, root: Node, root_priors=None):
         """Select, evaluate, expand and back up one complete simulation."""
         node = root
         path = [node]
@@ -476,7 +503,9 @@ class MCTS:
                 value = node.evaluation
                 break
 
-            _, node = node.select_child(self.config.c_puct)
+            _, node = node.select_child(
+                self.config.c_puct, root_priors if node is root else None
+            )
             path.append(node)
 
         if self.debug:

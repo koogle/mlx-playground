@@ -37,8 +37,8 @@ def play_single_game(
             unit_scale=True,
         )
 
+        mcts = MCTS(model, config, cache=game_cache)
         while not game.board.is_game_over():
-            mcts = MCTS(model, config, cache=game_cache)
             temperature = (
                 config.temperature
                 if len(game_history) < config.temp_decay_steps
@@ -54,6 +54,7 @@ def play_single_game(
             if not game.make_move(move[0], move[1]):
                 raise RuntimeError("Search returned an illegal move")
 
+            mcts.advance_root(move, game.board)
             pbar.update(1)
 
         pbar.close()

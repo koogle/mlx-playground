@@ -125,39 +125,36 @@ def create_batches(games, batch_size: int):
         f"Creating batches from {len(games)} game instances with batch_size {batch_size}"
     )
 
-    all_states = []
-    all_policies = []
-    all_values = []
-
-    for game_history, white_result in games:
-        for state, policy, _ in game_history:
-            all_states.append(state)
-            all_policies.append(policy)
-
-            # Plane 12 is 1 for White to move and 0 for Black to move.
-            if state[12, 0, 0] == 1:
-                value_target = white_result
-            else:
-                value_target = -white_result
-            all_values.append(value_target)
-
-    print(f"Total positions collected: {len(all_states)}")
-
-    if not all_states:
-        print("Warning: No positions to create batches from!")
+    if batch_size < 1:
+        raise ValueError("Batch size must be positive")
+    n_samples = sum(len(history) for history, _ in games)
+    print(f"Total positions collected: {n_samples}")
+    if not n_samples:
         return
-
-    states = mx.array(np.stack(all_states))
-    policies = mx.array(np.stack(all_policies))
-    values = mx.array(all_values)
-
-    n_samples = len(states)
-    indices = mx.arange(n_samples)
     print(f"Creating batches of size {batch_size} from {n_samples} samples")
 
-    for i in range(0, n_samples, batch_size):
-        batch_indices = indices[i : i + batch_size]
-        yield (states[batch_indices], policies[batch_indices], values[batch_indices])
+    # Upload only the next microbatch. A generation-wide CUDA allocation can
+    # block at large game counts and retains data the current step does not use.
+    states, policies, values = [], [], []
+    for history, white_result in games:
+        for state, policy, _ in history:
+            states.append(state)
+            policies.append(policy)
+            # Plane 12 is 1 for White to move and 0 for Black to move.
+            values.append(white_result if state[12, 0, 0] == 1 else -white_result)
+            if len(states) == batch_size:
+                yield (
+                    mx.array(np.stack(states)),
+                    mx.array(np.stack(policies)),
+                    mx.array(values),
+                )
+                states, policies, values = [], [], []
+    if states:
+        yield (
+            mx.array(np.stack(states)),
+            mx.array(np.stack(policies)),
+            mx.array(values),
+        )
 
 
 def get_policy_distribution(root_node, policy_output_dim: int):

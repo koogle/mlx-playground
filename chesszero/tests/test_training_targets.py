@@ -60,6 +60,24 @@ class TestValueTargets(unittest.TestCase):
         _, _, values = next(create_batches([(history, 1.0)], batch_size=2))
         np.testing.assert_array_equal(values, [-1.0, 1.0])
 
+    def test_streamed_batches_preserve_order_and_unpadded_tail(self):
+        history = [
+            (position(i % 2 == 0), np.array([i, 0], dtype=np.float32), None)
+            for i in range(5)
+        ]
+        with patch("model.self_play.np.stack", wraps=np.stack) as stack:
+            batches = list(create_batches([(history[:3], 1.0), (history[3:], -1.0)], 2))
+            self.assertTrue(
+                all(len(call.args[0]) <= 2 for call in stack.call_args_list)
+            )
+        self.assertEqual([len(b[0]) for b in batches], [2, 2, 1])
+        np.testing.assert_array_equal(
+            np.concatenate([np.array(b[1])[:, 0] for b in batches]), range(5)
+        )
+        np.testing.assert_array_equal(
+            np.concatenate([np.array(b[2]) for b in batches]), [1, -1, 1, 1, -1]
+        )
+
 
 class TestPolicyLoss(unittest.TestCase):
     def setUp(self):

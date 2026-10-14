@@ -760,8 +760,14 @@ class BitBoard:
         self.position_history = MappingProxyType(self.position_history)
         self._read_only = True
 
-    def get_repetition_hash(self) -> int:
-        """Counters are excluded; en passant matters only if a legal capture exists."""
+    def get_repetition_hash(self) -> tuple:
+        """Exact repetition identity (legacy method name).
+
+        Keep the full immutable position key so Python dictionary equality can
+        distinguish hash collisions. A reduced integer digest can falsely merge
+        unrelated positions into a threefold draw. Counters are excluded; en
+        passant matters only if a legal capture exists.
+        """
         ep = None
         if self.en_passant_target is not None:
             row, col = self.en_passant_target
@@ -776,7 +782,7 @@ class BitBoard:
                 ):
                     ep = self.en_passant_target
                     break
-        return hash((self.state[:17].tobytes(), ep))
+        return (self.state[:17].tobytes(), ep)
 
     def __hash__(self) -> int:
         """Hash the board"""

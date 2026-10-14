@@ -330,7 +330,14 @@ class MCTS:
         key = (self.cache.model_version, inputs.shape, inputs.tobytes())
         if key in self._evaluation_cache:
             return self._evaluation_cache[key]
-        policies, values = self.model(self._get_board_state(board))
+        states = self._get_board_state(board)
+        if getattr(self.model, "training", None) is not None:
+            # Interactive/local network calls still require MLX arrays. CPU pipe
+            # workers keep NumPy inputs and never import MLX.
+            import mlx.core as mx
+
+            states = mx.array(states)
+        policies, values = self.model(states)
         policy = np.array(policies[0])
         policy.flags.writeable = False
         result = policy, float(values[0].item())
@@ -354,6 +361,18 @@ class MCTS:
         return root
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
+        # Local callers (e.g. interactive play) may pass a network directly.
+        # Pipe clients have no mode: their parent owns inference/eval state.
+        was_training = getattr(self.model, "training", None)
+        if was_training is not None:
+            self.model.eval()
+        try:
+            return self._search_move(board, temperature)
+        finally:
+            if was_training is not None:
+                self.model.train(was_training)
+
+    def _search_move(self, board: BitBoard, temperature: float = 0.0):
         self.cache.bind(self.model, self.model_version)
         # Reuse is valid only within one fixed model and exact history path.
         if (

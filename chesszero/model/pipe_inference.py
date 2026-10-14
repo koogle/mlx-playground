@@ -4,6 +4,7 @@ import logging
 import multiprocessing as mp
 from multiprocessing.connection import wait
 import os
+import time
 
 import numpy as np
 from cachetools import LRUCache
@@ -12,11 +13,17 @@ from cachetools import LRUCache
 class PipeInferenceClient:
     """One game has one outstanding prediction; responses need no request IDs."""
 
-    def __init__(self, connection):
+    def __init__(self, connection, model_index=0):
         self.connection = connection
+        self.model_index = model_index
+
+    def for_model(self, model_index):
+        return PipeInferenceClient(self.connection, model_index)
 
     def __call__(self, states):
-        self.connection.send(("predict", np.asarray(states[0], dtype=np.float32)))
+        self.connection.send(
+            ("predict", np.asarray(states[0], dtype=np.float32), self.model_index)
+        )
         return self.connection.recv()
 
     def close(self):
@@ -34,7 +41,11 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
 
     if max_workers < 1 or config.inference_batch_size < 1:
         raise ValueError("Worker count and inference batch size must be positive")
-    model.eval()
+    models = list(model) if isinstance(model, (list, tuple)) else [model]
+    if not models:
+        raise ValueError("At least one inference model is required")
+    for network in models:
+        network.eval()
     ctx = mp.get_context("spawn")
     pending = iter(enumerate(jobs))
     active, results = {}, {}
@@ -42,6 +53,7 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
     predictions = LRUCache(maxsize=config.prediction_cache_size)
     statistics = dict(cache_hits=0, forwards=0, positions=0, largest_batch=0)
     logger = logging.getLogger(__name__)
+    progress_at = time.monotonic()
 
     try:
         while active or not exhausted:
@@ -86,7 +98,14 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                     # occupy the front of a large ready list.
                     active[connection] = active.pop(connection)
                     position = message[1]
-                    key = (position.shape, position.tobytes())
+                    model_index = message[2] if len(message) > 2 else 0
+                    if not isinstance(model_index, int) or not 0 <= model_index < len(
+                        models
+                    ):
+                        raise ValueError(
+                            f"Invalid inference model index: {model_index}"
+                        )
+                    key = (model_index, position.shape, position.tobytes())
                     if key in predictions:
                         statistics["cache_hits"] += 1
                         try:
@@ -113,19 +132,24 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                         results[job_id] = message
                     process.close()
 
-            if batch:
+            for model_index, network in enumerate(models):
+                model_batch = {
+                    key: value for key, value in batch.items() if key[0] == model_index
+                }
+                if not model_batch:
+                    continue
                 states = mx.array(
-                    np.stack([position for position, _ in batch.values()])
+                    np.stack([position for position, _ in model_batch.values()])
                 )
-                policies, values = model(states)
+                policies, values = network(states)
                 mx.eval(policies, values)
                 policies, values = np.array(policies), np.array(values)
                 statistics["forwards"] += 1
-                statistics["positions"] += len(batch)
+                statistics["positions"] += len(model_batch)
                 statistics["largest_batch"] = max(
-                    statistics["largest_batch"], len(batch)
+                    statistics["largest_batch"], len(model_batch)
                 )
-                for index, (key, (_, connections)) in enumerate(batch.items()):
+                for index, (key, (_, connections)) in enumerate(model_batch.items()):
                     prediction = (
                         policies[index : index + 1].copy(),
                         values[index : index + 1].copy(),
@@ -135,8 +159,16 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                         try:
                             connection.send(prediction)
                         except (BrokenPipeError, OSError):
-                            # EOF/exit handling on the next wait accounts for this game.
-                            pass
+                            pass  # EOF/exit handling accounts for the game on the next wait.
+            if time.monotonic() - progress_at >= 15:
+                logger.info(
+                    "Games: %d completed, %d failed, %d active; %d positions inferred",
+                    len(results),
+                    failures,
+                    len(active),
+                    statistics["positions"],
+                )
+                progress_at = time.monotonic()
     finally:
         for connection, (process, _) in active.items():
             if process.is_alive():

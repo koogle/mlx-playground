@@ -59,9 +59,17 @@ class TestGradientAccumulation(unittest.TestCase):
             self.assertEqual(int(self.split.optimizer.state["step"]), step)
 
     def test_training_loop_updates_once_for_the_generation(self):
+        def streamed_batches():
+            yield self.batches[0]
+            # A list() in the outer loop consumes this while model is in eval.
+            self.assertTrue(self.split.model.training)
+            yield self.batches[1]
+
         with (
             patch("model.training.generate_games", return_value=[]),
-            patch("model.training.create_batches", return_value=self.batches),
+            patch.object(self.split, "_save_checkpoint") as save,
+            patch("model.training.create_batches", return_value=streamed_batches()),
         ):
             self.split.train(n_epochs=1)
         self.assertEqual(int(self.split.optimizer.state["step"]), 1)
+        save.assert_called_once_with(1)

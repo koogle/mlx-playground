@@ -99,8 +99,11 @@ def generate_games(
     )
     logger.info("Shared pipe inference: %s", statistics)
     logger.info("Self-play generation: %d completed, %d failed", len(results), failures)
-    if not results:
-        raise RuntimeError("All self-play games failed; no training update can be made")
+    if failures or len(results) != config.n_games_per_iteration:
+        raise RuntimeError(
+            f"Incomplete self-play: {len(results)} completed, {failures} failed; "
+            "no training update can be made"
+        )
     for result in results:
         logger.info(
             "Game %d: %d moves, White result %s",

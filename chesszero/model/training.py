@@ -3,9 +3,7 @@ import mlx.optimizers as optim
 import mlx.nn.losses as mx_losses
 import mlx.nn as nn
 from typing import Tuple, Optional
-from chess_engine.game import ChessGame
 from model.network import ChessNet
-from model.mcts import MCTS
 from model.self_play import (
     create_batches,
     generate_games,
@@ -18,9 +16,8 @@ from tqdm import tqdm
 import gc
 import psutil
 import os
-import traceback
-from multiprocessing.connection import Connection
-from model.game_workers import run_game_workers
+from model.pipe_inference import run_pipe_games
+from model.evaluation import play_evaluation_game
 from mlx.utils import tree_flatten, tree_map
 
 
@@ -92,7 +89,7 @@ class Trainer:
 
                 games = generate_games(self.model, self.config, n_workers)
 
-                batches = list(create_batches(games, self.config.batch_size))
+                batches = create_batches(games, self.config.batch_size)
 
                 del games
                 gc.collect()
@@ -114,7 +111,9 @@ class Trainer:
                     self.logger.info("\n=== Running Evaluation ===")
 
                     try:
-                        result = self.evaluate_against_best(max_workers=n_workers)
+                        result = self.evaluate_against_best(
+                            n_games=self.config.n_eval_games, max_workers=n_workers
+                        )
                     except IncompleteEvaluationError as error:
                         self.logger.warning("Skipping model acceptance: %s", error)
                         self._save_checkpoint(epoch + 1)
@@ -130,7 +129,7 @@ class Trainer:
                             self._accept_current_model(score)
                         else:
                             self._revert_to_best()
-                    self._save_checkpoint(epoch + 1)
+                self._save_checkpoint(epoch + 1)
 
             total_time = time.time() - start_time
             self.logger.info("\n=== Training Completed ===")
@@ -144,7 +143,9 @@ class Trainer:
     @staticmethod
     def _release_unused_device_cache():
         """Return idle training buffers before other processes use the GPU."""
-        mx.clear_cache()
+        clear_cache = getattr(mx, "clear_cache", None)
+        if clear_cache is not None:
+            clear_cache()
 
     def _accept_current_model(self, score=0.0):
         if self.best_model is None:
@@ -222,7 +223,7 @@ class Trainer:
         # MLX arrays are immutable; retaining references is enough for rollback.
         original_parameters = self.model.parameters()
         try:
-            for batch in batches:
+            for microbatch, batch in enumerate(batches, 1):
                 batch_size = len(batch[0])
                 if batch_size == 0:
                     continue
@@ -240,6 +241,12 @@ class Trainer:
                 # Materialize each contribution so previous activation graphs can
                 # be released instead of accumulating across the entire generation.
                 mx.eval(accumulated, weighted_losses, self.model.parameters())
+                if microbatch == 1 or microbatch % 50 == 0:
+                    self.logger.info(
+                        "Learning: microbatch %d, %d positions accumulated",
+                        microbatch,
+                        n_positions,
+                    )
 
         except Exception:
             # A failed microbatch must not result in a partial generation update.
@@ -271,69 +278,6 @@ class Trainer:
             "system_percent": psutil.virtual_memory().percent,
         }
 
-    @staticmethod
-    def play_evaluation_game_worker(
-        model: ChessNet,
-        best_model: ChessNet,
-        config: ModelConfig,
-        game_id: int,
-        player_color: int,
-        result_connection: Connection,
-        max_workers: int,
-    ):
-        """Worker process that plays a single evaluation game and reports its result."""
-        try:
-            model.eval()
-            best_model.eval()
-            game = ChessGame()
-
-            pbar = tqdm(
-                desc=f"Evaluation game {game_id}",
-                position=game_id % max_workers,
-                leave=False,
-                unit="moves",
-                unit_scale=True,
-            )
-
-            searches = {
-                player_color: MCTS(model, config, exploration_noise=True),
-                1 - player_color: MCTS(best_model, config, exploration_noise=True),
-            }
-            while not game.board.is_game_over():
-                mcts = searches[game.board.get_current_turn()]
-
-                move = mcts.get_move(game.board, temperature=0.0)
-                if move is None:
-                    raise RuntimeError(
-                        "Search returned no move for an ongoing evaluation"
-                    )
-
-                if not game.make_move(move[0], move[1]):
-                    raise RuntimeError("Search returned an illegal evaluation move")
-
-                for search in searches.values():
-                    search.advance_root(move, game.board)
-                pbar.update(1)
-
-            pbar.close()
-
-            result = game.board.get_game_result(player_color)
-            if result is None:
-                raise RuntimeError("Evaluation ended without a terminal result")
-            result_connection.send(
-                {
-                    "game_id": game_id,
-                    "result": result,
-                    "perspective_color": player_color,
-                    "final_board": str(game.board),
-                }
-            )
-
-        except Exception as e:
-            logging.error(f"Error in evaluation game {game_id}: {str(e)}")
-            logging.error(traceback.format_exc())
-            result_connection.send(None)
-
     def evaluate_against_best(
         self, n_games: int = 40, max_workers: int = 10
     ) -> Optional[Tuple[float, int, int, int]]:
@@ -350,17 +294,51 @@ class Trainer:
             )
 
         jobs = [
-            (self.model, self.best_model, self.config, game_id, color)
+            (self.config, game_id, color, False, game_id)
             for color in (0, 1)
             for game_id in range(n_games // 2)
         ]
-        results, failures = run_game_workers(
-            self.play_evaluation_game_worker, jobs, max_workers
+        results, failures, statistics = run_pipe_games(
+            [self.model, self.best_model],
+            self.config,
+            play_evaluation_game,
+            jobs,
+            max_workers,
         )
+        self.logger.info("Evaluation inference: %s", statistics)
         self.logger.info("Evaluation: %d completed, %d failed", len(results), failures)
-        if failures:
+        if failures or len(results) != n_games:
             raise IncompleteEvaluationError(f"{failures} of {n_games} games failed")
         wins = sum(result["result"] == 1 for result in results)
         losses = sum(result["result"] == -1 for result in results)
         draws = sum(result["result"] == 0 for result in results)
         return self._evaluation_score(wins, losses, draws), wins, losses, draws
+
+    def evaluate_against_random(self, n_games=64, max_workers=8, seed=10000):
+        """Balanced, noise-free MCTS versus uniformly random legal moves.
+
+        Return score (draws worth half), wins, losses, draws. These games never
+        enter the optimizer, and a partial evaluation cannot report a score.
+        """
+        if n_games < 2 or n_games % 2 or max_workers < 1:
+            raise ValueError(
+                "Evaluation requires even n_games >= 2 and positive workers"
+            )
+        jobs = [(self.config, i, i % 2, True, seed + i // 2) for i in range(n_games)]
+        results, failures, statistics = run_pipe_games(
+            self.model, self.config, play_evaluation_game, jobs, max_workers
+        )
+        self.logger.info(
+            "Random evaluation: %d completed, %d failed; %s",
+            len(results),
+            failures,
+            statistics,
+        )
+        if failures or len(results) != n_games:
+            raise IncompleteEvaluationError(
+                f"{failures} of {n_games} random games failed"
+            )
+        wins = sum(r["result"] == 1 for r in results)
+        losses = sum(r["result"] == -1 for r in results)
+        draws = sum(r["result"] == 0 for r in results)
+        return (wins + 0.5 * draws) / n_games, wins, losses, draws

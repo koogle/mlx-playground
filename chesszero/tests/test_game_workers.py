@@ -9,6 +9,8 @@ import numpy as np
 
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
+from types import SimpleNamespace
+from model.evaluation import play_evaluation_game
 from model.game_workers import run_game_workers
 from model.mcts import MCTS, Node
 from model.self_play import generate_games
@@ -29,7 +31,11 @@ def worker_limit_probe(sender, max_workers):
 class TestGameWorkers(unittest.TestCase):
     def test_cuda_games_are_serialized_without_dropping_jobs(self):
         with (
-            patch("model.game_workers.mx.cuda.is_available", return_value=True),
+            patch(
+                "model.game_workers.mx.cuda",
+                SimpleNamespace(is_available=lambda: True),
+                create=True,
+            ),
             patch("model.game_workers.mx.default_device", return_value=mx.gpu),
             self.assertLogs("model.game_workers", level="WARNING") as logs,
         ):
@@ -42,7 +48,11 @@ class TestGameWorkers(unittest.TestCase):
         for cuda_available, device in ((True, mx.cpu), (False, mx.gpu)):
             with (
                 self.subTest(cuda_available=cuda_available, device=device),
-                patch("model.game_workers.mx.cuda.is_available", return_value=cuda_available),
+                patch(
+                    "model.game_workers.mx.cuda",
+                    SimpleNamespace(is_available=lambda: cuda_available),
+                    create=True,
+                ),
                 patch("model.game_workers.mx.default_device", return_value=device),
             ):
                 results, failures = run_game_workers(worker_limit_probe, [()] * 3, 2)
@@ -58,18 +68,39 @@ class TestGameWorkers(unittest.TestCase):
     def test_evaluation_target_is_picklable_and_failed_matches_are_not_scored(self):
         with tempfile.TemporaryDirectory() as directory:
             trainer = Trainer(ModelConfig(n_residual_blocks=0, n_filters=2), directory)
-            ForkingPickler.dumps(trainer.play_evaluation_game_worker)
+            ForkingPickler.dumps(play_evaluation_game)
             trainer._accept_current_model()
             with patch(
-                "model.training.run_game_workers", return_value=([{"result": 1}], 1)
+                "model.training.run_pipe_games", return_value=([{"result": 1}], 1, {})
             ):
                 with self.assertRaises(IncompleteEvaluationError):
                     trainer.evaluate_against_best(n_games=2)
 
     def test_all_failed_self_play_cannot_produce_an_update(self):
-        with patch("model.self_play.run_game_workers", return_value=([], 2)):
-            with self.assertRaisesRegex(RuntimeError, "All self-play games failed"):
+        with patch("model.self_play.run_pipe_games", return_value=([], 2, {})):
+            with self.assertRaisesRegex(RuntimeError, "Incomplete self-play"):
                 generate_games(None, ModelConfig(n_games_per_iteration=2))
+
+    def test_partial_self_play_is_rejected(self):
+        with patch("model.self_play.run_pipe_games", return_value=([{}], 1, {})):
+            with self.assertRaisesRegex(RuntimeError, "Incomplete self-play"):
+                generate_games(None, ModelConfig(n_games_per_iteration=2))
+
+    def test_random_evaluation_scores_draws_and_requires_every_game(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = Trainer(ModelConfig(n_residual_blocks=0, n_filters=2), directory)
+            results = [{"result": r} for r in (1, -1, 0, 0)]
+            with patch(
+                "model.training.run_pipe_games", return_value=(results, 0, {})
+            ) as run:
+                self.assertEqual(trainer.evaluate_against_random(4, 2), (0.5, 1, 1, 2))
+                jobs = run.call_args.args[3]
+                self.assertEqual([job[2] for job in jobs], [0, 1, 0, 1])
+            with patch(
+                "model.training.run_pipe_games", return_value=(results[:2], 0, {})
+            ):
+                with self.assertRaises(IncompleteEvaluationError):
+                    trainer.evaluate_against_random(4, 2)
 
     def test_configured_root_noise_affects_selection_without_changing_priors(self):
         config = ModelConfig(dirichlet_alpha=0.7, dirichlet_epsilon=0.4)

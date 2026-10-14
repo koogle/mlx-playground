@@ -38,6 +38,7 @@ class ModelConfig:
     debug: bool = False
 
     # Logging
+    n_eval_games: int = 40
     eval_interval_epochs: int = 5  # Run evaluation every 5 epochs
 
     inference_batch_size: int = 64

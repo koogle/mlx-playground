@@ -76,38 +76,49 @@ class TestInferenceMode(unittest.TestCase):
         self.searches.append(search)
         return search
 
-    def test_self_play_worker_keeps_model_in_eval(self):
-        model, connection = ModeModel(), Mock()
+    def test_self_play_worker_uses_cpu_client(self):
+        client, connection = Mock(), Mock()
         with (
             patch("model.self_play.ChessGame", return_value=self.worker_game()),
-            patch("model.self_play.MCTS", side_effect=self.checking_search),
+            patch("model.self_play.MCTS") as make_search,
             patch("model.self_play.tqdm"),
         ):
+            search = make_search.return_value
+            search.get_move.return_value = ((0, 1), (2, 2))
+            search.root_node = SimpleNamespace(
+                children={((0, 1), (2, 2)): SimpleNamespace(visit_count=1)}
+            )
             config = ModelConfig(temperature=0.7, temp_decay_steps=1, temp_final=0.2)
-            play_single_game(model, config, 0, connection, 1)
+            play_single_game(client, config, 0, connection, 1)
         self.assertEqual(
-            [
-                call.kwargs["temperature"]
-                for call in self.searches[0].get_move.call_args_list
-            ],
+            [call.kwargs["temperature"] for call in search.get_move.call_args_list],
             [0.7, 0.2],
         )
         self.assertIsNotNone(connection.send.call_args.args[0])
-        self.assertFalse(model.training)
+        client.close.assert_called_once()
+        client.eval.assert_not_called()
 
-    def test_evaluation_worker_sets_both_models_to_eval(self):
-        model, best_model, connection = ModeModel(), ModeModel(), Mock()
+    def test_evaluation_worker_uses_shared_clients_without_noise(self):
+        from model.evaluation import play_evaluation_game
+
+        client, connection = Mock(), Mock()
         with (
-            patch("model.training.ChessGame", return_value=self.worker_game()),
-            patch("model.training.MCTS", side_effect=self.checking_search),
-            patch("model.training.tqdm"),
+            patch("model.evaluation.ChessGame", return_value=self.worker_game()),
+            patch("model.evaluation.MCTS") as make_search,
         ):
-            Trainer.play_evaluation_game_worker(
-                model, best_model, ModelConfig(), 0, 0, connection, 1
+            make_search.return_value.get_move.return_value = ((0, 1), (2, 2))
+            play_evaluation_game(client, ModelConfig(), 0, 0, False, 0, connection, 1)
+        self.assertEqual(make_search.call_count, 2)
+        self.assertTrue(
+            all(
+                call.kwargs["exploration_noise"] is False
+                for call in make_search.call_args_list
             )
+        )
+        client.for_model.assert_called_once_with(1)
+        client.close.assert_called_once()
+        client.eval.assert_not_called()
         self.assertIsNotNone(connection.send.call_args.args[0])
-        self.assertFalse(model.training)
-        self.assertFalse(best_model.training)
 
     def test_fresh_network_has_unit_batchnorm_running_variance(self):
         from model.network import ChessNet

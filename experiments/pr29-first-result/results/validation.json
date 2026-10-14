@@ -1,0 +1,38 @@
+{
+  "local_tests": {
+    "passed": 92,
+    "failed": 0
+  },
+  "modal_preflight": {
+    "run_id": "pr29-preflight-20261014-202606",
+    "app_url": "https://modal.com/apps/radiantai/main/ap-G8Howk0KD03aHMPtfCFcpR",
+    "gpu": "L40S",
+    "mlx": "0.32.3",
+    "targeted_tests_passed": 22,
+    "architecture": {
+      "residual_blocks": 19,
+      "filters": 256
+    },
+    "random_control": {
+      "games": 64,
+      "failed": 0,
+      "censored": 0,
+      "oracle_verified": true
+    },
+    "cli": {
+      "epochs": 2,
+      "self_play_games": 4,
+      "self_play_positions": 1238,
+      "simulations": 2,
+      "workers": 2,
+      "best_model_evaluation_games": 2,
+      "random_evaluation_games": 4,
+      "random_wins": 0,
+      "random_draws": 3,
+      "random_losses": 1,
+      "checkpoint_reload": true,
+      "finite_parameters": true,
+      "note": "Existing promotion rule reverted epoch 2 to accepted epoch 1, including Adam state. This is operational validation, not evidence of strength or convergence."
+    }
+  }
+}

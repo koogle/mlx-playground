@@ -35,7 +35,7 @@ class TestValueTargets(unittest.TestCase):
                     "final_board": "test board",
                 }
                 with patch(
-                    "model.self_play.run_game_workers", return_value=([result], 0)
+                    "model.self_play.run_pipe_games", return_value=([result], 0, {})
                 ):
                     games = generate_games(
                         None, ModelConfig(n_games_per_iteration=1), max_workers=1

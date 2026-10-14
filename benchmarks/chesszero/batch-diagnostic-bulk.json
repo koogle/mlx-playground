@@ -1,0 +1,5 @@
+{
+  "exit_code": -15,
+  "seconds": 158.869476473,
+  "log": "fixture prepared 1.9068588629999996\nNumPy policy stack completed 0.7332518410000004 bytes 1725238784\nTimeout (0:01:00)!\nThread 0x00002aeb8954a740 (most recent call first):\n  File \"<string>\", line 21 in <module>\nTimeout (0:01:00)!\nThread 0x00002aeb8954a740 (most recent call first):\n  File \"<string>\", line 21 in <module>\n"
+}

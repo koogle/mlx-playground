@@ -1,0 +1,5 @@
+{
+  "exit_code": 0,
+  "seconds": 11.277043324000001,
+  "log": "fixture prepared 4.439640498\nCreating batches from 1 game instances with batch_size 64\nTotal positions collected: 92318\nCreating batches of size 64 from 92318 samples\nfirst batch returned 0.004369968000000668\nfirst batch evaluated 0.0051360690000006315\nall positions uploaded 92318 seconds 0.6240469860000006\n"
+}

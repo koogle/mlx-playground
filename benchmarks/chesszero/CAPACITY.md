@@ -9,3 +9,13 @@ This probe used the full model, fixed PR #22 source `96cb5f6`, generation-4 chec
 Raw telemetry, per-game durations, termination status and log are preserved as `capacity-512-*`. `capacity-runs.json` records the completed controller state. The CPU-only controller invocation and volume directory are in `capacity-controller.json`; `capacity_sweep.py` and `modal_high_parallel.py` implement the staged sweep.
 
 Earlier submissions were cancelled while queued or failed before executing a benchmark because their image omitted the shared `modal_batched_throughput` module. The corrected image includes that module. Those startup failures are not capacity measurements.
+
+## Diagnosis and streamed-batch validation
+
+The stall reproduces without any games, using 92,318 independent synthetic position/policy arrays on an L40S. A separate probe splits NumPy stacking from CUDA conversion: NumPy stacked the policy array in 0.733 seconds (1,725,238,784 bytes), then `mx.array(stacked)` did not return before termination after 158.87 seconds. Repeated stack traces point to that conversion. This identifies the blocking MLX CUDA operation; the underlying allocator/driver mechanism has not been established. It is not an observed out-of-memory error.
+
+PR #22 source `e13893b` now creates and uploads one training microbatch at a time, rather than copying the whole generation into MLX arrays. The position order, perspective targets, unpadded tail, sample-weighted gradient accumulation and single Adam update remain the same. The synthetic L40S fixture uploaded all 92,318 positions in 0.624 seconds with this change. Raw evidence is in `batch-diagnostic-bulk.json` and `batch-diagnostic-streamed.json`.
+
+An actual 16-game L40S run generated 2,734 positions in 168.04 seconds, completed training in 3.431 seconds, saved a checkpoint and advanced Adam from step 4 to 5 with finite parameters. Its game lengths and all four losses exactly match the prior 16-game run. All 82 PR #22 tests and 86 combined integration tests pass. This verifies execution and preserves the small-run result; it does not establish learning convergence.
+
+The fresh 512-game rerun is in progress. Its invocation/source metadata is in `capacity-streamed-512-run.json`. The benchmark now saves generation metrics before learning and emits repeated stack traces if training takes more than two minutes, so failures cannot hide all generation timings.

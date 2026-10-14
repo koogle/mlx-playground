@@ -22,6 +22,7 @@ def timed_game(model, config, game_id, directory, sender, max_workers):
 
 
 def main():
+    import faulthandler
     import mlx.core as mx
     from mlx.utils import tree_flatten
 
@@ -43,14 +44,37 @@ def main():
     start = time.monotonic()
     jobs = [(trainer.config, i, str(out)) for i in range(workers)]
     with BatchedInference(trainer.model, trainer.config) as inference:
-        results, failures = run_game_workers(timed_game, jobs, workers, clients=(inference.client(),))
+        results, failures = run_game_workers(
+            timed_game, jobs, workers, clients=(inference.client(),)
+        )
     seconds = time.monotonic() - start
     if failures:
         raise RuntimeError(f"{failures} games failed")
     games = [(r["history"], r["white_result"]) for r in results]
+    # Preserve generation timing even if preparation or backpropagation fails.
+    (out / "generation.json").write_text(
+        json.dumps(
+            {
+                "workers": workers,
+                "games": len(games),
+                "failures": failures,
+                "positions": sum(len(h) for h, _ in games),
+                "self_play_seconds": seconds,
+                "games_per_minute": len(games) * 60 / seconds,
+                "inference": inference.statistics,
+            },
+            indent=2,
+        )
+    )
+    print(
+        "Self-play completed", seconds, "seconds; preparing training data", flush=True
+    )
+    faulthandler.dump_traceback_later(120, repeat=True)
     learn_start = time.monotonic()
     losses = trainer.train_on_batches(create_batches(games, 64))
+    faulthandler.cancel_dump_traceback_later()
     learning_seconds = time.monotonic() - learn_start
+    print("Adam update completed", learning_seconds, "seconds", flush=True)
     finite = all(
         bool(mx.all(mx.isfinite(v)).item())
         for _, v in tree_flatten(trainer.model.parameters())

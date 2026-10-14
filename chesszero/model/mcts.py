@@ -85,14 +85,14 @@ class Node:
 class GameSearchCache:
     """Bounded reuse for one game's fixed model snapshot; never stores Nodes.
 
-    Clear the cache or advance model_version before changing model weights.
+    Advance model_version before changing model weights. Clearing cached entries
+    only releases cached data; search trees remain valid for the same weights.
     Self-play workers create a new owner for each game and never train mid-game.
     """
 
     def __init__(self, model, maxsize=10_000, model_version=0):
         self.model = model
         self.model_version = model_version
-        self.generation = 0
         self.all_moves = LRUCache(maxsize=maxsize)
         self.boards = LRUCache(maxsize=maxsize)
         self.positions = LRUCache(maxsize=maxsize)
@@ -109,7 +109,7 @@ class GameSearchCache:
             self.model_version = model_version
 
     def clear(self):
-        """Discard game data, or invalidate before changing a model's weights."""
+        """Release cached entries without invalidating retained search trees."""
         for cache in (
             self.all_moves,
             self.boards,
@@ -120,11 +120,10 @@ class GameSearchCache:
             *self.rules,
         ):
             cache.clear()
-        self.generation += 1
 
 
 class MCTS:
-    """Search a fixed model snapshot; clear/bind the cache before changing weights."""
+    """Search a fixed model snapshot; advance model_version when weights change."""
 
     # Geometry/encoding tables are constant; position caches have explicit owners.
     _move_encoding_table = None  # Will be initialized in __init__
@@ -368,10 +367,9 @@ class MCTS:
         try:
             self.cache.bind(self.model, self.model_version)
             # Reuse is valid only within one fixed model and exact history path.
-            cache_version = (self.cache.model_version, self.cache.generation)
             if (
                 self.root_node is None
-                or self._root_model_version != cache_version
+                or self._root_model_version != self.cache.model_version
                 or not self._same_position(self.root_node.board, board)
             ):
                 self.root_node = Node(
@@ -379,7 +377,7 @@ class MCTS:
                     exploration_noise=self.exploration_noise,
                     board_factory=self._get_child_board,
                 )
-                self._root_model_version = cache_version
+                self._root_model_version = self.cache.model_version
             if not self.root_node.is_expanded:
                 policy, value = self._evaluate_board(self.root_node.board)
                 self._expand_node(self.root_node, policy, value)

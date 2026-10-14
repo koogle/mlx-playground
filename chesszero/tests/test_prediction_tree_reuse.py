@@ -38,8 +38,8 @@ class TestTreeReuse(unittest.TestCase):
         self.assertEqual(child.visit_count, visits + 32)
         search.cache.clear()
         search.get_move(board)
-        self.assertIsNot(search.root_node, child)
-        self.assertEqual(search.root_node.visit_count, 32)
+        self.assertIs(search.root_node, child)
+        self.assertEqual(child.visit_count, visits + 64)
 
     def test_each_search_shares_one_noise_sample_only_at_the_root(self):
         board = ToyBoard()

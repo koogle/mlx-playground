@@ -22,7 +22,6 @@ def timed_game(model, config, game_id, directory, sender, max_workers):
 
 
 def main():
-    import faulthandler
     import mlx.core as mx
     from mlx.utils import tree_flatten
 
@@ -51,6 +50,11 @@ def main():
     if failures:
         raise RuntimeError(f"{failures} games failed")
     games = [(r["history"], r["white_result"]) for r in results]
+    # Keep this fresh generation available if the learning process needs a retry.
+    import pickle
+
+    with (out / "games.pkl").open("wb") as handle:
+        pickle.dump(games, handle, protocol=5)
     # Preserve generation timing even if preparation or backpropagation fails.
     (out / "generation.json").write_text(
         json.dumps(
@@ -69,10 +73,15 @@ def main():
     print(
         "Self-play completed", seconds, "seconds; preparing training data", flush=True
     )
-    faulthandler.dump_traceback_later(120, repeat=True)
     learn_start = time.monotonic()
-    losses = trainer.train_on_batches(create_batches(games, 64))
-    faulthandler.cancel_dump_traceback_later()
+
+    def progress_batches():
+        for index, batch in enumerate(create_batches(games, 64)):
+            if index % 100 == 0:
+                print("Training microbatch", index, flush=True)
+            yield batch
+
+    losses = trainer.train_on_batches(progress_batches())
     learning_seconds = time.monotonic() - learn_start
     print("Adam update completed", learning_seconds, "seconds", flush=True)
     finite = all(

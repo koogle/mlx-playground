@@ -1,0 +1,4 @@
+{
+  "exit_code": 0,
+  "log": "microbatch 0\nmicrobatch 100\nmicrobatch 200\nmicrobatch 300\nmicrobatch 400\nmicrobatch 500\nmicrobatch 600\nmicrobatch 700\nmicrobatch 800\nmicrobatch 900\nmicrobatch 1000\nmicrobatch 1100\nmicrobatch 1200\nmicrobatch 1300\nmicrobatch 1400\nmicrobatch 1500\nmicrobatch 1600\nmicrobatch 1700\nmicrobatch 1800\nmicrobatch 1900\nmicrobatch 2000\nmicrobatch 2100\nmicrobatch 2200\nmicrobatch 2300\nmicrobatch 2400\nmicrobatch 2500\nmicrobatch 2600\nmicrobatch 2700\nmicrobatch 2800\n{\"losses\": [9.343721389770508, 9.304224967956543, 0.014139940030872822, 0.025390613824129105], \"step\": 5, \"finite\": true, \"seconds\": 128.739739605}\n"
+}

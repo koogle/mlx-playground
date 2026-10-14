@@ -1,0 +1,13 @@
+{
+  "run_id": "scale-streamed-rpc-22-1024-20261014-075224",
+  "function_call_id": "fc-01M4WPBWYRVAM6007JV43XGPR8",
+  "source_revision": "e13893b",
+  "workers": 1024,
+  "gpu": "L40S",
+  "cpu": 32,
+  "memory_request_mb": 65536,
+  "memory_limit_mb": 393216,
+  "limit_seconds": 7200,
+  "status": "failed",
+  "error": "terminate called without an active exception\nSelf-play completed 2360.058852145 seconds; preparing training data\nCreating batches from 1024 game instances with batch_size 64\nTotal positions collected: 181645\nCreating batches of size 64 from 181645 samples\nTimeout (0:02:00)!\nThread 0x00002b486a96c740 (most recent call first):\n  File \"/usr/local/lib/python3.12/site-packages/mlx/nn/layers/convolution.py\", line 13 in __call__\n  File "
+}

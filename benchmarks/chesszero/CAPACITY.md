@@ -31,3 +31,15 @@ PR #22 source `e13893b` now creates and uploads one training microbatch at a tim
 An actual 16-game L40S run generated 2,734 positions in 168.04 seconds, completed training in 3.431 seconds, saved a checkpoint and advanced Adam from step 4 to 5 with finite parameters. Its game lengths and all four losses exactly match the prior 16-game run. All 82 PR #22 tests and 86 combined integration tests pass. This verifies execution and preserves the small-run result; it does not establish learning convergence.
 
 The fresh 512-game rerun completed successfully. Its invocation/source metadata is in `capacity-streamed-512-run.json`. The benchmark now saves generation metrics before learning and emits repeated stack traces if training takes more than two minutes, so failures cannot hide all generation timings.
+
+## First 1024-game attempt and diagnostic crash
+
+The first 1024-game attempt (`scale-streamed-rpc-22-1024-20261014-075224`, source `e13893b`) completed all 1024 games with no game failures and produced 181,645 positions. Generation took 2360.06 seconds (39.33 minutes), or 26.03 games/minute and 76.97 positions/second. This is 14.4% fewer games/minute than the 512-game trial. Inference averaged 59.48 positions per forward (cap 64). Sampled peaks: GPU 10.74 GiB; actual cgroup CPU RAM 226.36 GiB.
+
+Training was active when the benchmark's asynchronous `faulthandler` stack dump fired after two minutes. The process crashed mid-dump (SIGSEGV, exit code -11) before completing an Adam update or checkpoint. This trial therefore validates 1024-game generation only. Raw evidence is in `capacity-streamed-1024-*`.
+
+Two 100-microbatch controls passed with and without one-second dumping. A stronger 5 ms dump stress test reproduced the same mid-stack-dump segmentation fault during MLX autodiff. A full-sized control without dumping then trained 181,645 synthetic positions, produced finite parameters and Adam step 5, and completed in 128.74 seconds. These controls isolate diagnostic safety and training execution, not chess learning. `training-diagnostic-comparison.json` and `training-full-control.json` preserve the results.
+
+The benchmark now uses ordinary progress messages instead of asynchronous frame walking and saves each fresh generation to `games.pkl` before training. A second 1024-game end-to-end run is in progress; its metadata is in `capacity-streamed-1024-retry-run.json`. The production model/search/training source remains unchanged.
+
+The inference helper prints `terminate called without an active exception` during shutdown in both the successful 512-game trial and this first 1024-game attempt, after all game predictions have returned. This is separate from the diagnostic crash during training and has not been identified as a capacity failure.

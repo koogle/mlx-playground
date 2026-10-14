@@ -1,0 +1,11 @@
+{
+  "run_id": "scale-streamed-rpc-22-1024-retry-20261014-084822",
+  "function_call_id": "fc-01M4WSJBNERHJREWQ7TTPF8JYG",
+  "source_revision": "e13893b",
+  "workers": 1024,
+  "gpu": "L40S",
+  "cpu": 32,
+  "memory_limit_mb": 393216,
+  "limit_seconds": 7200,
+  "benchmark_changes": "No asynchronous stack dump; ordinary batch progress; preserve fresh generation"
+}

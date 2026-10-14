@@ -1,0 +1,10 @@
+{
+  "run_id": "same-gpu-crossover-retry-20261014-152527",
+  "function_call_id": "fc-01M4XG9EFEQ4Y5CCN2KCYJW8AC",
+  "source_legacy": "e13893be0296f817c50e0562a2c50bdc8c2fb7de",
+  "source_current": "d504652c2fc0a783565460002128b2c53165c260",
+  "workers": 512,
+  "prefix_plies": 32,
+  "n_simulations": 32,
+  "training": false
+}

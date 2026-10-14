@@ -1,0 +1,25 @@
+{
+  "run_id": "main-vs-pr22-512-20261014-134952",
+  "calls": [
+    {
+      "variant": "main",
+      "function_call_id": "fc-01M4XATDS1X9HX99SPFY7A6W3G",
+      "revision": "6ab1e6f0ee32dd51c93f6aa9140143d43391c47c"
+    },
+    {
+      "variant": "candidate",
+      "function_call_id": "fc-01M4XATDYFPFX0ATD0NHFE0FTG",
+      "revision": "d504652c2fc0a783565460002128b2c53165c260"
+    }
+  ],
+  "gpu_per_trial": "L40S",
+  "cpu_per_trial": 32,
+  "memory_limit_mib": 393216,
+  "games": 512,
+  "n_simulations": 32,
+  "training_batch_size": 64,
+  "initial_checkpoint": "learning-merged-20261013-205953/checkpoints",
+  "resume_epoch": 4,
+  "seed_base": 9000,
+  "cuda_convolution_cache_size": 1024
+}

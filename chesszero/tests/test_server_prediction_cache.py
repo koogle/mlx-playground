@@ -29,10 +29,10 @@ class TestServerPredictionCache(unittest.TestCase):
         from queue import Queue
         from unittest.mock import Mock
         from cachetools import LRUCache
-        from model.inference import _InferenceBackend
+        from model.inference_backend import _InferenceBackend
 
         backend = _InferenceBackend.__new__(_InferenceBackend)
-        backend.mx, backend.device = Mock(), "cpu"
+        backend.device = mx.cpu
         backend.batch_size, backend.cache_hits, backend.error = 2, 0, None
         backend.requests, backend.predictions = Queue(), LRUCache(maxsize=1)
         cached = np.full((19, 8, 8), 9, dtype=np.float32)

@@ -1,0 +1,6 @@
+{
+  "status": "aborted_after_failure",
+  "reason": "CUDA illegal memory access in game 52, double-free report, followed by frozen telemetry/game progress; stopped to release the failed GPU container.",
+  "last_sample_seconds": 234.608231645,
+  "manual_cancellation": true
+}

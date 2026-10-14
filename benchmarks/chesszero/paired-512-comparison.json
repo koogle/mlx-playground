@@ -1,0 +1,44 @@
+{
+  "run_id": "main-vs-pr22-512-20261014-134952",
+  "main": {
+    "status": "aborted_after_failure",
+    "reason": "CUDA illegal memory access in game 52, double-free report, followed by frozen telemetry/game progress; stopped to release the failed GPU container.",
+    "last_sample_seconds": 234.608231645,
+    "manual_cancellation": true,
+    "sampled_gpu_peak_gib": 44.408203125,
+    "sampled_host_peak_gib": 67.10506439208984,
+    "sample_mean_self_play_gpu_utilization_percent": 99.45454545454545
+  },
+  "candidate": {
+    "source_revision": "d504652c2fc0a783565460002128b2c53165c260",
+    "games": 512,
+    "failures": 0,
+    "positions": 69159,
+    "self_play_seconds": 1204.469941094,
+    "games_per_minute": 25.504995145082273,
+    "positions_per_second": 57.41861846480289,
+    "learning_seconds": 46.77397631400004,
+    "losses": [
+      7.7616047859191895,
+      7.111732482910156,
+      0.6244884133338928,
+      0.02539059892296791
+    ],
+    "adam_step": 5,
+    "finite_parameters": true,
+    "checkpoint_roundtrip": true,
+    "white_wins": 192,
+    "black_wins": 182,
+    "draws": 138,
+    "inference": {
+      "cache_hits": 29790,
+      "forwards": 47357,
+      "positions": 2163843,
+      "largest_batch": 64,
+      "error": null
+    },
+    "sampled_gpu_peak_gib": 10.76953125,
+    "sampled_host_peak_gib": 118.85924911499023,
+    "sample_mean_self_play_gpu_utilization_percent": 28.246376811594203
+  }
+}

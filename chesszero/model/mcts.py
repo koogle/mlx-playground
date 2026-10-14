@@ -32,7 +32,6 @@ class Node:
         self.move = move
         self.parent = parent
         self.prior = prior
-        self.base_prior = prior
         self.children = {}
         self.is_expanded = False
 
@@ -48,7 +47,7 @@ class Node:
             return 0.0
         return self.value_sum / self.visit_count  # already a Python float
 
-    def select_child(self, c_puct):
+    def select_child(self, c_puct, priors=None):
         """Optimized child selection with exploration"""
         if not self.children:
             return None, None
@@ -56,10 +55,11 @@ class Node:
         moves = list(self.children.keys())
         children = list(self.children.values())
 
-        visit_counts = np.array([child.visit_count for child in children])
-        if not np.any(visit_counts):
+        if priors is None:
             priors = np.array([child.prior for child in children])
 
+        visit_counts = np.array([child.visit_count for child in children])
+        if not np.any(visit_counts):
             priors = priors / np.sum(priors)
             selected_idx = np.argmax(priors)  # More greedy selection
             return moves[selected_idx], children[selected_idx]
@@ -70,8 +70,6 @@ class Node:
         sqrt_total = np.sqrt(total_visits)
 
         q_values = np.array([-child.value() for child in children])
-
-        priors = np.array([child.prior for child in children])
 
         # UCB formula with reduced noise
         exploration = c_puct * priors * sqrt_total / (1 + visit_counts)
@@ -235,23 +233,18 @@ class MCTS:
         if total_prior > 0:
             for child in children.values():
                 child.prior /= total_prior
-                child.base_prior = child.prior
 
         node.children = children
         node.is_expanded = True
-        if node.parent is None:
-            self._apply_root_noise(node)
 
-    def _apply_root_noise(self, root):
-        """Fresh search noise never modifies cached predictions or accumulates."""
-        children = list(root.children.values())
-        for child in children:
-            child.prior = child.base_prior
-        if self.exploration_noise and children:
-            noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(children))
+    def _root_search_priors(self, root):
+        """Sample once per search, leaving the tree's model priors unchanged."""
+        priors = np.array([child.prior for child in root.children.values()])
+        if self.exploration_noise and len(priors):
+            noise = np.random.dirichlet([self.config.dirichlet_alpha] * len(priors))
             epsilon = self.config.dirichlet_epsilon
-            for child, sample in zip(children, noise):
-                child.prior = (1 - epsilon) * child.base_prior + epsilon * float(sample)
+            priors = (1 - epsilon) * priors + epsilon * noise
+        return priors
 
     def _same_position(self, first, second):
         return self._board_key(first) == self._board_key(second) and getattr(
@@ -390,15 +383,15 @@ class MCTS:
             if not self.root_node.is_expanded:
                 policy, value = self._evaluate_board(self.root_node.board)
                 self._expand_node(self.root_node, policy, value)
-            else:
-                self._apply_root_noise(self.root_node)
 
             if not self.root_node.children:
                 return None
 
+            root_priors = self._root_search_priors(self.root_node)
+
             # Complete each simulation before selecting the next path.
             for simulations_completed in range(1, self.config.n_simulations + 1):
-                self._simulate(self.root_node)
+                self._simulate(self.root_node, root_priors)
 
                 # Check if a move clearly dominates
                 if simulations_completed >= 70 and self.should_stop(self.root_node):
@@ -483,7 +476,7 @@ class MCTS:
         self._all_moves_cache[board_hash] = moves
         return moves
 
-    def _simulate(self, root: Node):
+    def _simulate(self, root: Node, root_priors=None):
         """Select, evaluate, expand and back up one complete simulation."""
         node = root
         path = [node]
@@ -512,7 +505,9 @@ class MCTS:
                 value = node.evaluation
                 break
 
-            _, node = node.select_child(self.config.c_puct)
+            _, node = node.select_child(
+                self.config.c_puct, root_priors if node is root else None
+            )
             path.append(node)
 
         if self.debug:

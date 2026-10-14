@@ -18,7 +18,7 @@ class ModelConfig:
     policy_output_dim: int = 4672  # From/to moves + reserved underpromotion outputs
 
     # MCTS
-    n_simulations: int = 1600  # Fewer but higher quality simulations
+    n_simulations: int = 64  # Search budget per move; increase for longer runs
     c_puct: float = 1  # Increased exploration
     dirichlet_alpha: float = 0.55  # More noise
     dirichlet_epsilon: float = 0.3  # Stronger noise influence

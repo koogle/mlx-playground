@@ -34,6 +34,17 @@
     "memory_request_mb": 65536,
     "memory_limit_mb": 196608,
     "limit_seconds": 3600,
-    "status": "submitted"
+    "status": "failed or blocked",
+    "latest_sample": {
+      "seconds": 3586.09892161,
+      "gpu": "777, 0",
+      "gpu_processes": [
+        "1, 554"
+      ],
+      "container_memory_bytes": 7042494464,
+      "process_tree_rss_bytes": 9436733440,
+      "process_tree_cpu_cores": 0.97
+    },
+    "error": "Creating batches from 512 game instances with batch_size 64\nTotal positions collected: 92318\n"
   }
 ]

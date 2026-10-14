@@ -4,59 +4,41 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import mlx.core as mx
-import mlx.nn as nn
 import numpy as np
 
-from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
-from model.mcts import MCTS
 from model.self_play import play_single_game
 from model.training import Trainer
-
-
-class ModeModel(nn.Module):
-    def __init__(self, fail=False):
-        super().__init__()
-        self.bn = nn.BatchNorm(1)
-        self.modes = []
-        self.fail = fail
-
-    def __call__(self, states):
-        self.modes.append(self.training)
-        if self.fail:
-            raise RuntimeError("prediction failed")
-        normalized = self.bn(states.reshape(len(states), -1, 1))
-        value = mx.tanh(mx.mean(normalized, axis=1))
-        return mx.ones((len(states), 4672)) / 4672, value
+from model.evaluation import play_evaluation_game_worker
+from model.inference import BatchedInference
 
 
 class TestInferenceMode(unittest.TestCase):
     def setUp(self):
         self.searches = []
 
-    def test_search_uses_eval_and_restores_original_mode(self):
-        for training in (True, False):
-            with self.subTest(training=training):
-                model = ModeModel()
-                model.train(training)
-                mean = np.array(model.bn.running_mean)
-                variance = np.array(model.bn.running_var)
-                search = MCTS(model, ModelConfig(n_simulations=4))
-                search.get_move(BitBoard())
-                self.assertTrue(model.modes)
-                self.assertFalse(any(model.modes))
-                self.assertEqual(model.training, training)
-                np.testing.assert_array_equal(model.bn.running_mean, mean)
-                np.testing.assert_array_equal(model.bn.running_var, variance)
+    def test_server_predictions_match_eval_without_mutating_source_parameters(self):
+        from model.network import ChessNet
 
-    def test_search_restores_original_mode_on_failure(self):
-        for training in (True, False):
-            model = ModeModel(fail=True)
-            model.train(training)
-            with self.assertRaisesRegex(RuntimeError, "prediction failed"):
-                MCTS(model, ModelConfig()).get_move(BitBoard())
-            self.assertEqual(model.modes, [False])
-            self.assertEqual(model.training, training)
+        config = ModelConfig(n_residual_blocks=0, n_filters=2, policy_output_dim=4)
+        model = ChessNet(config)
+        model.eval()
+        states = mx.ones((1, 19, 8, 8))
+        expected_policy, expected_value = model(states)
+        mean, variance = (
+            np.array(model.bn_input.running_mean),
+            np.array(model.bn_input.running_var),
+        )
+        with BatchedInference(model, config) as service:
+            client = service.client()
+            try:
+                policy, value = client(states)
+            finally:
+                client.close()
+        np.testing.assert_allclose(policy, expected_policy, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(value, expected_value, rtol=1e-5, atol=1e-6)
+        np.testing.assert_array_equal(model.bn_input.running_mean, mean)
+        np.testing.assert_array_equal(model.bn_input.running_var, variance)
 
     def worker_game(self):
         game = Mock()
@@ -67,7 +49,6 @@ class TestInferenceMode(unittest.TestCase):
         return game
 
     def checking_search(self, model, config, **kwargs):
-        self.assertFalse(model.training)
         search = Mock()
         search.get_move.return_value = ((0, 1), (2, 2))
         search.root_node = SimpleNamespace(
@@ -77,7 +58,7 @@ class TestInferenceMode(unittest.TestCase):
         return search
 
     def test_self_play_worker_keeps_model_in_eval(self):
-        model, connection = ModeModel(), Mock()
+        model, connection = Mock(), Mock()
         with (
             patch("model.self_play.ChessGame", return_value=self.worker_game()),
             patch("model.self_play.MCTS", side_effect=self.checking_search),
@@ -93,21 +74,21 @@ class TestInferenceMode(unittest.TestCase):
             [0.7, 0.2],
         )
         self.assertIsNotNone(connection.send.call_args.args[0])
-        self.assertFalse(model.training)
+        model.close.assert_called_once()
 
     def test_evaluation_worker_sets_both_models_to_eval(self):
-        model, best_model, connection = ModeModel(), ModeModel(), Mock()
+        model, best_model, connection = Mock(), Mock(), Mock()
         with (
-            patch("model.training.ChessGame", return_value=self.worker_game()),
-            patch("model.training.MCTS", side_effect=self.checking_search),
-            patch("model.training.tqdm"),
+            patch("model.evaluation.ChessGame", return_value=self.worker_game()),
+            patch("model.evaluation.MCTS", side_effect=self.checking_search),
+            patch("model.evaluation.tqdm"),
         ):
-            Trainer.play_evaluation_game_worker(
+            play_evaluation_game_worker(
                 model, best_model, ModelConfig(), 0, 0, connection, 1
             )
         self.assertIsNotNone(connection.send.call_args.args[0])
-        self.assertFalse(model.training)
-        self.assertFalse(best_model.training)
+        model.close.assert_called_once()
+        best_model.close.assert_called_once()
 
     def test_fresh_network_has_unit_batchnorm_running_variance(self):
         from model.network import ChessNet

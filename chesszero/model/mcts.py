@@ -1,5 +1,4 @@
 import numpy as np
-import mlx.core as mx
 from typing import List, Tuple, Set, Dict
 from chess_engine.bitboard import BitBoard
 from cachetools import LRUCache
@@ -309,7 +308,7 @@ class MCTS:
         """Reuse the network input tensor for a physical position."""
         key = self._board_key(board)
         if key not in self._board_state_cache:
-            self._board_state_cache[key] = mx.array(board.state, dtype=mx.float32)[
+            self._board_state_cache[key] = np.array(board.state, dtype=np.float32)[
                 None, ...
             ]
         return self._board_state_cache[key]
@@ -329,20 +328,13 @@ class MCTS:
         """Cache policy/value together while one fixed model runs in eval mode."""
         inputs = np.asarray(board.state, dtype=np.float32)
         key = (self.cache.model_version, inputs.shape, inputs.tobytes())
-        cacheable = not getattr(self.model, "training", False)
-        if not cacheable:
-            # Training-mode calls may change BatchNorm state or use stochastic
-            # layers. Preserve their behavior rather than reusing an evaluation.
-            self._evaluation_cache.clear()
-        if cacheable and key in self._evaluation_cache:
+        if key in self._evaluation_cache:
             return self._evaluation_cache[key]
         policies, values = self.model(self._get_board_state(board))
-        mx.eval(policies, values)
         policy = np.array(policies[0])
         policy.flags.writeable = False
         result = policy, float(values[0].item())
-        if cacheable:
-            self._evaluation_cache[key] = result
+        self._evaluation_cache[key] = result
         return result
 
     def _clear_caches(self):
@@ -362,48 +354,43 @@ class MCTS:
         return root
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-        was_training = self.model.training
-        self.model.eval()
-        try:
-            self.cache.bind(self.model, self.model_version)
-            # Reuse is valid only within one fixed model and exact history path.
-            if (
-                self.root_node is None
-                or self._root_model_version != self.cache.model_version
-                or not self._same_position(self.root_node.board, board)
-            ):
-                self.root_node = Node(
-                    self._get_root_board(board),
-                    exploration_noise=self.exploration_noise,
-                    board_factory=self._get_child_board,
-                )
-                self._root_model_version = self.cache.model_version
-            if not self.root_node.is_expanded:
-                policy, value = self._evaluate_board(self.root_node.board)
-                self._expand_node(self.root_node, policy, value)
+        self.cache.bind(self.model, self.model_version)
+        # Reuse is valid only within one fixed model and exact history path.
+        if (
+            self.root_node is None
+            or self._root_model_version != self.cache.model_version
+            or not self._same_position(self.root_node.board, board)
+        ):
+            self.root_node = Node(
+                self._get_root_board(board),
+                exploration_noise=self.exploration_noise,
+                board_factory=self._get_child_board,
+            )
+            self._root_model_version = self.cache.model_version
+        if not self.root_node.is_expanded:
+            policy, value = self._evaluate_board(self.root_node.board)
+            self._expand_node(self.root_node, policy, value)
 
-            if not self.root_node.children:
-                return None
+        if not self.root_node.children:
+            return None
 
-            root_priors = self._root_search_priors(self.root_node)
+        root_priors = self._root_search_priors(self.root_node)
 
-            # Complete each simulation before selecting the next path.
-            for simulations_completed in range(1, self.config.n_simulations + 1):
-                self._simulate(self.root_node, root_priors)
+        # Complete each simulation before selecting the next path.
+        for simulations_completed in range(1, self.config.n_simulations + 1):
+            self._simulate(self.root_node, root_priors)
 
-                # Check if a move clearly dominates
-                if simulations_completed >= 70 and self.should_stop(self.root_node):
-                    if self.debug:
-                        print(
-                            f"Stopping simulations early at simulation {simulations_completed} of {self.config.n_simulations}"
-                        )
-                    break
+            # Check if a move clearly dominates
+            if simulations_completed >= 70 and self.should_stop(self.root_node):
+                if self.debug:
+                    print(
+                        f"Stopping simulations early at simulation {simulations_completed} of {self.config.n_simulations}"
+                    )
+                break
 
-            # Select move based on temperature
-            move = self._select_move_with_temperature(self.root_node, temperature)
-            return move
-        finally:
-            self.model.train(was_training)
+        # Select move based on temperature
+        move = self._select_move_with_temperature(self.root_node, temperature)
+        return move
 
     def _select_move_with_temperature(
         self, node: Node, temperature: float

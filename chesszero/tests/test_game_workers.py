@@ -13,9 +13,12 @@ from model.game_workers import run_game_workers
 from model.mcts import MCTS, Node
 from model.self_play import generate_games
 from model.training import IncompleteEvaluationError, Trainer
+from model.evaluation import play_evaluation_game_worker
+from model.inference import BatchedInference
+from test_shared_inference import small_model
 
 
-def worker_probe(kind, sender, max_workers):
+def worker_probe(client, kind, sender, max_workers):
     if kind == "crash":
         os._exit(7)
     if kind != "missing":
@@ -25,14 +28,18 @@ def worker_probe(kind, sender, max_workers):
 class TestGameWorkers(unittest.TestCase):
     def test_spawn_counts_reported_failures_crashes_and_missing_results(self):
         jobs = [(kind,) for kind in ("first", "failure", "crash", "missing", "last")]
-        results, failures = run_game_workers(worker_probe, jobs, max_workers=2)
+        model, config = small_model()
+        with BatchedInference(model, config) as service:
+            results, failures = run_game_workers(
+                worker_probe, jobs, 2, (service.client(),)
+            )
         self.assertEqual(results, ["first", "last"])
         self.assertEqual(failures, 3)
 
     def test_evaluation_target_is_picklable_and_failed_matches_are_not_scored(self):
         with tempfile.TemporaryDirectory() as directory:
             trainer = Trainer(ModelConfig(n_residual_blocks=0, n_filters=2), directory)
-            ForkingPickler.dumps(trainer.play_evaluation_game_worker)
+            ForkingPickler.dumps(play_evaluation_game_worker)
             trainer._accept_current_model()
             with patch(
                 "model.training.run_game_workers", return_value=([{"result": 1}], 1)
@@ -41,7 +48,10 @@ class TestGameWorkers(unittest.TestCase):
                     trainer.evaluate_against_best(n_games=2)
 
     def test_all_failed_self_play_cannot_produce_an_update(self):
-        with patch("model.self_play.run_game_workers", return_value=([], 2)):
+        with (
+            patch("model.self_play.BatchedInference"),
+            patch("model.self_play.run_game_workers", return_value=([], 2)),
+        ):
             with self.assertRaisesRegex(RuntimeError, "All self-play games failed"):
                 generate_games(None, ModelConfig(n_games_per_iteration=2))
 

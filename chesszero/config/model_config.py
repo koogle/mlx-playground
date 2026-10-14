@@ -23,6 +23,10 @@ class ModelConfig:
     dirichlet_alpha: float = 0.55  # More noise
     dirichlet_epsilon: float = 0.3  # Stronger noise influence
 
+    # Central inference batches requests already queued by parallel games.
+    inference_batch_size: int = 64
+    prediction_cache_size: int = 10_000
+
     # Training
     batch_size: int = 1024  # 2048
     n_epochs: int = 1000

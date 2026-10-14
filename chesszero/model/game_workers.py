@@ -2,10 +2,11 @@
 
 import logging
 import multiprocessing as mp
+import os
 from multiprocessing.connection import wait
 
 
-def run_game_workers(worker, jobs, max_workers):
+def run_game_workers(worker, jobs, max_workers, clients):
     """Return successful results and a failure count after all jobs finish.
 
     Each worker owns a result pipe. EOF accounts for crashes even when no result
@@ -30,8 +31,12 @@ def run_game_workers(worker, jobs, max_workers):
                     break
                 receiver, sender = ctx.Pipe(duplex=False)
                 process = ctx.Process(
-                    target=worker, args=(*args, sender, max_workers)
+                    target=worker, args=(*clients, *args, sender, max_workers)
                 )
+                # Hide CUDA before spawn imports MLX in a game worker. Selecting
+                # mx.cpu after import can still leave an unnecessary GPU context.
+                gpu_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+                os.environ["CUDA_VISIBLE_DEVICES"] = ""
                 try:
                     process.start()
                 except Exception:
@@ -42,6 +47,10 @@ def run_game_workers(worker, jobs, max_workers):
                 else:
                     active[receiver] = (process, job_id)
                 finally:
+                    if gpu_devices is None:
+                        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+                    else:
+                        os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
                     sender.close()
 
             for receiver in wait(active) if active else ():

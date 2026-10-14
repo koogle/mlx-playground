@@ -1,0 +1,27 @@
+{
+  "run_id": "pipe-vs-rpc-512-64sim-20261014-171022",
+  "calls": [
+    {
+      "variant": "pipe",
+      "function_call_id": "fc-01M4XPA3CCTF3PV7X2JWM1G550"
+    },
+    {
+      "variant": "rpc",
+      "function_call_id": "fc-01M4XPA3F3C3D7VR7RZWZB6AP7"
+    }
+  ],
+  "games": 512,
+  "workers": 512,
+  "gpu": "L40S",
+  "simulations": 64,
+  "pipe_revision": "ea7ec62",
+  "rpc_revision": "d504652c2fc0a783565460002128b2c53165c260",
+  "main_base": "525a988203b57dee797f1690a3af57bf431d8c31",
+  "initial_checkpoint": "learning-merged-20261013-205953/checkpoints",
+  "resume_epoch": 4,
+  "seed_base": 9000,
+  "cpu_per_gpu": 32,
+  "inference_batch_size": 64,
+  "training_batch_size": 64,
+  "cuda_convolution_cache_size": 1024
+}

@@ -1,0 +1,69 @@
+{
+  "trials": [
+    {
+      "variant": "pipe",
+      "source_revision": "ea7ec62741e5103b2c07e77ed3d2c97087b5c483",
+      "games": 512,
+      "positions": 70175,
+      "failures": 0,
+      "self_play_seconds": 1803.678678771,
+      "games_per_minute": 17.031858479877442,
+      "positions_per_second": 38.90659729249348,
+      "learning_seconds": 55.596527208,
+      "adam_step": 5,
+      "finite_parameters": true,
+      "checkpoint_roundtrip": true,
+      "losses": [
+        7.449978351593018,
+        6.91680908203125,
+        0.5077792406082153,
+        0.02539059892296791
+      ],
+      "inference": {
+        "cache_hits": 66540,
+        "forwards": 101461,
+        "positions": 4352100,
+        "largest_batch": 64
+      },
+      "sampled_gpu_peak_gib": 12.3603515625,
+      "host_peak_gib": 201.09687423706055,
+      "sampled_self_play_gpu_mean_percent": 35.94117647058823,
+      "mean_inference_batch": 42.8943140714166
+    },
+    {
+      "variant": "rpc",
+      "source_revision": "d504652c2fc0a783565460002128b2c53165c260",
+      "games": 512,
+      "positions": 70079,
+      "failures": 0,
+      "self_play_seconds": 2143.95567662,
+      "games_per_minute": 14.328654428355932,
+      "positions_per_second": 32.68677648713396,
+      "learning_seconds": 44.409419457999775,
+      "adam_step": 5,
+      "finite_parameters": true,
+      "checkpoint_roundtrip": true,
+      "losses": [
+        7.454214572906494,
+        6.916357040405273,
+        0.5124624371528625,
+        0.02539059892296791
+      ],
+      "inference": {
+        "cache_hits": 56830,
+        "forwards": 102431,
+        "positions": 4355940,
+        "largest_batch": 64,
+        "error": null
+      },
+      "sampled_gpu_peak_gib": 10.712890625,
+      "host_peak_gib": 200.9955596923828,
+      "sampled_self_play_gpu_mean_percent": 30.96694214876033,
+      "mean_inference_batch": 42.52560260077516
+    }
+  ],
+  "pipe_games_per_minute_improvement_percent": 18.865721586333727,
+  "pipe_self_play_time_reduction_percent": 15.87145674510655,
+  "matching_game_lengths": 509,
+  "total_positions_difference_percent": 0.13698825611097032
+}

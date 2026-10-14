@@ -1,0 +1,18 @@
+[
+  {
+    "variant": "pipe",
+    "name": "NVIDIA L40S",
+    "uuid": "GPU-e9c9a031-d4c3-f6c3-2c8a-33db62d1caea",
+    "power_limit_watts": 350,
+    "max_sm_clock_mhz": 2520,
+    "driver": "580.95.05"
+  },
+  {
+    "variant": "rpc",
+    "name": "NVIDIA L40S",
+    "uuid": "GPU-17122b49-7798-dfaf-b28a-ba1157c30625",
+    "power_limit_watts": 350,
+    "max_sm_clock_mhz": 2520,
+    "driver": "580.95.05"
+  }
+]

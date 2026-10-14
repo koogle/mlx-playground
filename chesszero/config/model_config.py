@@ -33,7 +33,7 @@ class ModelConfig:
     learning_rate: float = 1e-3  # Conservative starting rate for Adam
 
     # Self-play
-    n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
+    n_games_per_iteration: int = 512  # One fresh generation before each Adam update
     temperature: float = 1.0  # Initial temperature for move selection
     temp_decay_steps: int = 30  # Slower decay
     temp_final: float = 0.5  # Maintain some exploration

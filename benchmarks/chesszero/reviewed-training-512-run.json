@@ -1,0 +1,15 @@
+{
+  "run_id": "reviewed-training-512-20261014-095942",
+  "function_call_id": "fc-01M4WXMZ6G1PGTS26RZWVB1VE5",
+  "source_revision": "e4bc1604d9c4b4a3738a2f06958b3f5616e26a39",
+  "workers": 512,
+  "generations": 3,
+  "games": 1536,
+  "n_simulations": 32,
+  "microbatch_size": 64,
+  "gpu": "L40S",
+  "cpu": 32,
+  "memory_limit_mib": 393216,
+  "checkpoint_source": "learning-merged-20261013-205953/checkpoints",
+  "resume_epoch": 4
+}

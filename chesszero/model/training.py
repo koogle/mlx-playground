@@ -75,7 +75,7 @@ class Trainer:
 
         self._loss_and_grad = nn.value_and_grad(self.model, self._loss_fn)
 
-    def train(self, n_epochs: Optional[int] = None, n_workers: int = 8):
+    def train(self, n_epochs: Optional[int] = None, n_workers: int = 512):
         """Main training loop with parallel game generation"""
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()

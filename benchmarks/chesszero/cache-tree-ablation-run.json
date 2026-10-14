@@ -1,0 +1,54 @@
+{
+  "run_id": "cache-tree-ablation-20261014-142409",
+  "calls": [
+    {
+      "mode": "neither",
+      "function_call_id": "fc-01M4XCS6SWY7G981KPWP71PBMQ",
+      "games": 512,
+      "workers": 512,
+      "source_revision": "d504652c2fc0a783565460002128b2c53165c260"
+    },
+    {
+      "mode": "cache_only",
+      "function_call_id": "fc-01M4XCS6ZPSQHMMJJM4ANPJNQ0",
+      "games": 512,
+      "workers": 512,
+      "source_revision": "d504652c2fc0a783565460002128b2c53165c260"
+    },
+    {
+      "mode": "tree_only",
+      "function_call_id": "fc-01M4XCS770T2NZHA6AQW87TMBJ",
+      "games": 512,
+      "workers": 512,
+      "source_revision": "d504652c2fc0a783565460002128b2c53165c260"
+    },
+    {
+      "mode": "both",
+      "function_call_id": "fc-01M4XCS7BGCJYF05HVYQ6PTM9M",
+      "games": 512,
+      "workers": 512,
+      "source_revision": "d504652c2fc0a783565460002128b2c53165c260"
+    },
+    {
+      "mode": "both_raw_batch",
+      "function_call_id": "fc-01M4XCS7KS1GTCFRWMK3WRE7WC",
+      "games": 512,
+      "workers": 512,
+      "source_revision": "d504652c2fc0a783565460002128b2c53165c260"
+    },
+    {
+      "mode": "baseline27",
+      "function_call_id": "fc-01M4XCS7X4E09F7Q4EED7RR5J2",
+      "games": 16,
+      "workers_requested": 512,
+      "workers_effective": 1,
+      "source_revision": "da1f9878e73613e7517052168f0efcb403dc8138"
+    }
+  ],
+  "n_simulations": 32,
+  "seed_base": 9000,
+  "resume_epoch": 4,
+  "gpu": "L40S",
+  "cpu": 32,
+  "cuda_convolution_cache_size": 1024
+}

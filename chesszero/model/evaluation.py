@@ -11,8 +11,8 @@ from model.mcts import MCTS
 
 
 def play_evaluation_game_worker(
-    model: InferenceClient,
-    best_model: InferenceClient,
+    model_inference: InferenceClient,
+    best_model_inference: InferenceClient,
     config: ModelConfig,
     game_id: int,
     player_color: int,
@@ -32,8 +32,8 @@ def play_evaluation_game_worker(
         )
 
         searches = {
-            player_color: MCTS(model, config, exploration_noise=True),
-            1 - player_color: MCTS(best_model, config, exploration_noise=True),
+            player_color: MCTS(model_inference, config, exploration_noise=True),
+            1 - player_color: MCTS(best_model_inference, config, exploration_noise=True),
         }
         while not game.board.is_game_over():
             mcts = searches[game.board.get_current_turn()]
@@ -69,5 +69,5 @@ def play_evaluation_game_worker(
         result_connection.send(None)
 
     finally:
-        model.close()
-        best_model.close()
+        model_inference.close()
+        best_model_inference.close()

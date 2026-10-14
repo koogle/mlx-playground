@@ -17,15 +17,15 @@ if TYPE_CHECKING:
 
 
 def play_single_game(
-    model: InferenceClient,
+    model_inference: InferenceClient,
     config: ModelConfig,
     game_id: int,
     result_connection: Connection,
     max_workers: int,
 ):
-    """Worker process that plays a single complete game"""
+    """CPU worker that plays a complete game using the central inference client"""
     logger = logging.getLogger(__name__)
-    game_cache = GameSearchCache(model)
+    game_cache = GameSearchCache(model_inference)
     try:
         game = ChessGame()
         game_history = []
@@ -38,7 +38,7 @@ def play_single_game(
             unit_scale=True,
         )
 
-        mcts = MCTS(model, config, cache=game_cache)
+        mcts = MCTS(model_inference, config, cache=game_cache)
         while not game.board.is_game_over():
             temperature = (
                 config.temperature
@@ -85,7 +85,7 @@ def play_single_game(
         result_connection.send(None)
     finally:
         game_cache.clear()
-        model.close()
+        model_inference.close()
 
 
 def generate_games(

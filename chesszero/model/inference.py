@@ -41,6 +41,7 @@ class _InferenceBackend:
     """The manager constructs this object inside its dedicated GPU process."""
 
     def __init__(self, config, current_path, reference_path, device):
+        # CPU workers import this module for RPC handles; load MLX only here.
         import mlx.core as mx
         from model.network import ChessNet
 
@@ -76,24 +77,12 @@ class _InferenceBackend:
         self.requests.put((snapshot, position, response))
         return response.result()
 
-    def _predict(self, batch):
+    def _predict(self, pending):
         mx = self.mx
-        # Keys describe the exact network input under a fixed weight snapshot.
-        # Rules/history and root exploration noise never enter this cache.
-        pending, predictions = {}, {}
-        for snapshot, position, _ in batch:
-            key = (snapshot, position.shape, position.tobytes())
-            if key in self.predictions:
-                predictions[key] = self.predictions[key]
-                self.cache_hits += 1
-            elif key in pending:
-                self.cache_hits += 1
-            else:
-                pending[key] = position
         for snapshot in {key[0] for key in pending}:
             keys = [key for key in pending if key[0] == snapshot]
             self.model.update(self.snapshots[snapshot])
-            states = mx.array(np.stack([pending[key] for key in keys]))
+            states = mx.array(np.stack([pending[key][0] for key in keys]))
             policies, values = self.model(states)
             mx.eval(policies, values)
             policies, values = np.array(policies), np.array(values)
@@ -102,36 +91,52 @@ class _InferenceBackend:
             self.max_batch_size = max(self.max_batch_size, len(keys))
             for index, key in enumerate(keys):
                 prediction = (policies[index : index + 1], values[index : index + 1])
-                self.predictions[key] = predictions[key] = prediction
-        # Keep this batch's results even if its size exceeds the LRU capacity.
-        for snapshot, position, response in batch:
-            key = (snapshot, position.shape, position.tobytes())
-            response.set_result(predictions[key])
+                self.predictions[key] = prediction
+                # Resolve every duplicate directly, even if later entries evict
+                # this prediction from a cache smaller than the GPU batch.
+                for response in pending[key][1]:
+                    response.set_result(prediction)
 
     def _serve(self):
-        mx = self.mx
-        mx.set_default_device(self.device)
+        self.mx.set_default_device(self.device)
         while True:
-            first = self.requests.get()  # Block only when the queue has no work.
-            if first is None:
+            request = self.requests.get()  # Block only when the queue has no work.
+            if request is None:
                 return
-            batch = [first]
-            while len(batch) < self.batch_size:
-                try:
-                    request = self.requests.get_nowait()
-                except Empty:
-                    break
-                if request is None:
-                    self.requests.put(None)
-                    break
-                batch.append(request)
+            pending = {}
             try:
-                if self.error is not None:
-                    raise RuntimeError(self.error)
-                self._predict(batch)
+                while True:
+                    snapshot, position, response = request
+                    if self.error is not None:
+                        raise RuntimeError(self.error)
+                    # The limit counts unique GPU inputs, not cache hits or
+                    # duplicate requests. Only this executor accesses the LRU.
+                    key = (snapshot, position.shape, position.tobytes())
+                    if key in self.predictions:
+                        self.cache_hits += 1
+                        response.set_result(self.predictions[key])
+                    elif key in pending:
+                        self.cache_hits += 1
+                        pending[key][1].append(response)
+                    else:
+                        pending[key] = (position, [response])
+                    if len(pending) == self.batch_size:
+                        break
+                    try:
+                        request = self.requests.get_nowait()
+                    except Empty:
+                        break  # Dispatch available misses without a timer.
+                    if request is None:
+                        self.requests.put(None)
+                        break
+                if pending:
+                    self._predict(pending)
             except Exception as error:
                 self.error = str(error)
-                for _, _, response in batch:
+                responses = [r for _, waiters in pending.values() for r in waiters]
+                if request is not None:
+                    responses.append(request[2])
+                for response in responses:
                     if not response.done():
                         response.set_exception(RuntimeError(self.error))
 

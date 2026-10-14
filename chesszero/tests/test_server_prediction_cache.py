@@ -23,3 +23,37 @@ class TestServerPredictionCache(unittest.TestCase):
         first.policy_fc.bias = mx.array([3.0, 0.0, 0.0, 0.0])
         with BatchedInference(first, config) as fresh:
             self.assertFalse(np.array_equal(fresh.client()(state)[0], expected))
+
+    def test_cache_hits_and_duplicates_do_not_consume_gpu_batch_slots(self):
+        from concurrent.futures import Future
+        from queue import Queue
+        from unittest.mock import Mock
+        from cachetools import LRUCache
+        from model.inference import _InferenceBackend
+
+        backend = _InferenceBackend.__new__(_InferenceBackend)
+        backend.mx, backend.device = Mock(), "cpu"
+        backend.batch_size, backend.cache_hits, backend.error = 2, 0, None
+        backend.requests, backend.predictions = Queue(), LRUCache(maxsize=1)
+        cached = np.full((19, 8, 8), 9, dtype=np.float32)
+        expected = (np.array([[0.25] * 4]), np.array([[0.0]]))
+        backend.predictions[("current", cached.shape, cached.tobytes())] = expected
+        responses = [Future() for _ in range(4)]
+        for position, response in zip([np.zeros_like(cached), cached,
+                                       np.zeros_like(cached), np.ones_like(cached)], responses):
+            backend.requests.put(("current", position, response))
+        backend.requests.put(None)
+
+        def forward(pending):
+            self.assertTrue(responses[1].done())  # Hit returned before GPU work.
+            self.assertEqual(len(pending), 2)  # Both miss slots were filled.
+            self.assertEqual(sorted(len(waiters) for _, waiters in pending.values()), [1, 2])
+            for _, waiters in pending.values():
+                for response in waiters:
+                    response.set_result(expected)
+
+        backend._predict = Mock(side_effect=forward)
+        backend._serve()
+        backend._predict.assert_called_once()
+        self.assertEqual(backend.cache_hits, 2)
+        self.assertTrue(all(response.done() for response in responses))

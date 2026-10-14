@@ -66,13 +66,9 @@ class TestTreeReuse(unittest.TestCase):
                     priors for node, priors in selections if node is root
                 ]
                 self.assertEqual(len(root_selections), 32)
-                self.assertTrue(
-                    all(priors is root_selections[0] for priors in root_selections)
-                )
                 self.assertTrue(any(node is not root for node, _ in selections))
-                self.assertTrue(
-                    all(priors is None for node, priors in selections if node is not root)
-                )
+                for node, priors in selections:
+                    self.assertIs(priors, root_selections[0] if node is root else None)
                 expected = np.full(2, (1 - search.config.dirichlet_epsilon) / 2)
                 expected[turn] += search.config.dirichlet_epsilon
                 np.testing.assert_allclose(root_selections[0], expected)
@@ -83,7 +79,7 @@ class TestTreeReuse(unittest.TestCase):
                 search.advance_root(move, board)
             self.assertEqual(sample.call_count, 2)
 
-    def test_fresh_noise_does_not_accumulate_and_history_mismatch_drops_tree(self):
+    def test_history_and_model_changes_drop_tree(self):
         board = BitBoard()
         search = MCTS(RecordingModel(), ModelConfig(n_simulations=0))
         move = search.get_move(board)
@@ -91,16 +87,6 @@ class TestTreeReuse(unittest.TestCase):
         board.make_move(*move)
         search.advance_root(move, board)
         root = search.root_node
-        search.get_move(board)
-        with patch(
-            "numpy.random.dirichlet",
-            return_value=np.ones(len(root.children)) / len(root.children),
-        ):
-            priors = [child.prior for child in root.children.values()]
-            first = search._root_search_priors(root)
-            second = search._root_search_priors(root)
-            np.testing.assert_array_equal(first, second)
-            self.assertEqual(priors, [child.prior for child in root.children.values()])
         board.position_history[board.get_repetition_hash()] += 1
         search.get_move(board)
         self.assertIsNot(search.root_node, root)

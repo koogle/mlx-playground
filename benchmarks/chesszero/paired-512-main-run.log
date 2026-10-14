@@ -1,0 +1,15 @@
+Error in game 52: cuGraphAddKernelNode(&node, graph_, NULL, 0, &params) failed: an illegal memory access was encountered
+Traceback (most recent call last):
+  File "/opt/chesszero/chesszero/model/self_play.py", line 47, in play_single_game
+    move = mcts.get_move(game.board, temperature=temperature)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/chesszero/chesszero/model/mcts.py", line 392, in get_move
+    self._simulate(self.root_node, root_priors)
+  File "/opt/chesszero/chesszero/model/mcts.py", line 497, in _simulate
+    policy, value = self._evaluate_board(node.board)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/chesszero/chesszero/model/mcts.py", line 340, in _evaluate_board
+    mx.eval(policies, values)
+RuntimeError: cuGraphAddKernelNode(&node, graph_, NULL, 0, &params) failed: an illegal memory access was encountered
+
+double free or corruption (!prev)

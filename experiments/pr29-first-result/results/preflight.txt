@@ -1,0 +1,63 @@
+EVALUATION_START random-bank-regression 64
+EVALUATION_COMPLETE {"name": "random-bank-regression", "bank_seed": 20000, "summary": {"games": 64, "wins": 2, "losses": 2, "draws": 60, "censored": 0, "score_lower_bound": 0.5, "score_upper_bound": 0.5, "decisive_one_sided_p": 0.6875, "pair_bootstrap_95": [0.5, 0.5], "beats_random": false}, "inference": {"cache_hits": 0, "forwards": 0, "positions": 0, "largest_batch": 0}}
+2026-10-14 20:26:22,150 [INFO] === Training Session Started ===
+2026-10-14 20:26:22,151 [INFO] Checkpoint directory: /results/pr29-preflight-20261014-202606/checkpoints
+2026-10-14 20:26:22,151 [INFO] Model config:
+{'n_residual_blocks': 19, 'n_filters': 256, 'input_shape': (8, 8, 19), 'policy_output_dim': 4672, 'n_simulations': 256, 'c_puct': 1, 'dirichlet_alpha': 0.55, 'dirichlet_epsilon': 0.3, 'batch_size': 1024, 'n_epochs': 1000, 'learning_rate': 0.001, 'n_games_per_iteration': 25, 'temperature': 1.0, 'temp_decay_steps': 30, 'temp_final': 0.5, 'debug': False, 'n_eval_games': 40, 'eval_interval_epochs': 5, 'inference_batch_size': 64, 'prediction_cache_size': 10000}
+2026-10-14 20:26:22,159 [INFO] Epoch 1/2
+2026-10-14 20:26:22,160 [INFO] Generating games using 2 workers...
+2026-10-14 20:26:34,415 [INFO] Shared pipe inference: {'cache_hits': 2, 'forwards': 1482, 'positions': 1482, 'largest_batch': 1}
+2026-10-14 20:26:34,416 [INFO] Self-play generation: 2 completed, 0 failed
+2026-10-14 20:26:34,416 [INFO] Game 0: 312 moves, White result 0.0
+2026-10-14 20:26:34,417 [INFO] Game 1: 432 moves, White result 0.0
+2026-10-14 20:26:34,422 [INFO] Training on game data in epoch 1...
+Creating batches from 2 game instances with batch_size 64
+Total positions collected: 744
+Creating batches of size 64 from 744 samples
+2026-10-14 20:26:34,743 [INFO] Learning: microbatch 1, 64 positions accumulated
+2026-10-14 20:26:35,330 [INFO] Epoch completed in 13.2s
+2026-10-14 20:26:35,330 [INFO] Average policy loss: 8.4495
+2026-10-14 20:26:35,331 [INFO] Average l2 loss: 0.0217
+2026-10-14 20:26:35,331 [INFO] Average value loss: 0.0003
+2026-10-14 20:26:35,331 [INFO] Average total loss: 8.4716
+2026-10-14 20:26:35,331 [INFO] 
+=== Running Evaluation ===
+2026-10-14 20:26:35,401 [INFO] 
+Evaluating against best model...
+2026-10-14 20:26:35,403 [INFO] No best model yet, accepting current model as best
+2026-10-14 20:26:35,411 [INFO] Saving regular checkpoint for epoch 1...
+2026-10-14 20:26:38,018 [INFO] Saved regular checkpoint for epoch 1 in /results/pr29-preflight-20261014-202606/checkpoints
+2026-10-14 20:26:38,019 [INFO] Epoch 2/2
+2026-10-14 20:26:38,019 [INFO] Generating games using 2 workers...
+2026-10-14 20:26:48,842 [INFO] Shared pipe inference: {'cache_hits': 1, 'forwards': 983, 'positions': 983, 'largest_batch': 1}
+2026-10-14 20:26:48,843 [INFO] Self-play generation: 2 completed, 0 failed
+2026-10-14 20:26:48,843 [INFO] Game 0: 79 moves, White result 0.0
+2026-10-14 20:26:48,844 [INFO] Game 1: 415 moves, White result 0.0
+2026-10-14 20:26:48,850 [INFO] Training on game data in epoch 2...
+Creating batches from 2 game instances with batch_size 64
+Total positions collected: 494
+Creating batches of size 64 from 494 samples
+2026-10-14 20:26:48,904 [INFO] Learning: microbatch 1, 64 positions accumulated
+2026-10-14 20:26:49,261 [INFO] Epoch completed in 11.2s
+2026-10-14 20:26:49,262 [INFO] Average policy loss: 8.1630
+2026-10-14 20:26:49,262 [INFO] Average l2 loss: 0.0220
+2026-10-14 20:26:49,262 [INFO] Average value loss: 0.4936
+2026-10-14 20:26:49,263 [INFO] Average total loss: 8.6786
+2026-10-14 20:26:49,263 [INFO] 
+=== Running Evaluation ===
+2026-10-14 20:26:49,340 [INFO] 
+Evaluating against best model...
+2026-10-14 20:26:52,243 [INFO] Evaluation inference: {'cache_hits': 1, 'forwards': 342, 'positions': 342, 'largest_batch': 1}
+2026-10-14 20:26:52,243 [INFO] Evaluation: 2 completed, 0 failed
+2026-10-14 20:26:52,243 [INFO] Evaluation score: 0.00%; W/D/L: 0/2/0
+2026-10-14 20:26:52,244 [INFO] Reverting to best model and its optimizer state
+2026-10-14 20:26:52,247 [INFO] Saving regular checkpoint for epoch 2...
+2026-10-14 20:26:54,931 [INFO] Saved regular checkpoint for epoch 2 in /results/pr29-preflight-20261014-202606/checkpoints
+2026-10-14 20:26:54,932 [INFO] 
+=== Training Completed ===
+2026-10-14 20:26:54,932 [INFO] Total training time: 0.0 hours
+2026-10-14 20:27:09,938 [INFO] Games: 2 completed, 0 failed, 2 active; 1940 positions inferred
+2026-10-14 20:27:13,290 [INFO] Random evaluation: 4 completed, 0 failed; {'cache_hits': 3, 'forwards': 2291, 'positions': 2291, 'largest_batch': 1}
+2026-10-14 20:27:13,291 [INFO] Against random: score 37.50%; W/D/L 0/3/1
+PREFLIGHT_PASSED
+PREFLIGHT_ARTIFACTS pr29-preflight-20261014-202606

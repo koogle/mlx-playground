@@ -18,7 +18,7 @@ modal run experiments/pr29-first-result/modal_train.py::preflight
 
 The recorded 500-ply failure and a forced digest-collision test are permanent regressions. The validator checks every evaluation move and terminal result using python-chess; production rules/search never import that library.
 
-Validation completed: **92 local tests passed**; the L40S preflight completed both CLI epochs, all 64 independent random-control games, model and random evaluation, and checkpoint reload. [Evidence](results/validation.json) and [raw preflight log](results/preflight.log). The four-game low-search random smoke scored 37.5%; it is not a strength result.
+Validation completed: **92 local tests passed**; the L40S preflight completed both CLI epochs, all 64 independent random-control games, model and random evaluation, and checkpoint reload. [Evidence](results/validation.json) and [raw preflight log](results/preflight.txt). The four-game low-search random smoke scored 37.5%; it is not a strength result.
 
 ## Training protocol
 

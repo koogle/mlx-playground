@@ -39,3 +39,6 @@ class ModelConfig:
 
     # Logging
     eval_interval_epochs: int = 5  # Run evaluation every 5 epochs
+
+    inference_batch_size: int = 64
+    prediction_cache_size: int = 10_000

@@ -1,0 +1,5 @@
+Self-play throughput experiment originally benchmarked on main 525a988, now rebased onto main 042477a.
+
+Direct pipes replace manager RPC for self-play only. CPU game workers send NumPy inputs and receive predictions. The parent process retains its model, batches up to 64 unique ready cache misses, and trains after every game completes. Rules, tree reuse, noise, and original model architecture remain unchanged. Evaluation integration is not completed; this branch is a prototype for benchmarking, not a merge candidate.
+
+CPU validation: crash and missing-result accounting, duplicate prediction reuse, four terminal self-play games (1,366 positions), finite accumulated Adam update, checkpoint save. The current main default of 256 simulations is retained; the small CPU smoke fixture used two simulations and a small network. L40S experiments use the original 19-block/256-filter network and 64 simulations for both variants. The measured throughput does not establish performance at the 256-simulation default.

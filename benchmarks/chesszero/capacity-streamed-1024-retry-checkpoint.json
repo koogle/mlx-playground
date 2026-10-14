@@ -1,0 +1,34 @@
+{
+  "epoch": 5,
+  "completed_epochs": 5,
+  "interrupted": false,
+  "model_file": "model_epoch_5_de4a4e5d481849c4978d44cc479b6647.safetensors",
+  "optimizer_file": "optimizer_epoch_5_de4a4e5d481849c4978d44cc479b6647.safetensors",
+  "best_model_file": null,
+  "best_optimizer_file": null,
+  "config": {
+    "n_residual_blocks": 19,
+    "n_filters": 256,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 32,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "inference_batch_size": 64,
+    "batch_size": 64,
+    "n_epochs": 1000,
+    "learning_rate": 0.001,
+    "n_games_per_iteration": 1024,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "eval_interval_epochs": 501
+  },
+  "best_model_win_rate": 0.0
+}

@@ -1,0 +1,14 @@
+{
+  "workers": 1024,
+  "games": 1024,
+  "failures": 0,
+  "positions": 181645,
+  "self_play_seconds": 2350.581736838,
+  "games_per_minute": 26.1382104000557,
+  "inference": {
+    "forwards": 80999,
+    "positions": 4817475,
+    "largest_batch": 64,
+    "error": null
+  }
+}

@@ -40,6 +40,21 @@ Training was active when the benchmark's asynchronous `faulthandler` stack dump 
 
 Two 100-microbatch controls passed with and without one-second dumping. A stronger 5 ms dump stress test reproduced the same mid-stack-dump segmentation fault during MLX autodiff. A full-sized control without dumping then trained 181,645 synthetic positions, produced finite parameters and Adam step 5, and completed in 128.74 seconds. These controls isolate diagnostic safety and training execution, not chess learning. `training-diagnostic-comparison.json` and `training-full-control.json` preserve the results.
 
-The benchmark now uses ordinary progress messages instead of asynchronous frame walking and saves each fresh generation to `games.pkl` before training. A second 1024-game end-to-end run is in progress; its metadata is in `capacity-streamed-1024-retry-run.json`. The production model/search/training source remains unchanged.
+The benchmark now uses ordinary progress messages instead of asynchronous frame walking and saves each fresh generation to `games.pkl` before training. The second 1024-game end-to-end run completed successfully; its metadata is in `capacity-streamed-1024-retry-run.json`. The production model/search/training source remains unchanged.
 
 The inference helper prints `terminate called without an active exception` during shutdown in both the successful 512-game trial and this first 1024-game attempt, after all game predictions have returned. This is separate from the diagnostic crash during training and has not been identified as a capacity failure.
+
+## Successful 1024-game retry
+
+The corrected benchmark completed all 1024 fresh self-play games with no game failures, yielding 181,645 positions. Generation took 2350.58 seconds (39.18 minutes): 26.14 games/minute and 77.28 positions/second. Training took 117.94 seconds, advanced Adam from step 4 to 5 exactly once, and left all model parameters finite. The epoch-5 checkpoint manifest names nonempty full-model and optimizer tensor files. The wrapper exited with code 0 after 2504.47 seconds (41.74 minutes), including startup, fresh-data persistence, checkpoint saving and polling. The fresh generation is saved in the Modal volume as `games.pkl` (4,290,320,247 bytes); it was not replayed or randomly sampled.
+
+| Parallel games | Generation minutes | Games/minute | Actual CPU RAM peak | Sampled GPU peak | Training seconds |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 512 | 16.83 | 30.43 | 117.55 GiB | 10.59 GiB | 57.92 |
+| 1024 | 39.18 | 26.14 | 226.96 GiB | 10.65 GiB | 117.94 |
+
+1024 is supported, but measured generation throughput is 14.1% lower than at 512, using about 1.93 times the host memory. Average inference batch increased from 52.99 to 59.48 positions (cap 64); approximate sampled self-play GPU utilisation was 28.8%. The first 512 game lengths exactly match the earlier 512-game trial. The first 1024 attempt also measured a similar generation rate (26.03 games/minute), before the diagnostic crash. There is no established GPU-memory ceiling; 512 remains the fastest measured configuration under these settings.
+
+These comparisons use the same full original network, checkpoint, simulation count, seed scheme, CPU allocation, batch cap and frozen production source `e13893b`. The retry changes benchmark diagnostics and fresh-data persistence only. Tree reuse/shared prediction caching from the reordered PR stack were excluded. These are a few throughput trials, not evidence of learning convergence or a profile identifying the slowdown's cause.
+
+Raw results, telemetry, termination status and checkpoint manifest are in `capacity-streamed-1024-retry-*`.

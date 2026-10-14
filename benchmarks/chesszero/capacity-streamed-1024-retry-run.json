@@ -7,5 +7,6 @@
   "cpu": 32,
   "memory_limit_mb": 393216,
   "limit_seconds": 7200,
-  "benchmark_changes": "No asynchronous stack dump; ordinary batch progress; preserve fresh generation"
+  "benchmark_changes": "No asynchronous stack dump; ordinary batch progress; preserve fresh generation",
+  "status": "completed"
 }

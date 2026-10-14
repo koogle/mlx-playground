@@ -295,11 +295,12 @@ class Trainer:
                 unit_scale=True,
             )
 
+            searches = {
+                player_color: MCTS(model, config, exploration_noise=True),
+                1 - player_color: MCTS(best_model, config, exploration_noise=True),
+            }
             while not game.board.is_game_over():
-                if game.board.get_current_turn() == player_color:
-                    mcts = MCTS(model, config, exploration_noise=True)
-                else:
-                    mcts = MCTS(best_model, config, exploration_noise=True)
+                mcts = searches[game.board.get_current_turn()]
 
                 move = mcts.get_move(game.board, temperature=0.0)
                 if move is None:
@@ -310,6 +311,8 @@ class Trainer:
                 if not game.make_move(move[0], move[1]):
                     raise RuntimeError("Search returned an illegal evaluation move")
 
+                for search in searches.values():
+                    search.advance_root(move, game.board)
                 pbar.update(1)
 
             pbar.close()

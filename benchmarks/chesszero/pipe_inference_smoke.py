@@ -1,5 +1,6 @@
 import sys
-sys.path.insert(0, '/workspace/chesszero-pipe-inference/chesszero')
+import os
+sys.path.insert(0, os.environ.get('CHESSZERO_PIPE_SOURCE', '/workspace/chesszero-pipe-inference') + '/chesszero')
 import mlx.core as mx
 import numpy as np
 from model.pipe_inference import run_pipe_games

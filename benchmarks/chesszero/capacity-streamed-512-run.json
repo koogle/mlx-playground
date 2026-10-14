@@ -3,6 +3,6 @@
   "function_call_id": "fc-01M4WFKSVSADSXACPHM1ZREKDB",
   "source_revision": "e13893b",
   "workers": 512,
-  "status": "running",
+  "status": "completed",
   "purpose": "Validate streamed CUDA batches with 512 fresh self-play games and one Adam update"
 }

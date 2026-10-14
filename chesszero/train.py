@@ -1,6 +1,5 @@
 import argparse
 from config.model_config import ModelConfig
-from model.training import Trainer
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -24,6 +23,8 @@ def setup_logging(checkpoint_dir: str):
 
 
 def main():
+    from model.training import Trainer
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", type=int, help="Resume from epoch number")
     parser.add_argument(
@@ -40,7 +41,7 @@ def main():
     parser.add_argument(
         "--workers",
         type=int,
-        default=8,
+        default=512,
         help="Number of parallel workers for game generation",
     )
     parser.add_argument(

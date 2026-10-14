@@ -89,7 +89,7 @@ def play_single_game(
 
 
 def generate_games(
-    model: "ChessNet", config: ModelConfig, max_workers: int = 8
+    model: "ChessNet", config: ModelConfig, max_workers: int = 512
 ) -> List[Tuple]:
     logger = logging.getLogger(__name__)
     if config.n_games_per_iteration < 1:

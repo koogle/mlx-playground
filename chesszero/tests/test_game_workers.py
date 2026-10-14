@@ -55,7 +55,7 @@ class TestGameWorkers(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "All self-play games failed"):
                 generate_games(None, ModelConfig(n_games_per_iteration=2))
 
-    def test_configured_root_noise_persists_in_priors(self):
+    def test_configured_root_noise_affects_selection_without_changing_priors(self):
         config = ModelConfig(dirichlet_alpha=0.7, dirichlet_epsilon=0.4)
         search = MCTS(None, config)
         root = Node(BitBoard())
@@ -66,8 +66,10 @@ class TestGameWorkers(unittest.TestCase):
             children = list(root.children.values())
             expected = np.full(20, 0.6 / 20)
             expected[0] += 0.4
-            np.testing.assert_allclose([c.prior for c in children], expected)
+            priors = search._root_search_priors(root)
+            np.testing.assert_allclose(priors, expected)
+            self.assertIs(root.select_child(1.0, priors)[1], children[0])
             children[0].visit_count = 1
-            root.select_child(1.0)
-            np.testing.assert_allclose([c.prior for c in children], expected)
+            self.assertIs(root.select_child(1.0, priors)[1], children[0])
+            np.testing.assert_allclose([c.prior for c in children], np.full(20, 1 / 20))
             sample.assert_called_once_with([0.7] * 20)

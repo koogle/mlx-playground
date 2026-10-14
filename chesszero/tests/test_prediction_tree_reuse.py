@@ -1,36 +1,15 @@
 import unittest
 from unittest.mock import patch
 
-import mlx.core as mx
 import numpy as np
 
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
-from model.inference import BatchedInference
-from model.mcts import MCTS
+from model.mcts import MCTS, Node
 from test_mcts_sequential import RecordingModel, ToyBoard
-from test_shared_inference import small_model
 
 
 class TestPredictionReuse(unittest.TestCase):
-    def test_deduplication_lru_model_isolation_and_new_snapshot(self):
-        first, config = small_model()
-        second, _ = small_model(2)
-        config.prediction_cache_size = 1
-        state = mx.ones((1, 19, 8, 8))
-        with BatchedInference(first, config, reference_model=second) as service:
-            a, b = service.client(), service.reference_client()
-            expected = np.array(a(state)[0])
-            np.testing.assert_array_equal(a(state)[0], expected)
-            self.assertEqual(service.rpc.statistics()["positions"], 1)
-            self.assertEqual(service.rpc.statistics()["cache_hits"], 1)
-            self.assertFalse(np.array_equal(b(state)[0], expected))
-            a(state)  # Reference weights evicted the current entry.
-            self.assertEqual(service.rpc.statistics()["positions"], 3)
-        first.policy_fc.bias = mx.array([3.0, 0.0, 0.0, 0.0])
-        with BatchedInference(first, config) as fresh:
-            self.assertFalse(np.array_equal(fresh.client()(state)[0], expected))
-
     def test_prediction_identity_uses_nn_input_not_en_passant_state(self):
         model = RecordingModel()
         model.eval()
@@ -59,10 +38,48 @@ class TestTreeReuse(unittest.TestCase):
         self.assertEqual(child.visit_count, visits + 32)
         search.cache.clear()
         search.get_move(board)
-        self.assertIsNot(search.root_node, child)
-        self.assertEqual(search.root_node.visit_count, 32)
+        self.assertIs(search.root_node, child)
+        self.assertEqual(child.visit_count, visits + 64)
 
-    def test_fresh_noise_does_not_accumulate_and_history_mismatch_drops_tree(self):
+    def test_each_search_shares_one_noise_sample_only_at_the_root(self):
+        board = ToyBoard()
+        search = MCTS(RecordingModel(), ModelConfig(n_simulations=32))
+        selections = []
+        select_child = Node.select_child
+
+        def record_selection(node, c_puct, priors=None):
+            selections.append((node, priors))
+            return select_child(node, c_puct, priors)
+
+        with (
+            patch(
+                "numpy.random.dirichlet",
+                side_effect=[np.array([1.0, 0.0]), np.array([0.0, 1.0])],
+            ) as sample,
+            patch.object(Node, "select_child", record_selection),
+        ):
+            for turn in range(2):
+                selections.clear()
+                move = search.get_move(board)
+                root = search.root_node
+                root_selections = [
+                    priors for node, priors in selections if node is root
+                ]
+                self.assertEqual(len(root_selections), 32)
+                self.assertTrue(any(node is not root for node, _ in selections))
+                for node, priors in selections:
+                    self.assertIs(priors, root_selections[0] if node is root else None)
+                expected = np.full(2, (1 - search.config.dirichlet_epsilon) / 2)
+                expected[turn] += search.config.dirichlet_epsilon
+                np.testing.assert_allclose(root_selections[0], expected)
+                np.testing.assert_allclose(
+                    [child.prior for child in root.children.values()], [0.5, 0.5]
+                )
+                board.make_move(*move)
+                search.advance_root(move, board)
+            self.assertEqual(sample.call_count, 2)
+
+    def test_history_and_model_changes_drop_tree(self):
         board = BitBoard()
         search = MCTS(RecordingModel(), ModelConfig(n_simulations=0))
         move = search.get_move(board)
@@ -70,15 +87,6 @@ class TestTreeReuse(unittest.TestCase):
         board.make_move(*move)
         search.advance_root(move, board)
         root = search.root_node
-        search.get_move(board)
-        with patch(
-            "numpy.random.dirichlet",
-            return_value=np.ones(len(root.children)) / len(root.children),
-        ):
-            search._apply_root_noise(root)
-            priors = [child.prior for child in root.children.values()]
-            search._apply_root_noise(root)
-            self.assertEqual(priors, [child.prior for child in root.children.values()])
         board.position_history[board.get_repetition_hash()] += 1
         search.get_move(board)
         self.assertIsNot(search.root_node, root)

@@ -22,7 +22,33 @@ def worker_probe(kind, sender, max_workers):
         sender.send(None if kind == "failure" else kind)
 
 
+def worker_limit_probe(sender, max_workers):
+    sender.send(max_workers)
+
+
 class TestGameWorkers(unittest.TestCase):
+    def test_cuda_games_are_serialized_without_dropping_jobs(self):
+        with (
+            patch("model.game_workers.mx.cuda.is_available", return_value=True),
+            patch("model.game_workers.mx.default_device", return_value=mx.gpu),
+            self.assertLogs("model.game_workers", level="WARNING") as logs,
+        ):
+            results, failures = run_game_workers(worker_limit_probe, [()] * 3, 512)
+        self.assertEqual(results, [1, 1, 1])
+        self.assertEqual(failures, 0)
+        self.assertIn("from 512 to 1", logs.output[0])
+
+    def test_cpu_and_metal_keep_requested_parallelism(self):
+        for cuda_available, device in ((True, mx.cpu), (False, mx.gpu)):
+            with (
+                self.subTest(cuda_available=cuda_available, device=device),
+                patch("model.game_workers.mx.cuda.is_available", return_value=cuda_available),
+                patch("model.game_workers.mx.default_device", return_value=device),
+            ):
+                results, failures = run_game_workers(worker_limit_probe, [()] * 3, 2)
+            self.assertEqual(results, [2, 2, 2])
+            self.assertEqual(failures, 0)
+
     def test_spawn_counts_reported_failures_crashes_and_missing_results(self):
         jobs = [(kind,) for kind in ("first", "failure", "crash", "missing", "last")]
         results, failures = run_game_workers(worker_probe, jobs, max_workers=2)

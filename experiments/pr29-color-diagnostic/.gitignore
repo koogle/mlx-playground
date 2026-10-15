@@ -3,3 +3,6 @@ __pycache__/
 probe-launch.json
 calibration-launch.json
 repeat3-launch.json
+confirmation-launch.json
+warmup-launch.json
+first-step-launch.json

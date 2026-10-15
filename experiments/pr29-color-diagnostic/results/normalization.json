@@ -1,0 +1,107 @@
+{
+  "run_id": "pr29-normalization-diagnostic-20261015-093425",
+  "result": {
+    "status": "completed",
+    "report": {
+      "calibration_data": {
+        "games": 16,
+        "positions": 2571,
+        "failures": 0,
+        "white_wins": 6,
+        "black_wins": 9,
+        "draws": 1,
+        "inference": {
+          "cache_hits": 1109,
+          "forwards": 36009,
+          "positions": 161326,
+          "largest_batch": 13
+        },
+        "seed_protocol": "1000000 + 9000*1000 + game_id; games 0..15",
+        "source": "New complete 64-simulation self-play, no evaluation positions or outcomes used for calibration"
+      },
+      "ordered": {
+        "by_color": {
+          "white": {
+            "games": 16,
+            "wins": 8,
+            "draws": 7,
+            "losses": 1,
+            "censored": 0,
+            "score_lower_bound": 0.71875,
+            "score_upper_bound": 0.71875
+          },
+          "black": {
+            "games": 16,
+            "wins": 14,
+            "draws": 2,
+            "losses": 0,
+            "censored": 0,
+            "score_lower_bound": 0.9375,
+            "score_upper_bound": 0.9375
+          },
+          "white_minus_black_score": -0.21875
+        },
+        "positions_seen": 2571,
+        "learned_weights_unchanged": true,
+        "optimizer_updates": 0
+      },
+      "shuffled": {
+        "by_color": {
+          "white": {
+            "games": 16,
+            "wins": 2,
+            "draws": 12,
+            "losses": 2,
+            "censored": 0,
+            "score_lower_bound": 0.5,
+            "score_upper_bound": 0.5
+          },
+          "black": {
+            "games": 16,
+            "wins": 13,
+            "draws": 2,
+            "losses": 1,
+            "censored": 0,
+            "score_lower_bound": 0.875,
+            "score_upper_bound": 0.875
+          },
+          "white_minus_black_score": -0.375
+        },
+        "positions_seen": 2571,
+        "learned_weights_unchanged": true,
+        "optimizer_updates": 0
+      },
+      "mirror_balanced": {
+        "by_color": {
+          "white": {
+            "games": 16,
+            "wins": 4,
+            "draws": 10,
+            "losses": 2,
+            "censored": 0,
+            "score_lower_bound": 0.5625,
+            "score_upper_bound": 0.5625
+          },
+          "black": {
+            "games": 16,
+            "wins": 16,
+            "draws": 0,
+            "losses": 0,
+            "censored": 0,
+            "score_lower_bound": 1.0,
+            "score_upper_bound": 1.0
+          },
+          "white_minus_black_score": -0.4375
+        },
+        "positions_seen": 5142,
+        "learned_weights_unchanged": true,
+        "optimizer_updates": 0
+      }
+    }
+  },
+  "job": {
+    "exit_code": 0,
+    "timed_out": false,
+    "elapsed_seconds": 1283.078588179
+  }
+}

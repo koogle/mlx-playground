@@ -1,0 +1,78 @@
+{
+  "run_id": "pr29-initial-norm-warmup-20261015-095203",
+  "result": {
+    "status": "completed",
+    "report": {
+      "initial_reference": {
+        "white": {
+          "games": 16,
+          "wins": 11,
+          "draws": 4,
+          "losses": 1,
+          "censored": 0,
+          "score_lower_bound": 0.8125,
+          "score_upper_bound": 0.8125
+        },
+        "black": {
+          "games": 16,
+          "wins": 15,
+          "draws": 1,
+          "losses": 0,
+          "censored": 0,
+          "score_lower_bound": 0.96875,
+          "score_upper_bound": 0.96875
+        },
+        "white_minus_black_score": -0.15625
+      },
+      "warmed_random": {
+        "white": {
+          "games": 16,
+          "wins": 12,
+          "draws": 3,
+          "losses": 1,
+          "censored": 0,
+          "score_lower_bound": 0.84375,
+          "score_upper_bound": 0.84375
+        },
+        "black": {
+          "games": 16,
+          "wins": 14,
+          "draws": 2,
+          "losses": 0,
+          "censored": 0,
+          "score_lower_bound": 0.9375,
+          "score_upper_bound": 0.9375
+        },
+        "white_minus_black_score": -0.09375
+      },
+      "warmed_random_zero_value": {
+        "white": {
+          "games": 16,
+          "wins": 12,
+          "draws": 4,
+          "losses": 0,
+          "censored": 0,
+          "score_lower_bound": 0.875,
+          "score_upper_bound": 0.875
+        },
+        "black": {
+          "games": 16,
+          "wins": 12,
+          "draws": 3,
+          "losses": 1,
+          "censored": 0,
+          "score_lower_bound": 0.84375,
+          "score_upper_bound": 0.84375
+        },
+        "white_minus_black_score": 0.03125
+      }
+    },
+    "learned_weights_unchanged": true,
+    "optimizer_updates": 0
+  },
+  "job": {
+    "exit_code": 0,
+    "timed_out": false,
+    "elapsed_seconds": 379.31554676300004
+  }
+}

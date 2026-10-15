@@ -1,0 +1,182 @@
+{
+  "status": "interim_discovery",
+  "games_per_color_per_case": 16,
+  "draw_score": 0.5,
+  "evaluation_bank_seed": 10000,
+  "pair_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "source_runs": {
+    "original": "pr29-first-result-20261014-202746",
+    "fresh": "pr29-random-restart-20261015-085706"
+  },
+  "original_epoch10": {
+    "normal": {
+      "white": {
+        "games": 16,
+        "wins": 3,
+        "draws": 10,
+        "losses": 3,
+        "censored": 0,
+        "score_lower_bound": 0.5,
+        "score_upper_bound": 0.5
+      },
+      "black": {
+        "games": 16,
+        "wins": 15,
+        "draws": 1,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.96875,
+        "score_upper_bound": 0.96875
+      },
+      "white_minus_black_score": -0.46875
+    },
+    "zero_value": {
+      "white": {
+        "games": 16,
+        "wins": 15,
+        "draws": 1,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.96875,
+        "score_upper_bound": 0.96875
+      },
+      "black": {
+        "games": 16,
+        "wins": 15,
+        "draws": 0,
+        "losses": 1,
+        "censored": 0,
+        "score_lower_bound": 0.9375,
+        "score_upper_bound": 0.9375
+      },
+      "white_minus_black_score": 0.03125
+    },
+    "initial_value": {
+      "white": {
+        "games": 16,
+        "wins": 14,
+        "draws": 2,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.9375,
+        "score_upper_bound": 0.9375
+      },
+      "black": {
+        "games": 16,
+        "wins": 13,
+        "draws": 2,
+        "losses": 1,
+        "censored": 0,
+        "score_lower_bound": 0.875,
+        "score_upper_bound": 0.875
+      },
+      "white_minus_black_score": 0.0625
+    },
+    "initial_policy": {
+      "white": {
+        "games": 16,
+        "wins": 5,
+        "draws": 10,
+        "losses": 1,
+        "censored": 0,
+        "score_lower_bound": 0.625,
+        "score_upper_bound": 0.625
+      },
+      "black": {
+        "games": 16,
+        "wins": 16,
+        "draws": 0,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 1.0,
+        "score_upper_bound": 1.0
+      },
+      "white_minus_black_score": -0.375
+    }
+  },
+  "fresh_epoch3": {
+    "initial": {
+      "white": {
+        "games": 16,
+        "wins": 12,
+        "draws": 4,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.875,
+        "score_upper_bound": 0.875
+      },
+      "black": {
+        "games": 16,
+        "wins": 15,
+        "draws": 1,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.96875,
+        "score_upper_bound": 0.96875
+      },
+      "white_minus_black_score": -0.09375
+    },
+    "normal": {
+      "white": {
+        "games": 16,
+        "wins": 14,
+        "draws": 2,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.9375,
+        "score_upper_bound": 0.9375
+      },
+      "black": {
+        "games": 16,
+        "wins": 5,
+        "draws": 9,
+        "losses": 2,
+        "censored": 0,
+        "score_lower_bound": 0.59375,
+        "score_upper_bound": 0.59375
+      },
+      "white_minus_black_score": 0.34375
+    },
+    "zero_value": {
+      "white": {
+        "games": 16,
+        "wins": 15,
+        "draws": 1,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.96875,
+        "score_upper_bound": 0.96875
+      },
+      "black": {
+        "games": 16,
+        "wins": 15,
+        "draws": 1,
+        "losses": 0,
+        "censored": 0,
+        "score_lower_bound": 0.96875,
+        "score_upper_bound": 0.96875
+      },
+      "white_minus_black_score": 0.0
+    }
+  },
+  "interpretation": "Frozen inference-only zero-value intervention removes the observed weak-color regression in both saved checkpoints. The trained policy and exact terminal MCTS results stay unchanged. Full model/BN fingerprints are checked before and after each completed intervention. This isolates the harmful neural value contribution on these discovery banks. It does not identify the training mechanism, prove full-chess convergence, or establish superiority to the initial model.",
+  "normalization_cause": "Not yet established; fresh-data stats-only intervention running",
+  "fresh_epoch10": "Still training; do not treat epoch3 as the final repeat result"
+}

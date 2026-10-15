@@ -67,7 +67,14 @@ app = modal.App("chesszero-pr29-color-diagnostic")
     scaledown_window=2,
     volumes={"/results": volume},
 )
-def diagnose(run_id, source_revision):
+def diagnose(
+    run_id,
+    source_revision,
+    source_run="pr29-first-result-20261014-202746",
+    epoch=10,
+    kinds="",
+    reference_path="",
+):
     import json
     import os
     import signal
@@ -101,7 +108,14 @@ def diagnose(run_id, source_revision):
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=True,
-            env=dict(os.environ, CHESSZERO_SOURCE_REVISION=source_revision),
+            env=dict(
+                os.environ,
+                CHESSZERO_SOURCE_REVISION=source_revision,
+                CHESSZERO_DIAGNOSTIC_RUN=source_run,
+                CHESSZERO_DIAGNOSTIC_EPOCH=str(epoch),
+                CHESSZERO_DIAGNOSTIC_KINDS=kinds,
+                CHESSZERO_DIAGNOSTIC_REFERENCE_PATH=reference_path,
+            ),
         )
         try:
             while process.poll() is None:
@@ -149,7 +163,13 @@ def diagnose(run_id, source_revision):
 
 
 @app.local_entrypoint()
-def main():
+def main(
+    source_run: str = "pr29-first-result-20261014-202746",
+    epoch: int = 10,
+    kinds: str = "",
+    reference_path: str = "",
+    launch_file: str = "launch.json",
+):
     import datetime
     import json
     import subprocess
@@ -160,16 +180,19 @@ def main():
     revision = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()
-    call = diagnose.spawn(run_id, revision)
+    call = diagnose.spawn(run_id, revision, source_run, epoch, kinds, reference_path)
     record = dict(
         run_id=run_id,
         function_call_id=call.object_id,
         volume="chesszero-convergence",
         remote_path="/" + run_id,
         source_revision=revision,
-        source_run="pr29-first-result-20261014-202746",
+        source_run=source_run,
+        epoch=epoch,
+        kinds=kinds,
+        reference_path=reference_path,
     )
-    Path(__file__).with_name("launch.json").write_text(
+    Path(__file__).with_name(launch_file).write_text(
         json.dumps(record, indent=2) + "\n"
     )
     print(json.dumps(record), flush=True)

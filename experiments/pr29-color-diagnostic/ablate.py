@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 import time
@@ -13,7 +14,10 @@ sys.path.insert(0, "/opt/chesszero/chesszero")
 from run_training import evaluate, write_json
 from restart_training import color_summary
 
-SOURCE = Path("/results/pr29-first-result-20261014-202746")
+SOURCE = Path("/results") / os.environ.get(
+    "CHESSZERO_DIAGNOSTIC_RUN", "pr29-first-result-20261014-202746"
+)
+EPOCH = int(os.environ.get("CHESSZERO_DIAGNOSTIC_EPOCH", "10"))
 
 
 def mirror_states(states):
@@ -84,7 +88,7 @@ def main():
     mx.set_default_device(mx.gpu)
     out = Path(sys.argv[1])
     initial, state0 = ChessNet.load_checkpoint(SOURCE / "checkpoints", 0)
-    trained, state10 = ChessNet.load_checkpoint(SOURCE / "checkpoints", 10)
+    trained, state10 = ChessNet.load_checkpoint(SOURCE / "checkpoints", EPOCH)
     del state0, state10
     initial.eval()
     trained.eval()
@@ -97,11 +101,13 @@ def main():
         "mirror_policy_and_value",
         "trained_policy_negated_value",
     )
+    if os.environ.get("CHESSZERO_DIAGNOSTIC_KINDS"):
+        variants = tuple(os.environ["CHESSZERO_DIAGNOSTIC_KINDS"].split(","))
     write_json(
         out / "protocol.json",
         dict(
             source=SOURCE.name,
-            source_epoch=10,
+            source_epoch=EPOCH,
             variants=variants,
             optimizer_updates=0,
             normalization_updates=0,
@@ -112,7 +118,12 @@ def main():
     )
     result = {"references": {}}
     for label in ("initial", "trained"):
-        rows = json.loads((SOURCE / f"{label}-vs-random-games.json").read_text())
+        reference_path = SOURCE / f"{label}-vs-random-games.json"
+        if label == "trained" and os.environ.get("CHESSZERO_DIAGNOSTIC_REFERENCE_PATH"):
+            reference_path = (
+                Path("/results") / os.environ["CHESSZERO_DIAGNOSTIC_REFERENCE_PATH"]
+            )
+        rows = json.loads(reference_path.read_text())
         rows = [r for r in rows if r["pair_id"] < 16]
         result["references"][label] = color_summary(rows)
     started = time.monotonic()

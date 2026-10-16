@@ -1,0 +1,19 @@
+{
+  "run_id": "pr29-gated-rerun-20261016-060137",
+  "call_id": "fc-01M51MTFB808C8C964QY5HB1AF",
+  "cancelled_deliberately": true,
+  "reason": "User requested stop and historical regression investigation",
+  "progress": {
+    "games_completed": 256,
+    "generation": 8,
+    "attempted_updates": 677,
+    "accepted_updates": 0,
+    "accepted_generation": 0,
+    "promotions": 0,
+    "rejections": 8,
+    "phase": "self_play",
+    "milestones": []
+  },
+  "terminal_call_check": "RemoteError: Function call was cancelled by user or a failure.",
+  "monitor_disabled": true
+}

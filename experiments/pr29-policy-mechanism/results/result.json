@@ -1,0 +1,157 @@
+{
+  "status": "completed",
+  "phase": "completed",
+  "results": {
+    "joint_initial_policy": {
+      "normalization": {
+        "policy": {
+          "original_batch_max_error": 0.020452924072742462,
+          "independent_max_error": 4.3446198105812073e-07,
+          "fixed_shape_max_error": 0.0,
+          "reordering_max_error": 0.0
+        },
+        "value": {
+          "original_batch_max_error": 0.1333167403936386,
+          "independent_max_error": 7.838010787963867e-06,
+          "fixed_shape_max_error": 0.0,
+          "reordering_max_error": 0.0
+        }
+      },
+      "match": {
+        "games": 16,
+        "wins": 9,
+        "draws": 4,
+        "losses": 3,
+        "censored": 0,
+        "score": 0.6875,
+        "one_sided_p": 0.072998046875,
+        "bootstrap_interval": [
+          0.5625,
+          0.8125
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 3,
+            "draws": 3,
+            "losses": 2
+          },
+          "1": {
+            "wins": 6,
+            "draws": 1,
+            "losses": 1
+          }
+        },
+        "inference": {
+          "cache_hits": 66,
+          "forwards": 44011,
+          "positions": 111090,
+          "largest_batch": 12
+        }
+      },
+      "paired_identical_games": 0
+    },
+    "joint_initial_value": {
+      "normalization": {
+        "policy": {
+          "original_batch_max_error": 0.020452924072742462,
+          "independent_max_error": 4.3446198105812073e-07,
+          "fixed_shape_max_error": 0.0,
+          "reordering_max_error": 0.0
+        },
+        "value": {
+          "original_batch_max_error": 0.1333167403936386,
+          "independent_max_error": 7.838010787963867e-06,
+          "fixed_shape_max_error": 0.0,
+          "reordering_max_error": 0.0
+        }
+      },
+      "match": {
+        "games": 16,
+        "wins": 0,
+        "draws": 2,
+        "losses": 14,
+        "censored": 0,
+        "score": 0.0625,
+        "one_sided_p": 1.0,
+        "bootstrap_interval": [
+          0.0,
+          0.15625
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 0,
+            "draws": 1,
+            "losses": 7
+          },
+          "1": {
+            "wins": 0,
+            "draws": 1,
+            "losses": 7
+          }
+        },
+        "inference": {
+          "cache_hits": 78,
+          "forwards": 24752,
+          "positions": 76087,
+          "largest_batch": 11
+        }
+      },
+      "paired_identical_games": 0
+    },
+    "policy_temperature4": {
+      "normalization": {
+        "policy": {
+          "original_batch_max_error": 0.030854079872369766,
+          "independent_max_error": 4.814937710762024e-07,
+          "fixed_shape_max_error": 0.0,
+          "reordering_max_error": 0.0
+        },
+        "value": {
+          "original_batch_max_error": 0.006243313662707806,
+          "independent_max_error": 2.149667125195265e-06,
+          "fixed_shape_max_error": 0.0,
+          "reordering_max_error": 0.0
+        }
+      },
+      "match": {
+        "games": 16,
+        "wins": 3,
+        "draws": 5,
+        "losses": 8,
+        "censored": 0,
+        "score": 0.34375,
+        "one_sided_p": 0.96728515625,
+        "bootstrap_interval": [
+          0.21875,
+          0.5
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 2,
+            "draws": 3,
+            "losses": 3
+          },
+          "1": {
+            "wins": 1,
+            "draws": 2,
+            "losses": 5
+          }
+        },
+        "inference": {
+          "cache_hits": 63,
+          "forwards": 20318,
+          "positions": 76862,
+          "largest_batch": 11
+        }
+      },
+      "paired_identical_games": 0
+    }
+  },
+  "active_arm": "policy_temperature4"
+}

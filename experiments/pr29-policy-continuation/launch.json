@@ -1,0 +1,18 @@
+{
+  "run_id": "pr29-policy-continuation-20261016-134346",
+  "function_call_id": "fc-01M52F8P5ND214CDGYNA3E4NJK",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-policy-continuation-20261016-134346",
+  "source_revision": "2fbeec6bd6e8dca18d8546ca2d39bc68ed597495",
+  "source_run": "pr29-controlled-learning-20261016-113623",
+  "training_games": 96,
+  "source_study": "pr29-controlled-learning-20261016-113623",
+  "source_epoch": 78,
+  "discovery_match_games": 16,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

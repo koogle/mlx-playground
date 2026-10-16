@@ -1,0 +1,46 @@
+{
+  "source_revision": "b22e790260783cb88e4b3eb9d60280341bc30db8",
+  "source": "/results/pr29-random-restart-20261015-085706/checkpoints",
+  "config": {
+    "n_residual_blocks": 19,
+    "n_filters": 256,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 64,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "learning_rate": 0.0001,
+    "accumulate_gradients": false,
+    "n_games_per_iteration": 32,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "n_eval_games": 40,
+    "eval_interval_epochs": 5,
+    "inference_batch_size": 16,
+    "search_batch_norm": true,
+    "search_batch_norm_per_position": true,
+    "inference_pad_batches": true,
+    "prediction_cache_size": 10000
+  },
+  "arms": [
+    "batch_training",
+    "independent_training"
+  ],
+  "training_games": 32,
+  "validation_games": 8,
+  "match_games": 32,
+  "data_seed_generation": 62016,
+  "discovery_opening_seed": 162016,
+  "confirmation_opening_seed": 92016,
+  "baseline_fingerprint": "73ff231021d0d6aa354250bdd90684639e3e7735878dec361e5f3ca08bb35700",
+  "note": "Two arms share identical initial weights, saved32-game arrays, order, Adam and losses. Only training normalization changes: standardbatch vs independent spatial statistics. Both search with independent spatial statistics and fixedshape16. Validation probes descriptive. Discovery not confirmation."
+}

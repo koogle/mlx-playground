@@ -1,0 +1,18 @@
+{
+  "run_id": "pr29-rate-confirmation-20261016-234052",
+  "function_call_id": "fc-01M53HE0SZR89D5YBD7HEX6R6B",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-rate-confirmation-20261016-234052",
+  "source_revision": "25fb773f2c8fbaf80cab60ed6885471df7d01d81",
+  "source_run": "pr29-learning-rate-20261016-232717",
+  "training_games": 0,
+  "source_study": "pr29-learning-rate-20261016-232717",
+  "source_epoch": 78,
+  "confirmation_match_games": 256,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

@@ -9,7 +9,11 @@ from contextlib import ExitStack
 
 import numpy as np
 from cachetools import LRUCache
-from model.inference_mode import search_inference_mode
+from model.inference_mode import (
+    search_inference_mode,
+    predict_search_batch,
+    prediction_cache_safe,
+)
 
 
 class PipeInferenceClient:
@@ -53,6 +57,7 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
     active, results = {}, {}
     exhausted, failures = False, 0
     predictions = LRUCache(maxsize=config.prediction_cache_size)
+    cache_safe = prediction_cache_safe(config)
     statistics = dict(cache_hits=0, forwards=0, positions=0, largest_batch=0)
     logger = logging.getLogger(__name__)
     logger.info(
@@ -60,7 +65,7 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
         ("per-position" if config.search_batch_norm_per_position else "batch")
         if config.search_batch_norm
         else "running",
-        "disabled" if config.search_batch_norm else "enabled",
+        "enabled" if cache_safe else "disabled",
     )
     progress_at = time.monotonic()
 
@@ -123,17 +128,17 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                             f"Invalid inference model index: {model_index}"
                         )
                     key = (model_index, position.shape, position.tobytes())
-                    if config.search_batch_norm:
+                    if not cache_safe:
                         # Keep every request in the batch: removing duplicates
                         # changes the statistics used by BatchNorm itself.
                         key = (*key, connection)
-                    if not config.search_batch_norm and key in predictions:
+                    if cache_safe and key in predictions:
                         statistics["cache_hits"] += 1
                         try:
                             connection.send(predictions[key])
                         except (BrokenPipeError, OSError):
                             pass
-                    elif not config.search_batch_norm and key in batch:
+                    elif cache_safe and key in batch:
                         statistics["cache_hits"] += 1
                         batch[key][1].append(connection)
                     else:
@@ -162,7 +167,7 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                 states = mx.array(
                     np.stack([position for position, _ in model_batch.values()])
                 )
-                policies, values = network(states)
+                policies, values = predict_search_batch(network, states, config)
                 mx.eval(policies, values)
                 policies, values = np.array(policies), np.array(values)
                 statistics["forwards"] += 1
@@ -175,7 +180,7 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                         policies[index : index + 1].copy(),
                         values[index : index + 1].copy(),
                     )
-                    if not config.search_batch_norm:
+                    if cache_safe:
                         predictions[key] = prediction
                     for connection in connections:
                         try:

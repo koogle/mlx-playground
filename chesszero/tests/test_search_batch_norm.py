@@ -5,7 +5,7 @@ import pytest
 from mlx.utils import tree_flatten
 
 from config.model_config import ModelConfig
-from model.inference_mode import search_inference_mode
+from model.inference_mode import search_inference_mode, predict_search_batch
 from model.network import ChessNet
 from model.search_batch_norm import SearchBatchNorm
 
@@ -51,3 +51,36 @@ def test_search_position_mode_restored_on_exception():
             raise RuntimeError("prediction failed")
     assert model.training
     assert all(not m._search_per_position and m.track_running_stats for m in layers)
+
+
+def test_padded_inference_matches_single_requests_and_returns_only_real_rows():
+    config = ModelConfig(
+        n_filters=4,
+        n_residual_blocks=1,
+        policy_output_dim=8,
+        inference_batch_size=4,
+        inference_pad_batches=True,
+        search_batch_norm_per_position=True,
+    )
+    model = ChessNet(config)
+    states = mx.random.normal((3, 19, 8, 8))
+    with search_inference_mode(model, True, per_position=True):
+        together = predict_search_batch(model, states, config)
+        separate = [
+            predict_search_batch(model, states[i : i + 1], config) for i in range(3)
+        ]
+    assert together[0].shape == (3, 8)
+    assert together[1].shape == (3, 1)
+    for head in (0, 1):
+        np.testing.assert_allclose(
+            together[head],
+            np.concatenate([r[head] for r in separate]),
+            atol=1e-6,
+            rtol=1e-5,
+        )
+
+
+def test_padding_rejects_batch_coupled_statistics():
+    config = ModelConfig(inference_pad_batches=True)
+    with pytest.raises(ValueError, match="independent position statistics"):
+        predict_search_batch(None, mx.ones((1, 19, 8, 8)), config)

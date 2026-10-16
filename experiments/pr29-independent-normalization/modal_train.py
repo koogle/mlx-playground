@@ -166,6 +166,8 @@ def main(resume_run: str = ""):
         discovery_match_games=16,
         search_batch_norm=True,
         search_batch_norm_per_position=True,
+        inference_pad_batches=True,
+        inference_batch_size=16,
         recycle_promotion_games=False,
         policy_target="visit_distribution",
     )

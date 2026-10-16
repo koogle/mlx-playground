@@ -98,6 +98,26 @@ class TestPipeInference(unittest.TestCase):
         self.assertTrue(model.training)
         self.assertTrue(model.bn.track_running_stats)
 
+    def test_independent_padded_batchnorm_can_cache_predictions(self):
+        from test_inference_mode import ModeModel
+        from model.search_batch_norm import SearchBatchNorm
+
+        model = ModeModel()
+        model.bn = SearchBatchNorm(1)
+        config = ModelConfig(
+            search_batch_norm_per_position=True,
+            inference_pad_batches=True,
+            inference_batch_size=4,
+        )
+        results, failures, stats = run_pipe_games(
+            model, config, request_shifted, [()], 1
+        )
+        assert failures == 0
+        np.testing.assert_allclose(results, [[0, 0]], atol=1e-6)
+        assert stats["cache_hits"] == 1
+        assert len(model.modes) == 1
+        assert model.bn.track_running_stats and not model.bn._search_per_position
+
     def test_spawned_cli_import_does_not_load_mlx(self):
         entrypoint = str(Path(__file__).parents[1] / "train.py")
         script = (

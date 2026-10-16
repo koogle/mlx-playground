@@ -4,7 +4,11 @@ from chess_engine.bitboard import BitBoard
 from cachetools import LRUCache
 from config.model_config import ModelConfig
 from model.move_encoding import MoveDestination, encode_move
-from model.inference_mode import search_inference_mode
+from model.inference_mode import (
+    search_inference_mode,
+    predict_search_batch,
+    prediction_cache_safe,
+)
 from contextlib import nullcontext
 
 
@@ -330,7 +334,7 @@ class MCTS:
         """Reuse predictions only when normalization is independent of the batch."""
         inputs = np.asarray(board.state, dtype=np.float32)
         key = (self.cache.model_version, inputs.shape, inputs.tobytes())
-        if not self.config.search_batch_norm and key in self._evaluation_cache:
+        if prediction_cache_safe(self.config) and key in self._evaluation_cache:
             return self._evaluation_cache[key]
         states = self._get_board_state(board)
         if getattr(self.model, "training", None) is not None:
@@ -339,11 +343,14 @@ class MCTS:
             import mlx.core as mx
 
             states = mx.array(states)
-        policies, values = self.model(states)
+        if getattr(self.model, "training", None) is not None:
+            policies, values = predict_search_batch(self.model, states, self.config)
+        else:
+            policies, values = self.model(states)
         policy = np.array(policies[0])
         policy.flags.writeable = False
         result = policy, float(values[0].item())
-        if not self.config.search_batch_norm:
+        if prediction_cache_safe(self.config):
             self._evaluation_cache[key] = result
         return result
 

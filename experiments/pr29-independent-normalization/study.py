@@ -28,9 +28,9 @@ def fingerprint(model):
     return digest.hexdigest()
 
 
-def normalization_check(model, positions):
+def normalization_check(model, positions, config):
     import mlx.core as mx
-    from model.inference_mode import search_inference_mode
+    from model.inference_mode import search_inference_mode, predict_search_batch
 
     before = fingerprint(model)
     x = mx.array(positions)
@@ -41,6 +41,14 @@ def normalization_check(model, positions):
     with search_inference_mode(model, True, per_position=True):
         independent = model(x)
         reversed_batch = model(x[::-1])
+        padded = predict_search_batch(model, x, config)
+        padded_reversed = predict_search_batch(model, x[::-1], config)
+        padded_serial = [
+            predict_search_batch(model, x[i : i + 1], config) for i in range(len(x))
+        ]
+    fixed_expected = [
+        np.concatenate([np.asarray(row[h]) for row in padded_serial]) for h in (0, 1)
+    ]
     errors = {}
     for head, label in enumerate(("policy", "value")):
         errors[label] = dict(
@@ -51,11 +59,22 @@ def normalization_check(model, positions):
                 np.max(np.abs(np.asarray(independent[head]) - expected[head]))
             ),
         )
-        np.testing.assert_allclose(
-            independent[head], expected[head], atol=2e-5, rtol=2e-5
+        errors[label]["fixed_shape_max_error"] = float(
+            np.max(np.abs(np.asarray(padded[head]) - fixed_expected[head]))
+        )
+        errors[label]["reordering_max_error"] = float(
+            np.max(
+                np.abs(
+                    np.asarray(reversed_batch[head])
+                    - np.asarray(independent[head])[::-1]
+                )
+            )
         )
         np.testing.assert_allclose(
-            reversed_batch[head], expected[head][::-1], atol=2e-5, rtol=2e-5
+            padded[head], fixed_expected[head], atol=2e-5, rtol=2e-5
+        )
+        np.testing.assert_allclose(
+            padded_reversed[head], fixed_expected[head][::-1], atol=2e-5, rtol=2e-5
         )
     assert fingerprint(model) == before
     return errors
@@ -80,6 +99,8 @@ def main():
     config.n_simulations = 64
     config.search_batch_norm = True
     config.search_batch_norm_per_position = True
+    config.inference_pad_batches = True
+    config.inference_batch_size = 16
     write_json(
         out / "protocol.json",
         dict(
@@ -113,7 +134,7 @@ def main():
                 SOURCE / arm, source["results"][arm]["updates"]
             )
             assert fingerprint(candidate) == source["results"][arm]["fingerprint"]
-        checks = normalization_check(candidate, positions)
+        checks = normalization_check(candidate, positions, config)
         if kind == "joint_zero_value":
 
             class ZeroValue(nn.Module):

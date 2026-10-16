@@ -1,0 +1,5 @@
+# Fresh-bank learning-rate confirmation
+
+Same initial weights/data/loss/78updates:1e-4 control0W2D30L3.125%;1e-5 15W4D13L53.125%;1e-6 18W5D9L64.0625%. Smaller rates avoided collapse on the discovery bank, but neither met its superiority criterion. All64lower-rate games complete, frozen fingerprints checked. Effective Adam rates explicitly set after restoring state and asserted before each update.
+
+Freeze both final78-update models and evaluate128games each against initial on identical fresh seed17201664pairedopenings. No updates or model selection using this bank. Verify saved Adamstep, effective learningrate, source fingerprint, and inference immutability. Same64simulations/independent spatial inference/fixedshape16. Alpha.025 per candidate,16family clustered bootstrap, censored separately. Any favorable result still needs sustained self-play validation. This test can distinguish preserved starting strength from confirmed improvement; it does not establish the entire historical regression mechanism.

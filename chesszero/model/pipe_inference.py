@@ -57,7 +57,9 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
     logger = logging.getLogger(__name__)
     logger.info(
         "Search BatchNorm: %s statistics; prediction cache %s",
-        "batch" if config.search_batch_norm else "running",
+        ("per-position" if config.search_batch_norm_per_position else "batch")
+        if config.search_batch_norm
+        else "running",
         "disabled" if config.search_batch_norm else "enabled",
     )
     progress_at = time.monotonic()
@@ -65,7 +67,11 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
     try:
         for network in models:
             inference_modes.enter_context(
-                search_inference_mode(network, config.search_batch_norm)
+                search_inference_mode(
+                    network,
+                    config.search_batch_norm,
+                    config.search_batch_norm_per_position,
+                )
             )
         while active or not exhausted:
             while not exhausted and len(active) < max_workers:

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 
 @contextmanager
-def search_inference_mode(network, batch_statistics):
+def search_inference_mode(network, batch_statistics, per_position=False):
     # Import only in the inference owner; CPU game workers must not load MLX.
     import mlx.nn as nn
 
@@ -15,6 +15,9 @@ def search_inference_mode(network, batch_statistics):
         else []
     )
     tracking = [layer.track_running_stats for layer in batch_norms]
+    position_modes = [
+        getattr(layer, "_search_per_position", None) for layer in batch_norms
+    ]
     try:
         network.eval()
         if batch_statistics:
@@ -22,8 +25,17 @@ def search_inference_mode(network, batch_statistics):
             # even in eval mode. This keeps search from mutating the teacher.
             for layer in batch_norms:
                 layer.track_running_stats = False
+                if per_position:
+                    if not hasattr(layer, "_search_per_position"):
+                        raise TypeError(
+                            "Per-position search needs SearchBatchNorm layers"
+                        )
+                    layer._search_per_position = True
         yield
     finally:
         for layer, original in zip(batch_norms, tracking):
             layer.track_running_stats = original
+        for layer, original in zip(batch_norms, position_modes):
+            if original is not None:
+                layer._search_per_position = original
         network.train(was_training)

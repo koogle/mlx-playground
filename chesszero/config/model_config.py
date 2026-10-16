@@ -44,4 +44,5 @@ class ModelConfig:
 
     inference_batch_size: int = 64
     search_batch_norm: bool = True  # Use current-batch BN statistics during search
+    search_batch_norm_per_position: bool = False  # Opt-in batch-independent search BN
     prediction_cache_size: int = 10_000

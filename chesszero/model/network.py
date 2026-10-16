@@ -1,5 +1,6 @@
 import mlx.core as mx
 import mlx.nn as nn
+from model.search_batch_norm import SearchBatchNorm
 from config.model_config import ModelConfig
 from typing import Tuple, Optional
 from mlx.utils import tree_map_with_path, tree_flatten, tree_unflatten
@@ -16,11 +17,11 @@ class ResidualBlock(nn.Module):
         super().__init__()
         # First convolution
         self.conv1 = nn.Conv2d(n_filters, n_filters, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm(n_filters)
+        self.bn1 = SearchBatchNorm(n_filters)
 
         # Second convolution
         self.conv2 = nn.Conv2d(n_filters, n_filters, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm(n_filters)
+        self.bn2 = SearchBatchNorm(n_filters)
 
         self.relu = nn.ReLU()
 
@@ -65,7 +66,7 @@ class ChessNet(nn.Module):
             kernel_size=3,
             padding=1,
         )
-        self.bn_input = nn.BatchNorm(config.n_filters)
+        self.bn_input = SearchBatchNorm(config.n_filters)
         self.relu = nn.ReLU()
 
         # Residual tower
@@ -77,14 +78,14 @@ class ChessNet(nn.Module):
         self.policy_conv = nn.Conv2d(
             in_channels=config.n_filters, out_channels=32, kernel_size=1
         )
-        self.policy_bn = nn.BatchNorm(32)
+        self.policy_bn = SearchBatchNorm(32)
         self.policy_fc = nn.Linear(32 * 8 * 8, config.policy_output_dim)
 
         # Value head - reduce channels to 32
         self.value_conv = nn.Conv2d(
             in_channels=config.n_filters, out_channels=32, kernel_size=1
         )
-        self.value_bn = nn.BatchNorm(32)
+        self.value_bn = SearchBatchNorm(32)
         self.value_fc1 = nn.Linear(32 * 8 * 8, 256)
         self.value_fc2 = nn.Linear(256, 1)
 

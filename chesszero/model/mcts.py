@@ -367,7 +367,11 @@ class MCTS:
         # Local callers (e.g. interactive play) may pass a network directly.
         # Pipe clients have no mode: their parent owns normalization state.
         context = (
-            search_inference_mode(self.model, self.config.search_batch_norm)
+            search_inference_mode(
+                self.model,
+                self.config.search_batch_norm,
+                self.config.search_batch_norm_per_position,
+            )
             if getattr(self.model, "training", None) is not None
             else nullcontext()
         )

@@ -1,0 +1,5 @@
+# Matched learning-rate test
+
+Frozen trajectory on seed162016: step1 score40.625%, step8 23.4375%, step32 9.375%, step78 3.125%. All96early games complete and fingerprints verified. This shows early progressive regression, but does not establish an optimizer bug or prove targets are useful.
+
+Train two arms from identical epoch0 weights and Adamstep0 on the same saved32-game/4935-position arrays: learningrate1e-5 and1e-6, versus persisted1e-4control. Same minibatchorder64,78updates, ordinarytrainingBatchNorm, joint raw-logit policyCE+valueMSE+L2, Adamwithoutbiascorrection. Only learningrate changes. Save steps1,8,32,78 and optimizer. No freshtraininggames. Evaluate each final candidate on the same32game seed162016 discovery bank with64simulations and independent spatial inference/fixedshape16. Validation probes descriptive, no evaluationgames trained. Smaller updates may merely preserveinitialstrength; require actual improvement, independentconfirmation and sustainedselfplay before claimingfix.

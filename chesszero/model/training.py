@@ -1,4 +1,5 @@
 import mlx.core as mx
+import numpy as np
 import mlx.optimizers as optim
 import mlx.nn.losses as mx_losses
 import mlx.nn as nn
@@ -6,10 +7,8 @@ from typing import Tuple, Optional
 from chess_engine.game import ChessGame
 from model.network import ChessNet
 from model.mcts import MCTS
-from model.self_play import (
-    create_batches,
-    generate_games,
-)
+from model.self_play import generate_games
+from model.replay_buffer import ReplayBuffer
 from config.model_config import ModelConfig
 from pathlib import Path
 import time
@@ -76,6 +75,11 @@ class Trainer:
             self.optimizer = optim.Adam(learning_rate=config.learning_rate)
 
         self._loss_and_grad = nn.value_and_grad(self.model, self._loss_fn)
+        # Checkpoints do not persist the buffer; a resumed run refills it from
+        # fresh generations before training steps ramp back up.
+        self.replay = ReplayBuffer(
+            self.config.replay_buffer_size, self.config.policy_output_dim
+        )
 
     def train(self, n_epochs: Optional[int] = None, n_workers: int = 8):
         """Main training loop with parallel game generation"""
@@ -90,17 +94,30 @@ class Trainer:
                 self.model.eval()
                 self._release_unused_device_cache()
 
-                games = generate_games(self.model, self.config, n_workers)
-
-                batches = list(create_batches(games, self.config.batch_size))
-
+                # Once a best model exists it generates the games while the
+                # current model keeps training (AlphaGo Zero style). Training
+                # progress is therefore never discarded by a failed evaluation.
+                generator = self.best_model if self.best_model is not None else self.model
+                generator.eval()
+                games = generate_games(generator, self.config, n_workers)
+                added = self.replay.add(games)
                 del games
                 gc.collect()
-
-                self.logger.info(f"Training on game data in epoch {epoch + 1}...")
-                (avg_loss, avg_policy_loss, avg_value_loss, avg_l2_loss) = (
-                    self.train_on_batches(tqdm(batches, desc="Accumulating gradients"))
+                self.logger.info(
+                    "Replay buffer: +%d positions, %d total from %d generations",
+                    added,
+                    len(self.replay),
+                    self.replay.n_generations,
                 )
+
+                n_steps = self._training_steps_for_generation()
+                self.logger.info(
+                    f"Training {n_steps} minibatch steps in epoch {epoch + 1}..."
+                )
+                (avg_loss, avg_policy_loss, avg_value_loss, avg_l2_loss) = (
+                    self.train_from_replay(n_steps)
+                )
+                self.recalibrate_batchnorm()
 
                 epoch_time = time.time() - epoch_start_time
 
@@ -126,10 +143,13 @@ class Trainer:
                         self.logger.info(
                             f"Evaluation score: {score:.2%}; W/D/L: {wins}/{draws}/{losses}"
                         )
-                        if score > 0.55:
+                        if score > self.config.acceptance_threshold:
                             self._accept_current_model(score)
                         else:
-                            self._revert_to_best()
+                            self.logger.info(
+                                "Candidate not accepted; best model keeps generating "
+                                "games while the current model continues training"
+                            )
                     self._save_checkpoint(epoch + 1)
 
             total_time = time.time() - start_time
@@ -188,11 +208,55 @@ class Trainer:
 
     @staticmethod
     def _evaluation_score(wins, losses, draws):
-        """Fraction of all evaluation games won; draws contribute no credit."""
+        """Match score with draws worth half a point.
+
+        Requiring outright wins made a clearly stronger candidate fail most of
+        the time, because early chess self-play is draw-heavy.
+        """
         total = wins + losses + draws
         if total <= 0:
             raise ValueError("Evaluation requires completed games")
-        return wins / total
+        return (wins + 0.5 * draws) / total
+
+    def _training_steps_for_generation(self) -> int:
+        """Steps covering the configured number of passes over the buffer."""
+        if not len(self.replay):
+            return 0
+        wanted = self.config.training_passes_per_generation * len(self.replay)
+        steps = int(np.ceil(wanted / self.config.batch_size))
+        return max(1, min(steps, self.config.max_training_steps))
+
+    def train_from_replay(self, n_steps: int):
+        """Apply n_steps Adam updates on minibatches sampled from the buffer."""
+        if n_steps <= 0 or not len(self.replay):
+            self.logger.warning("No replay positions available; skipping training")
+            return 0.0, 0.0, 0.0, 0.0
+        totals = np.zeros(4)
+        for batch in tqdm(
+            self.replay.sample_batches(self.config.batch_size, n_steps),
+            total=n_steps,
+            desc="Training steps",
+        ):
+            totals += np.array(self.train_on_batches((batch,)))
+        return tuple((totals / n_steps).tolist())
+
+    def recalibrate_batchnorm(self, n_batches: Optional[int] = None):
+        """Refresh BatchNorm running statistics for the final weights.
+
+        Self-play and evaluation run in eval mode, which uses running statistics
+        that lag the weights they were accumulated under. Forward passes in
+        train mode with the trained weights (no parameter update) realign them.
+        """
+        n_batches = (
+            self.config.batchnorm_recalibration_batches if n_batches is None else n_batches
+        )
+        if n_batches <= 0 or not len(self.replay):
+            return
+        self.model.train()
+        for batch in self.replay.sample_batches(self.config.batch_size, n_batches):
+            outputs = self.model.forward_logits(batch[0])
+            mx.eval(outputs, self.model.parameters())
+        self.model.eval()
 
     def _loss_fn(self, states, policies, values):
         policy_logits, pred_values = self.model.forward_logits(states)

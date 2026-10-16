@@ -58,10 +58,32 @@ class TestGradientAccumulation(unittest.TestCase):
                     )
             self.assertEqual(int(self.split.optimizer.state["step"]), step)
 
-    def test_training_loop_updates_once_for_the_generation(self):
+    def test_training_loop_takes_configured_passes_over_the_buffer(self):
+        history = [
+            (mx.zeros((19, 8, 8)), mx.array([1.0, 0.0, 0.0]), None),
+            (mx.zeros((19, 8, 8)), mx.array([0.0, 1.0, 0.0]), None),
+            (mx.zeros((19, 8, 8)), mx.array([0.2, 0.8, 0.0]), None),
+        ]
+        config = self.split.config
+        config.policy_output_dim = 3
+        config.batch_size = 2
+        config.training_passes_per_generation = 2.0  # ceil(2 * 3 / 2) = 3 steps
+        config.batchnorm_recalibration_batches = 0
+        self.split.replay.policy_output_dim = 3
         with (
-            patch("model.training.generate_games", return_value=[]),
-            patch("model.training.create_batches", return_value=self.batches),
+            patch("model.training.generate_games", return_value=[(history, 1.0)]),
+            patch.object(TinyNet, "forward_logits", self.flat_forward),
         ):
             self.split.train(n_epochs=1)
-        self.assertEqual(int(self.split.optimizer.state["step"]), 1)
+        self.assertEqual(len(self.split.replay), 3)
+        self.assertEqual(int(self.split.optimizer.state["step"]), 3)
+
+    def test_empty_generation_skips_training_without_failing(self):
+        with patch("model.training.generate_games", return_value=[]):
+            self.split.train(n_epochs=1)
+        self.assertEqual(int(self.split.optimizer.state["step"]), 0)
+
+    @staticmethod
+    def flat_forward(model, states, original=TinyNet.forward_logits):
+        # TinyNet takes two features; the loop feeds full board tensors.
+        return original(model, states.reshape(len(states), -1)[:, :2])

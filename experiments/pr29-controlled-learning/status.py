@@ -1,4 +1,4 @@
-"""Read only: live progress and completed 500-game reports."""
+"""Read only: queued/running call state, experiment progress and results."""
 
 import json
 from pathlib import Path
@@ -11,6 +11,8 @@ record = json.loads(Path(__file__).with_name("launch.json").read_text())
 volume = modal.Volume.from_name(record["volume"])
 root = record["run_id"]
 print("RUN", root)
+call = modal.FunctionCall.from_id(record["function_call_id"])
+print("CALL_STATE", [entry.status.name for entry in call.get_call_graph()])
 try:
     cancellation = json.loads(b"".join(volume.read_file(root + "/cancellation.json")))
 except FileNotFoundError:

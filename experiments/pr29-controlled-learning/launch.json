@@ -1,0 +1,16 @@
+{
+  "run_id": "pr29-controlled-learning-20261016-113623",
+  "function_call_id": "fc-01M527ZED4HZZEFFHB28PZ1T73",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-controlled-learning-20261016-113623",
+  "source_revision": "2922658a3a561ddbbac26355ca81054d0e2ef988",
+  "source_run": "pr29-random-restart-20261015-085706",
+  "training_games": 32,
+  "validation_games": 8,
+  "source_epoch": 0,
+  "discovery_match_games": 16,
+  "search_batch_norm": true,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution",
+  "app_url": "https://modal.com/apps/radiantai/main/ap-CxIOsYVMzh3rLouR7XdJ88"
+}

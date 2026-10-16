@@ -43,4 +43,5 @@ class ModelConfig:
     eval_interval_epochs: int = 1  # Gate each candidate generation by default
 
     inference_batch_size: int = 64
+    search_batch_norm: bool = True  # Use current-batch BN statistics during search
     prediction_cache_size: int = 10_000

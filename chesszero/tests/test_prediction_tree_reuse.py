@@ -13,12 +13,20 @@ class TestPredictionReuse(unittest.TestCase):
     def test_prediction_identity_uses_nn_input_not_en_passant_state(self):
         model = RecordingModel()
         model.eval()
-        search, board = MCTS(model, ModelConfig()), BitBoard()
+        search, board = MCTS(model, ModelConfig(search_batch_norm=False)), BitBoard()
         policy, _ = search._evaluate_board(board)
         board.en_passant_target = (2, 0)
         repeated, _ = search._evaluate_board(board)
         self.assertIs(policy, repeated)
         self.assertEqual(len(model.inputs), 1)
+
+    def test_batch_statistics_do_not_reuse_cached_predictions(self):
+        model, board = RecordingModel(), BitBoard()
+        search = MCTS(model, ModelConfig())
+        search._evaluate_board(board)
+        search._evaluate_board(board)
+        self.assertEqual(len(model.inputs), 2)
+        self.assertEqual(len(search._evaluation_cache), 0)
 
 
 class TestTreeReuse(unittest.TestCase):

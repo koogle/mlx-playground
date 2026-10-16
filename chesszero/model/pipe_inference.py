@@ -5,9 +5,11 @@ import multiprocessing as mp
 from multiprocessing.connection import wait
 import os
 import time
+from contextlib import ExitStack
 
 import numpy as np
 from cachetools import LRUCache
+from model.inference_mode import search_inference_mode
 
 
 class PipeInferenceClient:
@@ -35,7 +37,8 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
 
     The same pipe carries prediction requests and the final game result. Only
     this process imports MLX for inference; training can follow after it returns.
-    We batch currently ready unique cache misses without a batching delay.
+    Batch-stat normalization retains every ready request, including duplicates.
+    Running-stat normalization batches unique cache misses instead.
     """
     import mlx.core as mx
 
@@ -44,8 +47,7 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
     models = list(model) if isinstance(model, (list, tuple)) else [model]
     if not models:
         raise ValueError("At least one inference model is required")
-    for network in models:
-        network.eval()
+    inference_modes = ExitStack()
     ctx = mp.get_context("spawn")
     pending = iter(enumerate(jobs))
     active, results = {}, {}
@@ -53,9 +55,18 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
     predictions = LRUCache(maxsize=config.prediction_cache_size)
     statistics = dict(cache_hits=0, forwards=0, positions=0, largest_batch=0)
     logger = logging.getLogger(__name__)
+    logger.info(
+        "Search BatchNorm: %s statistics; prediction cache %s",
+        "batch" if config.search_batch_norm else "running",
+        "disabled" if config.search_batch_norm else "enabled",
+    )
     progress_at = time.monotonic()
 
     try:
+        for network in models:
+            inference_modes.enter_context(
+                search_inference_mode(network, config.search_batch_norm)
+            )
         while active or not exhausted:
             while not exhausted and len(active) < max_workers:
                 try:
@@ -106,13 +117,17 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                             f"Invalid inference model index: {model_index}"
                         )
                     key = (model_index, position.shape, position.tobytes())
-                    if key in predictions:
+                    if config.search_batch_norm:
+                        # Keep every request in the batch: removing duplicates
+                        # changes the statistics used by BatchNorm itself.
+                        key = (*key, connection)
+                    if not config.search_batch_norm and key in predictions:
                         statistics["cache_hits"] += 1
                         try:
                             connection.send(predictions[key])
                         except (BrokenPipeError, OSError):
                             pass
-                    elif key in batch:
+                    elif not config.search_batch_norm and key in batch:
                         statistics["cache_hits"] += 1
                         batch[key][1].append(connection)
                     else:
@@ -154,7 +169,8 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                         policies[index : index + 1].copy(),
                         values[index : index + 1].copy(),
                     )
-                    predictions[key] = prediction
+                    if not config.search_batch_norm:
+                        predictions[key] = prediction
                     for connection in connections:
                         try:
                             connection.send(prediction)
@@ -170,6 +186,7 @@ def run_pipe_games(model, config, worker, jobs, max_workers):
                 )
                 progress_at = time.monotonic()
     finally:
+        inference_modes.close()
         for connection, (process, _) in active.items():
             if process.is_alive():
                 process.terminate()

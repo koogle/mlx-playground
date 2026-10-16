@@ -9,6 +9,15 @@ targets. Each position is used once. Pending games survive checkpoint/resume.
 The CLI trainer and this driver share this behavior; no replacement run has
 been launched as part of this change.
 
+Current source also restores current-batch BatchNorm statistics during search
+(`search_batch_norm=True`) in both local and pipe inference. Search leaves saved
+running statistics unchanged; optimizer minibatches continue updating them.
+Neural prediction caching and request deduplication are disabled in this mode
+because changing the batch can change a position's prediction. Search tree
+reuse remains enabled. Set `search_batch_norm=False` for the previous
+running-statistics path with prediction caching. The stopped run used running
+statistics, so its scores do not measure this new configuration.
+
 Start from the exact untrained model and Adam state at epoch0 of
 `pr29-random-restart-20261015-085706`. Train for **3,000 total self-play games**,
 rather than extending the collapsed checkpoint. Keep the original architecture,

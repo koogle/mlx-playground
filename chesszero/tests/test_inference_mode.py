@@ -12,6 +12,7 @@ from config.model_config import ModelConfig
 from model.mcts import MCTS
 from model.self_play import play_single_game
 from model.training import Trainer
+from model.inference_mode import search_inference_mode
 
 
 class ModeModel(nn.Module):
@@ -34,18 +35,26 @@ class TestInferenceMode(unittest.TestCase):
     def setUp(self):
         self.searches = []
 
-    def test_search_uses_eval_and_restores_original_mode(self):
-        for training in (True, False):
-            with self.subTest(training=training):
+    def test_search_preserves_running_statistics_and_original_mode(self):
+        for training, batch_stats in (
+            (True, True),
+            (False, True),
+            (True, False),
+            (False, False),
+        ):
+            with self.subTest(training=training, batch_stats=batch_stats):
                 model = ModeModel()
                 model.train(training)
                 mean = np.array(model.bn.running_mean)
                 variance = np.array(model.bn.running_var)
-                search = MCTS(model, ModelConfig(n_simulations=4))
+                search = MCTS(
+                    model, ModelConfig(n_simulations=4, search_batch_norm=batch_stats)
+                )
                 search.get_move(BitBoard())
                 self.assertTrue(model.modes)
                 self.assertFalse(any(model.modes))
                 self.assertEqual(model.training, training)
+                self.assertTrue(model.bn.track_running_stats)
                 np.testing.assert_array_equal(model.bn.running_mean, mean)
                 np.testing.assert_array_equal(model.bn.running_var, variance)
 
@@ -57,6 +66,25 @@ class TestInferenceMode(unittest.TestCase):
                 MCTS(model, ModelConfig()).get_move(BitBoard())
             self.assertEqual(model.modes, [False])
             self.assertEqual(model.training, training)
+            self.assertTrue(model.bn.track_running_stats)
+
+    def test_batch_statistics_match_manual_normalization_without_updating_buffers(self):
+        model = ModeModel()
+        inputs = mx.arange(8, dtype=mx.float32).reshape(2, 4, 1) + 10
+        for batch_stats in (True, False):
+            with self.subTest(batch_stats=batch_stats):
+                with search_inference_mode(model, batch_stats):
+                    actual = model.bn(inputs)
+                    if batch_stats:
+                        expected = (inputs - mx.mean(inputs)) / mx.sqrt(
+                            mx.var(inputs) + model.bn.eps
+                        )
+                    else:
+                        expected = inputs / mx.sqrt(mx.array(1 + model.bn.eps))
+                    np.testing.assert_allclose(actual, expected, atol=1e-6)
+                np.testing.assert_array_equal(model.bn.running_mean, [0])
+                np.testing.assert_array_equal(model.bn.running_var, [1])
+                self.assertTrue(model.bn.track_running_stats)
 
     def worker_game(self):
         game = Mock()

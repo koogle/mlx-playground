@@ -4,6 +4,8 @@ from chess_engine.bitboard import BitBoard
 from cachetools import LRUCache
 from config.model_config import ModelConfig
 from model.move_encoding import MoveDestination, encode_move
+from model.inference_mode import search_inference_mode
+from contextlib import nullcontext
 
 
 class Node:
@@ -325,10 +327,10 @@ class MCTS:
         return self._move_list_cache[key]
 
     def _evaluate_board(self, board):
-        """Cache policy/value together while one fixed model runs in eval mode."""
+        """Reuse predictions only when normalization is independent of the batch."""
         inputs = np.asarray(board.state, dtype=np.float32)
         key = (self.cache.model_version, inputs.shape, inputs.tobytes())
-        if key in self._evaluation_cache:
+        if not self.config.search_batch_norm and key in self._evaluation_cache:
             return self._evaluation_cache[key]
         states = self._get_board_state(board)
         if getattr(self.model, "training", None) is not None:
@@ -341,7 +343,8 @@ class MCTS:
         policy = np.array(policies[0])
         policy.flags.writeable = False
         result = policy, float(values[0].item())
-        self._evaluation_cache[key] = result
+        if not self.config.search_batch_norm:
+            self._evaluation_cache[key] = result
         return result
 
     def _clear_caches(self):
@@ -362,15 +365,14 @@ class MCTS:
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
         # Local callers (e.g. interactive play) may pass a network directly.
-        # Pipe clients have no mode: their parent owns inference/eval state.
-        was_training = getattr(self.model, "training", None)
-        if was_training is not None:
-            self.model.eval()
-        try:
+        # Pipe clients have no mode: their parent owns normalization state.
+        context = (
+            search_inference_mode(self.model, self.config.search_batch_norm)
+            if getattr(self.model, "training", None) is not None
+            else nullcontext()
+        )
+        with context:
             return self._search_move(board, temperature)
-        finally:
-            if was_training is not None:
-                self.model.train(was_training)
 
     def _search_move(self, board: BitBoard, temperature: float = 0.0):
         self.cache.bind(self.model, self.model_version)

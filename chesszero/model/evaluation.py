@@ -14,6 +14,7 @@ def play_evaluation_game(
     seed,
     connection,
     max_workers,
+    opening_plies=0,
 ):
     try:
         rng = np.random.default_rng(seed)
@@ -23,6 +24,21 @@ def play_evaluation_game(
             searches[1 - player_color] = MCTS(
                 client.for_model(1), config, exploration_noise=False
             )
+        # The same seed produces the same opening for both candidate colors.
+        # Keep search deterministic after the opening and disable root noise.
+        for _ in range(opening_plies):
+            if game.board.is_game_over():
+                break
+            legal = sorted(
+                (source, target)
+                for source, _ in game.board.get_all_pieces(
+                    game.board.get_current_turn()
+                )
+                for target in game.board.get_valid_moves(source)
+            )
+            move = legal[int(rng.integers(len(legal)))]
+            if not game.make_move(*move):
+                raise RuntimeError("Evaluation opening contains an illegal move")
         while not game.board.is_game_over():
             turn = game.board.get_current_turn()
             if random_opponent and turn != player_color:
@@ -53,3 +69,8 @@ def play_evaluation_game(
         )
     finally:
         client.close()
+
+
+def play_promotion_game(*args):
+    """Promotion pairs share an eight-ply opening before deterministic search."""
+    return play_evaluation_game(*args, opening_plies=8)

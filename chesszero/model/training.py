@@ -17,7 +17,7 @@ import gc
 import psutil
 import os
 from model.pipe_inference import run_pipe_games
-from model.evaluation import play_evaluation_game
+from model.evaluation import play_evaluation_game, play_promotion_game
 from mlx.utils import tree_flatten, tree_map
 
 
@@ -78,6 +78,10 @@ class Trainer:
         """Main training loop with parallel game generation"""
         n_epochs = n_epochs or self.config.n_epochs
         start_time = time.time()
+        if self.best_model is None:
+            # Establish the teacher before training: the first update must earn
+            # promotion too. Resumed candidates retain their saved teacher.
+            self._accept_current_model()
 
         try:
             for epoch in range(self.start_epoch, n_epochs):
@@ -87,7 +91,7 @@ class Trainer:
                 self.model.eval()
                 self._release_unused_device_cache()
 
-                games = generate_games(self.model, self.config, n_workers)
+                games = generate_games(self.best_model, self.config, n_workers)
 
                 batches = create_batches(games, self.config.batch_size)
 
@@ -96,7 +100,7 @@ class Trainer:
 
                 self.logger.info(f"Training on game data in epoch {epoch + 1}...")
                 (avg_loss, avg_policy_loss, avg_value_loss, avg_l2_loss) = (
-                    self.train_on_batches(tqdm(batches, desc="Accumulating gradients"))
+                    self.train_on_batches(tqdm(batches, desc="Training minibatches"))
                 )
 
                 epoch_time = time.time() - epoch_start_time
@@ -112,10 +116,15 @@ class Trainer:
 
                     try:
                         result = self.evaluate_against_best(
-                            n_games=self.config.n_eval_games, max_workers=n_workers
+                            n_games=self.config.n_eval_games,
+                            max_workers=n_workers,
+                            seed=20000 + (epoch + 1) * self.config.n_eval_games,
                         )
                     except IncompleteEvaluationError as error:
-                        self.logger.warning("Skipping model acceptance: %s", error)
+                        self.logger.warning(
+                            "Rejecting incomplete evaluation: %s", error
+                        )
+                        self._revert_to_best()
                         self._save_checkpoint(epoch + 1)
                         continue
                     if result is None:
@@ -189,11 +198,11 @@ class Trainer:
 
     @staticmethod
     def _evaluation_score(wins, losses, draws):
-        """Fraction of all evaluation games won; draws contribute no credit."""
+        """Match score over all completed games, with draws worth half a point."""
         total = wins + losses + draws
         if total <= 0:
             raise ValueError("Evaluation requires completed games")
-        return wins / total
+        return (wins + 0.5 * draws) / total
 
     def _loss_fn(self, states, policies, values):
         policy_logits, pred_values = self.model.forward_logits(states)
@@ -211,6 +220,41 @@ class Trainer:
         return p_loss + v_loss + l2_loss, (p_loss, v_loss, l2_loss)
 
     def train_on_batches(self, batches):
+        """Update after each minibatch unless generation accumulation is requested.
+
+        Restore the entire generation on failure, including moments and BN stats,
+        so a failed later minibatch cannot leave a partially updated candidate.
+        """
+        if self.config.accumulate_gradients:
+            return self._train_accumulated_batches(batches)
+        self.model.train()
+        original_parameters = self.model.parameters()
+        original_optimizer = tree_map(lambda x: x, self.optimizer.state)
+        totals = [0.0] * 4
+        n_positions = 0
+        n_updates = 0
+        try:
+            for batch in batches:
+                size = len(batch[0])
+                if not size:
+                    continue
+                losses = self.train_on_batch(batch)
+                totals = [a + size * b for a, b in zip(totals, losses)]
+                n_positions += size
+                n_updates += 1
+        except Exception:
+            self.model.update(original_parameters)
+            self.optimizer.state = original_optimizer
+            raise
+        self.logger.info(
+            "Learning completed: %d optimizer updates over %d positions; Adam step %s",
+            n_updates,
+            n_positions,
+            int(self.optimizer.state["step"]),
+        )
+        return tuple(v / n_positions for v in totals) if n_positions else (0.0,) * 4
+
+    def _train_accumulated_batches(self, batches):
         """Average gradients over fresh positions and apply exactly one update.
 
         Learned parameters remain fixed across microbatches. BatchNorm still uses
@@ -265,8 +309,8 @@ class Trainer:
         return tuple((weighted_losses / n_positions).tolist())
 
     def train_on_batch(self, batch):
-        """Compatibility wrapper for an update containing one microbatch."""
-        return self.train_on_batches((batch,))
+        """Apply one Adam update to one minibatch."""
+        return self._train_accumulated_batches((batch,))
 
     def _get_memory_usage(self):
         """Get current memory usage information"""
@@ -279,7 +323,7 @@ class Trainer:
         }
 
     def evaluate_against_best(
-        self, n_games: int = 40, max_workers: int = 10
+        self, n_games: int = 40, max_workers: int = 10, seed: int = 20000
     ) -> Optional[Tuple[float, int, int, int]]:
         """Evaluate current model against best model and return score counts."""
         self._release_unused_device_cache()
@@ -294,14 +338,14 @@ class Trainer:
             )
 
         jobs = [
-            (self.config, game_id, color, False, game_id)
+            (self.config, game_id, color, False, seed + game_id)
             for color in (0, 1)
             for game_id in range(n_games // 2)
         ]
         results, failures, statistics = run_pipe_games(
             [self.model, self.best_model],
             self.config,
-            play_evaluation_game,
+            play_promotion_game,
             jobs,
             max_workers,
         )

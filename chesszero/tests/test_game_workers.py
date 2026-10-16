@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 from multiprocessing.reduction import ForkingPickler
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import mlx.core as mx
 import numpy as np
@@ -10,7 +10,7 @@ import numpy as np
 from chess_engine.bitboard import BitBoard
 from config.model_config import ModelConfig
 from types import SimpleNamespace
-from model.evaluation import play_evaluation_game
+from model.evaluation import play_evaluation_game, play_promotion_game
 from model.game_workers import run_game_workers
 from model.mcts import MCTS, Node
 from model.self_play import generate_games
@@ -101,6 +101,68 @@ class TestGameWorkers(unittest.TestCase):
             ):
                 with self.assertRaises(IncompleteEvaluationError):
                     trainer.evaluate_against_random(4, 2)
+
+    def test_promotion_openings_are_legal_paired_and_seeded(self):
+        import chess
+        from chess_engine.game import ChessGame
+        from test_board import coords, from_fen
+
+        class StopAtOpening(Exception):
+            pass
+
+        openings = []
+        for seed in (20000, 20001):
+            pair = []
+            for color in (0, 1):
+                game, oracle = ChessGame(), chess.Board()
+                original_make_move = game.make_move
+
+                def apply(source, target):
+                    legal = {coords(move): move for move in oracle.legal_moves}
+                    self.assertIn((source, target), legal)
+                    oracle.push(legal[(source, target)])
+                    return original_make_move(source, target)
+
+                def capture(board, temperature):
+                    self.assertEqual(board.get_move_count(), 8)
+                    expected, _ = from_fen(oracle.fen(en_passant="fen"))
+                    np.testing.assert_array_equal(board.state, expected.state)
+                    pair.append(board.get_hash())
+                    raise StopAtOpening
+
+                client, connection = Mock(), Mock()
+                with (
+                    patch("model.evaluation.ChessGame", return_value=game),
+                    patch.object(game, "make_move", side_effect=apply),
+                    patch("model.evaluation.MCTS") as search,
+                ):
+                    search.return_value.get_move.side_effect = capture
+                    with self.assertRaises(StopAtOpening):
+                        play_promotion_game(
+                            client, ModelConfig(), 0, color, False, seed, connection, 1
+                        )
+                client.close.assert_called_once()
+            self.assertEqual(pair[0], pair[1])
+            openings.append(pair[0])
+        self.assertNotEqual(*openings)
+
+    def test_promotion_jobs_balance_colors_on_identical_opening_seeds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = Trainer(ModelConfig(n_residual_blocks=0, n_filters=2), directory)
+            trainer._accept_current_model()
+            results = [{"result": r} for r in (1, 0, 0, -1)]
+            with patch(
+                "model.training.run_pipe_games", return_value=(results, 0, {})
+            ) as run:
+                self.assertEqual(
+                    trainer.evaluate_against_best(4, 2, seed=123), (0.5, 1, 1, 2)
+                )
+                self.assertIs(run.call_args.args[2], play_promotion_game)
+                jobs = run.call_args.args[3]
+                self.assertEqual(
+                    [(j[2], j[4]) for j in jobs],
+                    [(0, 123), (0, 124), (1, 123), (1, 124)],
+                )
 
     def test_configured_root_noise_affects_selection_without_changing_priors(self):
         config = ModelConfig(dirichlet_alpha=0.7, dirichlet_epsilon=0.4)

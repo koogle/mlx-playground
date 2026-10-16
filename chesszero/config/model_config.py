@@ -27,6 +27,7 @@ class ModelConfig:
     batch_size: int = 1024  # 2048
     n_epochs: int = 1000
     learning_rate: float = 1e-3  # Conservative starting rate for Adam
+    accumulate_gradients: bool = False  # Opt in to one update per generation
 
     # Self-play
     n_games_per_iteration: int = 25  # Fewer games per iteration for more frequent evals
@@ -39,7 +40,7 @@ class ModelConfig:
 
     # Logging
     n_eval_games: int = 40
-    eval_interval_epochs: int = 5  # Run evaluation every 5 epochs
+    eval_interval_epochs: int = 1  # Gate each candidate generation by default
 
     inference_batch_size: int = 64
     prediction_cache_size: int = 10_000

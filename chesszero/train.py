@@ -49,7 +49,7 @@ def main():
     parser.add_argument(
         "--games-per-iteration",
         type=int,
-        help="Fresh games collected before one training update (defaults to at least --workers)",
+        help="Fresh games collected before minibatch training (defaults to at least --workers)",
     )
     parser.add_argument(
         "--epochs",
@@ -59,6 +59,11 @@ def main():
     parser.add_argument("--simulations", type=int, help="MCTS simulations per move")
     parser.add_argument("--batch-size", type=int, help="Training microbatch size")
     parser.add_argument("--learning-rate", type=float, help="Adam learning rate")
+    parser.add_argument(
+        "--accumulate-gradients",
+        action="store_true",
+        help="Use one averaged update per generation instead of per minibatch",
+    )
     parser.add_argument(
         "--eval-interval", type=int, help="Evaluate against best every N epochs"
     )
@@ -108,6 +113,7 @@ def main():
     trainer.config.n_games_per_iteration = args.games_per_iteration or max(
         trainer.config.n_games_per_iteration, args.workers
     )
+    trainer.config.accumulate_gradients = args.accumulate_gradients
 
     for argument, field in (
         ("epochs", "n_epochs"),

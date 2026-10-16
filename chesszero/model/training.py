@@ -16,6 +16,8 @@ from tqdm import tqdm
 import gc
 import psutil
 import os
+import uuid
+import numpy as np
 from model.pipe_inference import run_pipe_games
 from model.evaluation import play_evaluation_game, play_promotion_game
 from mlx.utils import tree_flatten, tree_map
@@ -53,6 +55,7 @@ class Trainer:
         self.best_model = None
         self.best_model_win_rate = 0.0
         self.best_optimizer_state = None
+        self.pending_evaluation_games = []
 
         if resume_epoch is not None:
             self.logger.info(f"Resuming from epoch {resume_epoch}")
@@ -67,6 +70,20 @@ class Trainer:
             self.best_model = state.get("best_model")
             self.best_optimizer_state = state.get("best_optimizer_state")
             self.best_model_win_rate = state.get("best_model_win_rate") or 0.0
+            if state.get("pending_training_file"):
+                with np.load(
+                    self.checkpoint_dir / state["pending_training_file"]
+                ) as data:
+                    for index, outcome in enumerate(data["outcomes"]):
+                        history = [
+                            (position, policy, None)
+                            for position, policy in zip(
+                                data[f"states_{index}"],
+                                data[f"policies_{index}"],
+                                strict=True,
+                            )
+                        ]
+                        self.pending_evaluation_games.append((history, float(outcome)))
         else:
             self.model = ChessNet(config)
             self.start_epoch = 0
@@ -92,6 +109,7 @@ class Trainer:
                 self._release_unused_device_cache()
 
                 games = generate_games(self.best_model, self.config, n_workers)
+                games.extend(self.pending_evaluation_games)
 
                 batches = create_batches(games, self.config.batch_size)
 
@@ -102,6 +120,9 @@ class Trainer:
                 (avg_loss, avg_policy_loss, avg_value_loss, avg_l2_loss) = (
                     self.train_on_batches(tqdm(batches, desc="Training minibatches"))
                 )
+                # Consume once, after a successful update. Rejected candidates'
+                # completed games are useful examples too.
+                self.pending_evaluation_games = []
 
                 epoch_time = time.time() - epoch_start_time
 
@@ -194,6 +215,18 @@ class Trainer:
     def _save_checkpoint(self, epoch, interrupted=False, completed_epochs=None):
         kind = "interrupted" if interrupted else "regular"
         self.logger.info("Saving %s checkpoint for epoch %d...", kind, epoch)
+        pending_file = None
+        if self.pending_evaluation_games:
+            # Write before publishing the checkpoint manifest. Unique filenames
+            # preserve the previous checkpoint if any part of saving fails.
+            pending_file = f"pending_training_{uuid.uuid4().hex}.npz"
+            arrays = {
+                "outcomes": np.array([r for _, r in self.pending_evaluation_games])
+            }
+            for index, (history, _) in enumerate(self.pending_evaluation_games):
+                arrays[f"states_{index}"] = np.stack([s for s, _, _ in history])
+                arrays[f"policies_{index}"] = np.stack([p for _, p, _ in history])
+            np.savez_compressed(self.checkpoint_dir / pending_file, **arrays)
         self.model.save_checkpoint(
             self.checkpoint_dir,
             epoch,
@@ -203,6 +236,7 @@ class Trainer:
             best_model=self.best_model,
             best_optimizer_state=self.best_optimizer_state,
             completed_epochs=completed_epochs,
+            pending_training_file=pending_file,
         )
         self.logger.info(
             "Saved %s checkpoint for epoch %d in %s", kind, epoch, self.checkpoint_dir
@@ -337,7 +371,10 @@ class Trainer:
     def evaluate_against_best(
         self, n_games: int = 40, max_workers: int = 10, seed: int = 20000
     ) -> Optional[Tuple[float, int, int, int]]:
-        """Evaluate current model against best model and return score counts."""
+        """Score the promotion match and queue its games for next epoch's training.
+
+        Only a complete match supplies data, regardless of promotion or rejection.
+        """
         self._release_unused_device_cache()
         self.logger.info("\nEvaluating against best model...")
 
@@ -365,6 +402,27 @@ class Trainer:
         self.logger.info("Evaluation: %d completed, %d failed", len(results), failures)
         if failures or len(results) != n_games:
             raise IncompleteEvaluationError(f"{failures} of {n_games} games failed")
+        games = []
+        for result in results:
+            if (
+                result.get("perspective_color") not in (0, 1)
+                or result.get("result") not in (-1, 0, 1)
+                or "history" not in result
+            ):
+                raise IncompleteEvaluationError(
+                    "Promotion game lacks training history or outcome"
+                )
+            # Workers score the candidate; batching requires White's result and
+            # converts it to the side to move exactly once for each position.
+            white_result = result["result"] * (
+                1 if result["perspective_color"] == 0 else -1
+            )
+            if result["history"]:
+                games.append((result["history"], white_result))
+        self.pending_evaluation_games.extend(games)
+        self.logger.info(
+            "Queued %d promotion games for the next training epoch", len(games)
+        )
         wins = sum(result["result"] == 1 for result in results)
         losses = sum(result["result"] == -1 for result in results)
         draws = sum(result["result"] == 0 for result in results)

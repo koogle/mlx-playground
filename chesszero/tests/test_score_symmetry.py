@@ -261,7 +261,10 @@ def test_self_play_worker_results_and_batch_targets_mirror():
 
 
 @pytest.mark.parametrize("original_player", [0, 1])
-def test_evaluation_worker_scores_tested_player_after_color_swap(original_player):
+@pytest.mark.parametrize("collect_history", [False, True])
+def test_evaluation_worker_scores_tested_player_after_color_swap(
+    original_player, collect_history
+):
     scores = []
     for index, (board, _) in enumerate(board_pair(chess.Board(FORCED_FEN))):
         from chess_engine.game import ChessGame
@@ -275,14 +278,63 @@ def test_evaluation_worker_scores_tested_player_after_color_swap(original_player
             patch("model.evaluation.MCTS", side_effect=scripted_search),
         ):
             play_evaluation_game(
-                client, ModelConfig(), 0, player, False, 42, connection, 1
+                client,
+                ModelConfig(),
+                0,
+                player,
+                False,
+                42,
+                connection,
+                1,
+                collect_history=collect_history,
             )
         assert client.closed
         assert client.models == [1]
         (result,) = connection.results
         assert result["perspective_color"] == player
+        if collect_history:
+            assert len(result["history"]) == 2
+            white_result = result["result"] * (1 if player == 0 else -1)
+            states, policies, targets = next(
+                create_batches([(result["history"], white_result)], 8)
+            )
+            np.testing.assert_array_equal(targets, [-1, 1])
+            np.testing.assert_allclose(np.asarray(policies).sum(axis=1), 1)
+            # Both players' positions were copied before each move.
+            assert states[0, 12, 0, 0].item() != states[1, 12, 0, 0].item()
+        else:
+            assert "history" not in result
         scores.append(result["result"])
     assert scores == ([1.0, 1.0] if original_player == 0 else [-1.0, -1.0])
+
+
+def test_promotion_history_excludes_random_opening_positions():
+    from chess_engine.game import ChessGame
+
+    game = ChessGame()
+    game.board, _ = from_fen(FORCED_FEN)
+    connection = Connection()
+    with (
+        patch("model.evaluation.ChessGame", return_value=game),
+        patch("model.evaluation.MCTS", side_effect=scripted_search),
+    ):
+        # Black's only legal move is the opening; White then delivers mate.
+        play_evaluation_game(
+            UniformClient(),
+            ModelConfig(),
+            0,
+            0,
+            False,
+            42,
+            connection,
+            1,
+            opening_plies=1,
+            collect_history=True,
+        )
+    (result,) = connection.results
+    assert result["result"] == 1
+    assert len(result["history"]) == 1
+    assert result["history"][0][0][12, 0, 0] == 1
 
 
 @pytest.mark.parametrize(

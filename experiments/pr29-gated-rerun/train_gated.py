@@ -117,6 +117,7 @@ def prune_checkpoints(directory, epoch):
             "optimizer_file",
             "best_model_file",
             "best_optimizer_file",
+            "pending_training_file",
         ):
             if manifest.get(key):
                 (directory / manifest[key]).unlink(missing_ok=True)
@@ -261,11 +262,20 @@ def main():
         progress["phase"] = "training"
         write_json(progress_path, progress)
         before = int(trainer.optimizer.state["step"])
+        record["recycled_promotion_games"] = len(trainer.pending_evaluation_games)
+        record["recycled_promotion_positions"] = sum(
+            len(history) for history, _ in trainer.pending_evaluation_games
+        )
+        games.extend(trainer.pending_evaluation_games)
         record["losses"] = trainer.train_on_batches(
             create_batches(games, config.batch_size)
         )
+        trainer.pending_evaluation_games = []
         updates = int(trainer.optimizer.state["step"]) - before
-        assert updates == math.ceil(positions / config.batch_size) and updates > 1
+        training_positions = positions + record["recycled_promotion_positions"]
+        assert (
+            updates == math.ceil(training_positions / config.batch_size) and updates > 1
+        )
         assert all(
             bool(mx.all(mx.isfinite(v)).item())
             for _, v in tree_flatten(trainer.model.parameters())

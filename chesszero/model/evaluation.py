@@ -3,6 +3,7 @@
 import numpy as np
 from chess_engine.game import ChessGame
 from model.mcts import MCTS
+from model.self_play import get_policy_distribution
 
 
 def play_evaluation_game(
@@ -15,10 +16,14 @@ def play_evaluation_game(
     connection,
     max_workers,
     opening_plies=0,
+    collect_history=False,
 ):
     try:
+        if collect_history and random_opponent:
+            raise ValueError("Random-opponent evaluations cannot supply training data")
         rng = np.random.default_rng(seed)
         game = ChessGame()
+        history = []
         searches = {player_color: MCTS(client, config, exploration_noise=False)}
         if not random_opponent:
             searches[1 - player_color] = MCTS(
@@ -50,6 +55,16 @@ def play_evaluation_game(
                 move = legal[int(rng.integers(len(legal)))]
             else:
                 move = searches[turn].get_move(game.board, temperature=0)
+                if collect_history and move is not None:
+                    history.append(
+                        (
+                            np.array(game.board.state, dtype=np.float32),
+                            get_policy_distribution(
+                                searches[turn].root_node, config.policy_output_dim
+                            ),
+                            None,
+                        )
+                    )
             if move is None or not game.make_move(*move):
                 raise RuntimeError(
                     "Evaluation selected no legal move in an ongoing game"
@@ -59,18 +74,19 @@ def play_evaluation_game(
         result = game.board.get_game_result(player_color)
         if result is None:
             raise RuntimeError("Evaluation ended without a terminal result")
-        connection.send(
-            dict(
-                game_id=game_id,
-                result=result,
-                perspective_color=player_color,
-                final_board=str(game.board),
-            )
+        record = dict(
+            game_id=game_id,
+            result=result,
+            perspective_color=player_color,
+            final_board=str(game.board),
         )
+        if collect_history:
+            record["history"] = history
+        connection.send(record)
     finally:
         client.close()
 
 
 def play_promotion_game(*args):
     """Promotion pairs share an eight-ply opening before deterministic search."""
-    return play_evaluation_game(*args, opening_plies=8)
+    return play_evaluation_game(*args, opening_plies=8, collect_history=True)

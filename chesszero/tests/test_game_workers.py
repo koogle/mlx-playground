@@ -150,7 +150,10 @@ class TestGameWorkers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             trainer = Trainer(ModelConfig(n_residual_blocks=0, n_filters=2), directory)
             trainer._accept_current_model()
-            results = [{"result": r} for r in (1, 0, 0, -1)]
+            results = [
+                {"result": r, "perspective_color": color, "history": []}
+                for r, color in zip((1, 0, 0, -1), (0, 0, 1, 1))
+            ]
             with patch(
                 "model.training.run_pipe_games", return_value=(results, 0, {})
             ) as run:

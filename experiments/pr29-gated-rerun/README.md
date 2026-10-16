@@ -1,5 +1,14 @@
 # Fresh-seed minibatch and rejection rerun
 
+The original run was stopped deliberately. The current source additionally
+recycles completed candidate-versus-best promotion games into the next
+generation, including rejected candidates' games. Both players supply MCTS
+visit-policy targets; random opening plies supply none. Outcomes are converted
+from candidate-relative to White-relative before batching produces side-to-move
+targets. Each position is used once. Pending games survive checkpoint/resume.
+The CLI trainer and this driver share this behavior; no replacement run has
+been launched as part of this change.
+
 Start from the exact untrained model and Adam state at epoch0 of
 `pr29-random-restart-20261015-085706`. Train for **3,000 total self-play games**,
 rather than extending the collapsed checkpoint. Keep the original architecture,
@@ -19,7 +28,8 @@ Every500 games (fifteen32-game batches and one20-game batch), evaluate both the
 latest candidate and the accepted model on the previous fixed64-game random
 bank. Reports distinguish attempted updates from accepted optimizer steps,
 promotions/rejections, and White/Black WDL and scores. Reuse the candidate result
-when it was promoted. Evaluation data never trains the model. At completion,
+when it was promoted. Random-opponent and final baseline-match data never train
+the model; promotion-match games do. At completion,
 play64 direct games against the frozen initial model on the same paired opening
 bank used by the previous experiment, and verify saved model/teacher/Adam tensors.
 

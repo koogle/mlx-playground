@@ -197,6 +197,7 @@ class ChessNet(nn.Module):
         best_model: Optional["ChessNet"] = None,
         best_optimizer_state: Optional[dict] = None,
         completed_epochs: Optional[int] = None,
+        pending_training_file: Optional[str] = None,
     ) -> None:
         """Publish a complete checkpoint manifest after all tensor files are saved."""
         checkpoint_dir = Path(checkpoint_dir)
@@ -235,6 +236,7 @@ class ChessNet(nn.Module):
             ),
             "config": vars(self.config),
             "best_model_win_rate": best_model_win_rate,
+            "pending_training_file": pending_training_file,
         }
         # Unique tensor filenames keep an older manifest valid if saving fails.
         temporary = checkpoint_dir / f"state_{token}.json.tmp"

@@ -1,0 +1,7 @@
+# Matched training normalization experiment
+
+Mirror-value confirmation completed256games with unchanged weights/policy: unchanged51.171875%, mirrored49.21875%. White35.15625% to43.75%, Black67.1875% to54.6875%. The gap narrowed without confirmed overall strength improvement. Do not promote mirror inference as a strength fix.
+
+Return to policy learning. Restore identical epoch0 parameters and step0 Adam in two arms, reuse original controlled study's32traininggames/4935positions and8validationgames. Same order, batch64, learningrate1e-4, joint raw-logit CE + value MSE +L2,78updates. Only change training normalization: original shared minibatch statistics versus per-position spatial statistics. For independent mode, suppress running-stat updates and restore all mode flags after each update; running statistics are unused in both arms' evaluation. This is a normalization mechanism comparison, not a production default change.
+
+Both search with independent spatial statistics and fixedshape16,64simulations. Save checkpoints at1,8,32,78 with optimizer state; probe held-out positions descriptively. Compare each final arm to initial on identical new32-game bank seed162016. No fresh games generated and no evaluation data used in training. All weak/rejected checkpoints remain. A local gradient test verifies per-position training remains differentiable and one sample's gradient does not change with unrelated batch companions. Any promising result needs larger independent confirmation and sustainedselfplay validation.

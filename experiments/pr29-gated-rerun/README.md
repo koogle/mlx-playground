@@ -47,3 +47,9 @@ interruption. Timing is uncertain because promotion matches add substantial work
 The launcher records the run/call/volume/source revision in ignored `launch.json`.
 Use `--resume-run RUN_ID` for an explicitly needed continuation of a stopped run.
 Status reads only persisted Modal volume data and allocates no GPU.
+
+Launched2026-10-16 at06:01UTC: `pr29-gated-rerun-20261016-060137`,
+[Modal app](https://modal.com/apps/radiantai/main/ap-aXIFYbVH385FsITR1WsM7i),
+call `fc-01M51MTFB808C8C964QY5HB1AF`, source `6bad942`.
+Startup verified the restored epoch0/Adam step0 and began the64-game initial
+evaluation. Those startup checks are not completed training or strength results.

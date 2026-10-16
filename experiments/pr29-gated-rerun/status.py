@@ -11,7 +11,13 @@ record = json.loads(Path(__file__).with_name("launch.json").read_text())
 volume = modal.Volume.from_name(record["volume"])
 root = record["run_id"]
 print("RUN", root)
-for name in ("heartbeat.json", "progress.json", "job.json", "result.json"):
+for name in (
+    "heartbeat.json",
+    "progress.json",
+    "initial-vs-random.json",
+    "job.json",
+    "result.json",
+):
     try:
         obj = json.loads(b"".join(volume.read_file(root + "/" + name)))
         if name == "progress.json":

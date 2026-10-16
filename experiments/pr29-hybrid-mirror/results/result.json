@@ -1,0 +1,43 @@
+{
+  "status": "completed",
+  "phase": "completed",
+  "results": {
+    "vs_initial": {
+      "match": {
+        "games": 128,
+        "wins": 64,
+        "draws": 16,
+        "losses": 48,
+        "censored": 0,
+        "score": 0.5625,
+        "one_sided_p": 0.07803315099688364,
+        "bootstrap_interval": [
+          0.45703125,
+          0.6640625
+        ],
+        "alpha": 0.025,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 25,
+            "draws": 9,
+            "losses": 30
+          },
+          "1": {
+            "wins": 39,
+            "draws": 7,
+            "losses": 18
+          }
+        },
+        "inference": {
+          "cache_hits": 421,
+          "forwards": 127593,
+          "positions": 647425,
+          "largest_batch": 15
+        }
+      },
+      "checkpoint_verified": true
+    }
+  },
+  "active_arm": "vs_initial"
+}

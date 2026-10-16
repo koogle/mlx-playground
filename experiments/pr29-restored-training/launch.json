@@ -1,0 +1,15 @@
+{
+  "run_id": "pr29-restored-training-20261016-105037",
+  "function_call_id": "fc-01M525BMCPZVXQ496THW3V0ZVJ",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-restored-training-20261016-105037",
+  "source_revision": "0fdaa5d98305470e80beb6662cc6e6b471de1582",
+  "source_run": "pr29-random-restart-20261015-085706",
+  "total_games": 3000,
+  "source_epoch": 0,
+  "report_every_games": 500,
+  "search_batch_norm": true,
+  "recycle_promotion_games": true,
+  "policy_target": "visit_distribution",
+  "app_url": "https://modal.com/apps/radiantai/main/ap-l5DnXMlowRLgG3oD1vKjyX"
+}

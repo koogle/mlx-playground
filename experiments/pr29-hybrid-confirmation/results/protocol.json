@@ -1,0 +1,42 @@
+{
+  "source_revision": "e8067e97d8c478e93b643353e2636c8e3f780eb6",
+  "source": "/results/pr29-policy-continuation-20261016-134346",
+  "step": 337,
+  "config": {
+    "n_residual_blocks": 19,
+    "n_filters": 256,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 64,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "learning_rate": 0.0001,
+    "accumulate_gradients": false,
+    "n_games_per_iteration": 32,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "n_eval_games": 40,
+    "eval_interval_epochs": 5,
+    "inference_batch_size": 16,
+    "search_batch_norm": true,
+    "search_batch_norm_per_position": true,
+    "inference_pad_batches": true,
+    "prediction_cache_size": 10000
+  },
+  "optimizer_updates": 0,
+  "seed": 132016,
+  "vs_initial_games": 128,
+  "vs_starting_games": 64,
+  "purpose": "Frozen independent confirmation; no training or promotion using these games. Two contrasts; alpha .025 each. Opening base families clustered for uncertainty.",
+  "candidate_fingerprint": "4e7f60a21a992d468886db45cb39e4ffea2a20dd4b2dd991d65b06b9b752b229",
+  "starting_fingerprint": "c08c6042514f863a2dd710dd601586382ae598b07c85dc4d2f39f4f09f96922b"
+}

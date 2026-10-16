@@ -1,0 +1,79 @@
+{
+  "status": "completed",
+  "phase": "completed",
+  "results": {
+    "vs_initial": {
+      "match": {
+        "games": 128,
+        "wins": 52,
+        "draws": 29,
+        "losses": 47,
+        "censored": 0,
+        "score": 0.51953125,
+        "one_sided_p": 0.34394267178984556,
+        "bootstrap_interval": [
+          0.453125,
+          0.59375
+        ],
+        "alpha": 0.025,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 15,
+            "draws": 13,
+            "losses": 36
+          },
+          "1": {
+            "wins": 37,
+            "draws": 16,
+            "losses": 11
+          }
+        },
+        "inference": {
+          "cache_hits": 400,
+          "forwards": 140892,
+          "positions": 688512,
+          "largest_batch": 15
+        }
+      },
+      "checkpoint_verified": true
+    },
+    "vs_starting_hybrid": {
+      "match": {
+        "games": 64,
+        "wins": 37,
+        "draws": 12,
+        "losses": 15,
+        "censored": 0,
+        "score": 0.671875,
+        "one_sided_p": 0.0015926267238883796,
+        "bootstrap_interval": [
+          0.5625,
+          0.7734375
+        ],
+        "alpha": 0.025,
+        "baseline_beaten": true,
+        "by_color": {
+          "0": {
+            "wins": 15,
+            "draws": 8,
+            "losses": 9
+          },
+          "1": {
+            "wins": 22,
+            "draws": 4,
+            "losses": 6
+          }
+        },
+        "inference": {
+          "cache_hits": 528,
+          "forwards": 74208,
+          "positions": 334820,
+          "largest_batch": 14
+        }
+      },
+      "checkpoint_verified": true
+    }
+  },
+  "active_arm": "vs_starting_hybrid"
+}

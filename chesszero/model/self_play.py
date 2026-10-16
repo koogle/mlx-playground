@@ -28,6 +28,7 @@ def play_single_game(
     try:
         game = ChessGame()
         game_history = []
+        played_moves = []
 
         pbar = tqdm(
             desc=f"Game {game_id}",
@@ -53,6 +54,7 @@ def play_single_game(
             game_history.append((state, policy, None))
             if not game.make_move(move[0], move[1]):
                 raise RuntimeError("Search returned an illegal move")
+            played_moves.append(move)
 
             mcts.advance_root(move, game.board)
             pbar.update(1)
@@ -71,6 +73,7 @@ def play_single_game(
             {
                 "game_id": game_id,
                 "history": game_history,
+                "moves": played_moves,
                 "white_result": white_result,
                 "black_result": black_result,
                 "n_moves": len(game_history),

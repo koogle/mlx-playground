@@ -114,30 +114,10 @@ class Trainer:
                 if (epoch + 1) % self.config.eval_interval_epochs == 0:
                     self.logger.info("\n=== Running Evaluation ===")
 
-                    try:
-                        result = self.evaluate_against_best(
-                            n_games=self.config.n_eval_games,
-                            max_workers=n_workers,
-                            seed=20000 + (epoch + 1) * self.config.n_eval_games,
-                        )
-                    except IncompleteEvaluationError as error:
-                        self.logger.warning(
-                            "Rejecting incomplete evaluation: %s", error
-                        )
-                        self._revert_to_best()
-                        self._save_checkpoint(epoch + 1)
-                        continue
-                    if result is None:
-                        self._accept_current_model()
-                    else:
-                        score, wins, losses, draws = result
-                        self.logger.info(
-                            f"Evaluation score: {score:.2%}; W/D/L: {wins}/{draws}/{losses}"
-                        )
-                        if score > 0.55:
-                            self._accept_current_model(score)
-                        else:
-                            self._revert_to_best()
+                    self.consider_candidate(
+                        n_workers=n_workers,
+                        seed=20000 + (epoch + 1) * self.config.n_eval_games,
+                    )
                 self._save_checkpoint(epoch + 1)
 
             total_time = time.time() - start_time
@@ -169,6 +149,38 @@ class Trainer:
         # overwrite the accepted model's moments/step.
         self.best_optimizer_state = tree_map(lambda x: x, self.optimizer.state)
         self.best_model_win_rate = score
+
+    def consider_candidate(self, n_workers=8, seed=20000):
+        """Apply the same promotion/rejection rule in CLI and experiment runs."""
+        if self.best_model is None:
+            raise RuntimeError("Establish the accepted teacher before training")
+        try:
+            result = self.evaluate_against_best(
+                n_games=self.config.n_eval_games, max_workers=n_workers, seed=seed
+            )
+        except IncompleteEvaluationError as error:
+            self.logger.warning("Rejecting incomplete evaluation: %s", error)
+            self._revert_to_best()
+            return dict(accepted=False, score=None, reason=str(error))
+        if result is None:
+            raise RuntimeError("Promotion evaluation returned no result")
+        score, wins, losses, draws = result
+        accepted = score > 0.55
+        self.logger.info(
+            "Candidate %s: score %.2f%%; W/D/L %d/%d/%d",
+            "accepted" if accepted else "rejected",
+            score * 100,
+            wins,
+            draws,
+            losses,
+        )
+        if accepted:
+            self._accept_current_model(score)
+        else:
+            self._revert_to_best()
+        return dict(
+            accepted=accepted, score=score, wins=wins, losses=losses, draws=draws
+        )
 
     def _revert_to_best(self):
         self.logger.info("Reverting to best model and its optimizer state")

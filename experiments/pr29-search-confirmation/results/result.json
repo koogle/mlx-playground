@@ -1,0 +1,93 @@
+{
+  "status": "completed",
+  "phase": "completed",
+  "results": {
+    "neural": {
+      "match": {
+        "games": 128,
+        "wins": 27,
+        "draws": 47,
+        "losses": 53,
+        "censored": 1,
+        "score": 0.39453125,
+        "one_sided_p": 0.9988377293559556,
+        "bootstrap_interval": [
+          0.33984375,
+          0.44140625
+        ],
+        "alpha": 0.025,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 10,
+            "draws": 18,
+            "losses": 35
+          },
+          "1": {
+            "wins": 17,
+            "draws": 29,
+            "losses": 18
+          }
+        },
+        "inference": {
+          "cache_hits": 419,
+          "forwards": 367983,
+          "positions": 2279304,
+          "largest_batch": 15
+        }
+      },
+      "checkpoint_verified": true,
+      "initial_fingerprint": "73ff231021d0d6aa354250bdd90684639e3e7735878dec361e5f3ca08bb35700",
+      "candidate_simulations": 1848867,
+      "baseline_simulations": 465216
+    },
+    "zero": {
+      "match": {
+        "games": 128,
+        "wins": 41,
+        "draws": 57,
+        "losses": 30,
+        "censored": 0,
+        "score": 0.54296875,
+        "one_sided_p": 0.11754878120417092,
+        "bootstrap_interval": [
+          0.4765625,
+          0.6015625
+        ],
+        "alpha": 0.025,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 16,
+            "draws": 31,
+            "losses": 17
+          },
+          "1": {
+            "wins": 25,
+            "draws": 26,
+            "losses": 13
+          }
+        },
+        "inference": {
+          "cache_hits": 920,
+          "forwards": 281972,
+          "positions": 1731281,
+          "largest_batch": 15
+        }
+      },
+      "checkpoint_verified": true,
+      "initial_fingerprint": "73ff231021d0d6aa354250bdd90684639e3e7735878dec361e5f3ca08bb35700",
+      "candidate_simulations": 1387276,
+      "baseline_simulations": 348608
+    }
+  },
+  "active_arm": "zero",
+  "paired_comparison": {
+    "zero_minus_neural": 0.1484375,
+    "family_interval95": [
+      0.0859375,
+      0.20703125
+    ],
+    "note": "Relative256vs64 scores under different value conditions, not direct zero-vs-neural strength. Censoring separately."
+  }
+}

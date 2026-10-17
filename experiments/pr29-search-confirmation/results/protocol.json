@@ -1,0 +1,45 @@
+{
+  "source_revision": "0d6d074fef1b1bb3b66f7194b789ac9731064082",
+  "arms": [
+    "neural",
+    "zero"
+  ],
+  "seed": 222016,
+  "games_per_arm": 128,
+  "optimizer_updates": 0,
+  "config": {
+    "n_residual_blocks": 19,
+    "n_filters": 256,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 64,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "learning_rate": 0.0001,
+    "accumulate_gradients": false,
+    "n_games_per_iteration": 32,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "n_eval_games": 40,
+    "eval_interval_epochs": 5,
+    "inference_batch_size": 16,
+    "search_batch_norm": true,
+    "search_batch_norm_per_position": true,
+    "inference_pad_batches": true,
+    "prediction_cache_size": 10000
+  },
+  "candidate_cap": 256,
+  "baseline_cap": 64,
+  "earlystop_unchanged": true,
+  "alpha_per_arm": 0.025,
+  "paired_contrast": "zero-minus-neural budget score;16opening-family bootstrap95%"
+}

@@ -1,0 +1,19 @@
+{
+  "run_id": "pr29-legal-training-norm-20261017-060455",
+  "function_call_id": "fc-01M547D71RXEMEXWP84WNJMJ0H",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-legal-training-norm-20261017-060455",
+  "source_revision": "064253d1c6d51c968446878fa24844af5b4ad696",
+  "source_run": "pr29-random-restart-20261015-085706",
+  "training_games": 32,
+  "validation_games": 8,
+  "source_epoch": 0,
+  "discovery_match_games": 32,
+  "fresh_training_games": 0,
+  "source_data": "pr29-controlled-learning-20261016-113623",
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "search_batch_norm": true,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

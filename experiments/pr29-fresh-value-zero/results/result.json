@@ -1,0 +1,47 @@
+{
+  "status": "completed",
+  "phase": "completed",
+  "results": {
+    "fresh_value_zero": {
+      "match": {
+        "games": 32,
+        "wins": 13,
+        "draws": 6,
+        "losses": 13,
+        "censored": 0,
+        "score": 0.5,
+        "one_sided_p": 0.577490508556366,
+        "bootstrap_interval": [
+          0.375,
+          0.625
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 6,
+            "draws": 3,
+            "losses": 7
+          },
+          "1": {
+            "wins": 7,
+            "draws": 3,
+            "losses": 6
+          }
+        },
+        "inference": {
+          "cache_hits": 151,
+          "forwards": 43008,
+          "positions": 155259,
+          "largest_batch": 13
+        }
+      },
+      "checkpoint_verified": true,
+      "candidate_fingerprint": "0beb7f7080c06f12af2f7f85181d1643ba31a5d25309eb0334b0a9b42516a7fb",
+      "baseline_fingerprint": "73ff231021d0d6aa354250bdd90684639e3e7735878dec361e5f3ca08bb35700",
+      "candidate_simulations": 77376,
+      "baseline_simulations": 77440
+    }
+  },
+  "active_arm": "fresh_value_zero"
+}

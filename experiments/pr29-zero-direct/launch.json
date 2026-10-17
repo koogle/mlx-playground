@@ -1,0 +1,20 @@
+{
+  "run_id": "pr29-zero-direct-20261017-135120",
+  "function_call_id": "fc-01M55238JZMDZ62MD6FW65QQQD",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-zero-direct-20261017-135120",
+  "source_revision": "f2f185019931d0e58e2d2da7f9c0f26c66537b2c",
+  "source_run": "pr29-random-restart-20261015-085706",
+  "training_games": 0,
+  "source_study": "pr29-random-restart-20261015-085706",
+  "source_epochs": [
+    0
+  ],
+  "confirmation_match_games": 128,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

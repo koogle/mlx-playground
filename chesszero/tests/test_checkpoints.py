@@ -8,7 +8,7 @@ import numpy as np
 from mlx.utils import tree_flatten
 
 from config.model_config import ModelConfig
-from model.training import Trainer
+from model.training import Trainer, IncompleteEvaluationError
 from model.mcts import Node
 from chess_engine.bitboard import BitBoard
 
@@ -62,6 +62,83 @@ class TestCheckpoints(unittest.TestCase):
         self.assert_trees_equal(trainer.model.parameters(), accepted_model)
         self.assert_trees_equal(trainer.optimizer.state, accepted_optimizer)
 
+    def test_loop_promotes_winner_then_rejects_and_resumes_full_teacher(self):
+        trainer = self.trainer()
+        candidates, teachers = [], []
+
+        def generate(teacher, *args):
+            self.assertIs(teacher, trainer.best_model)
+            self.assertIsNot(teacher, trainer.model)
+            teachers.append(teacher.parameters())
+            return []
+
+        def evaluate(**kwargs):
+            self.assertEqual(
+                int(trainer.optimizer.state["step"]), 2 * (len(candidates) + 1)
+            )
+            candidates.append(trainer.model.parameters())
+            return (0.6, 24, 16, 0) if len(candidates) == 1 else (0.5, 0, 0, 40)
+
+        with (
+            patch("model.training.generate_games", side_effect=generate),
+            patch(
+                "model.training.create_batches",
+                side_effect=lambda *args: iter([self.batch] * 2),
+            ),
+            patch.object(trainer, "evaluate_against_best", side_effect=evaluate),
+        ):
+            trainer.train(n_epochs=2, n_workers=2)
+        self.assert_trees_equal(teachers[1], candidates[0])
+        self.assert_trees_equal(trainer.model.parameters(), candidates[0])
+        self.assertEqual(int(trainer.optimizer.state["step"]), 2)
+        resumed = self.trainer(resume_epoch=2)
+        self.assertEqual(resumed.start_epoch, 2)
+        self.assert_trees_equal(resumed.model.parameters(), candidates[0])
+        self.assert_trees_equal(resumed.best_model.parameters(), candidates[0])
+        self.assert_trees_equal(resumed.optimizer.state, trainer.optimizer.state)
+        self.assert_trees_equal(resumed.best_optimizer_state, trainer.optimizer.state)
+
+    def test_incomplete_first_match_reverts_to_initial_checkpoint(self):
+        trainer = self.trainer()
+        initial = trainer.model.parameters()
+        with (
+            patch("model.training.generate_games", return_value=[]),
+            patch("model.training.create_batches", return_value=iter([self.batch])),
+            patch.object(
+                trainer,
+                "evaluate_against_best",
+                side_effect=IncompleteEvaluationError("one missing game"),
+            ),
+        ):
+            trainer.train(n_epochs=1)
+        self.assert_trees_equal(trainer.model.parameters(), initial)
+        self.assertEqual(int(trainer.optimizer.state["step"]), 0)
+        self.assertEqual(int(self.trainer(resume_epoch=1).optimizer.state["step"]), 0)
+
+    def test_self_play_keeps_accepted_teacher_between_evaluations(self):
+        trainer = self.trainer()
+        trainer.config.eval_interval_epochs = 2
+        initial = trainer.model.parameters()
+
+        def generate(teacher, *args):
+            self.assert_trees_equal(teacher.parameters(), initial)
+            return []
+
+        with (
+            patch("model.training.generate_games", side_effect=generate) as games,
+            patch(
+                "model.training.create_batches",
+                side_effect=lambda *args: iter([self.batch]),
+            ),
+            patch.object(
+                trainer, "evaluate_against_best", return_value=(0.5, 0, 0, 40)
+            ) as evaluation,
+        ):
+            trainer.train(n_epochs=2)
+        self.assertEqual(games.call_count, 2)
+        self.assertEqual(evaluation.call_count, 1)
+        self.assert_trees_equal(trainer.model.parameters(), initial)
+
     def test_interrupted_and_regular_snapshots_are_separate_and_keep_best(self):
         trainer = self.trainer()
         trainer.train_on_batch(self.batch)
@@ -96,10 +173,10 @@ class TestCheckpoints(unittest.TestCase):
         )
         self.trainer(resume_epoch=1)
 
-    def test_draws_count_as_games_but_not_wins(self):
-        self.assertEqual(Trainer._evaluation_score(0, 0, 40), 0.0)
-        self.assertEqual(Trainer._evaluation_score(1, 0, 39), 0.025)
-        self.assertEqual(Trainer._evaluation_score(6, 4, 10), 0.3)
+    def test_promotion_counts_draws_as_half_a_point(self):
+        self.assertEqual(Trainer._evaluation_score(0, 0, 40), 0.5)
+        self.assertEqual(Trainer._evaluation_score(1, 0, 39), 0.5125)
+        self.assertEqual(Trainer._evaluation_score(6, 4, 10), 0.55)
         self.assertEqual(Trainer._evaluation_score(24, 16, 0), 0.6)
         with self.assertRaises(ValueError):
             Trainer._evaluation_score(0, 0, 0)

@@ -1,10 +1,15 @@
 import numpy as np
-import mlx.core as mx
 from typing import List, Tuple, Set, Dict
 from chess_engine.bitboard import BitBoard
 from cachetools import LRUCache
 from config.model_config import ModelConfig
 from model.move_encoding import MoveDestination, encode_move
+from model.inference_mode import (
+    search_inference_mode,
+    predict_search_batch,
+    prediction_cache_safe,
+)
+from contextlib import nullcontext
 
 
 class Node:
@@ -309,7 +314,7 @@ class MCTS:
         """Reuse the network input tensor for a physical position."""
         key = self._board_key(board)
         if key not in self._board_state_cache:
-            self._board_state_cache[key] = mx.array(board.state, dtype=mx.float32)[
+            self._board_state_cache[key] = np.array(board.state, dtype=np.float32)[
                 None, ...
             ]
         return self._board_state_cache[key]
@@ -326,22 +331,26 @@ class MCTS:
         return self._move_list_cache[key]
 
     def _evaluate_board(self, board):
-        """Cache policy/value together while one fixed model runs in eval mode."""
+        """Reuse predictions only when normalization is independent of the batch."""
         inputs = np.asarray(board.state, dtype=np.float32)
         key = (self.cache.model_version, inputs.shape, inputs.tobytes())
-        cacheable = not getattr(self.model, "training", False)
-        if not cacheable:
-            # Training-mode calls may change BatchNorm state or use stochastic
-            # layers. Preserve their behavior rather than reusing an evaluation.
-            self._evaluation_cache.clear()
-        if cacheable and key in self._evaluation_cache:
+        if prediction_cache_safe(self.config) and key in self._evaluation_cache:
             return self._evaluation_cache[key]
-        policies, values = self.model(self._get_board_state(board))
-        mx.eval(policies, values)
+        states = self._get_board_state(board)
+        if getattr(self.model, "training", None) is not None:
+            # Interactive/local network calls still require MLX arrays. CPU pipe
+            # workers keep NumPy inputs and never import MLX.
+            import mlx.core as mx
+
+            states = mx.array(states)
+        if getattr(self.model, "training", None) is not None:
+            policies, values = predict_search_batch(self.model, states, self.config)
+        else:
+            policies, values = self.model(states)
         policy = np.array(policies[0])
         policy.flags.writeable = False
         result = policy, float(values[0].item())
-        if cacheable:
+        if prediction_cache_safe(self.config):
             self._evaluation_cache[key] = result
         return result
 
@@ -362,48 +371,58 @@ class MCTS:
         return root
 
     def get_move(self, board: BitBoard, temperature: float = 0.0):
-        was_training = self.model.training
-        self.model.eval()
-        try:
-            self.cache.bind(self.model, self.model_version)
-            # Reuse is valid only within one fixed model and exact history path.
-            if (
-                self.root_node is None
-                or self._root_model_version != self.cache.model_version
-                or not self._same_position(self.root_node.board, board)
-            ):
-                self.root_node = Node(
-                    self._get_root_board(board),
-                    exploration_noise=self.exploration_noise,
-                    board_factory=self._get_child_board,
-                )
-                self._root_model_version = self.cache.model_version
-            if not self.root_node.is_expanded:
-                policy, value = self._evaluate_board(self.root_node.board)
-                self._expand_node(self.root_node, policy, value)
+        # Local callers (e.g. interactive play) may pass a network directly.
+        # Pipe clients have no mode: their parent owns normalization state.
+        context = (
+            search_inference_mode(
+                self.model,
+                self.config.search_batch_norm,
+                self.config.search_batch_norm_per_position,
+            )
+            if getattr(self.model, "training", None) is not None
+            else nullcontext()
+        )
+        with context:
+            return self._search_move(board, temperature)
 
-            if not self.root_node.children:
-                return None
+    def _search_move(self, board: BitBoard, temperature: float = 0.0):
+        self.cache.bind(self.model, self.model_version)
+        # Reuse is valid only within one fixed model and exact history path.
+        if (
+            self.root_node is None
+            or self._root_model_version != self.cache.model_version
+            or not self._same_position(self.root_node.board, board)
+        ):
+            self.root_node = Node(
+                self._get_root_board(board),
+                exploration_noise=self.exploration_noise,
+                board_factory=self._get_child_board,
+            )
+            self._root_model_version = self.cache.model_version
+        if not self.root_node.is_expanded:
+            policy, value = self._evaluate_board(self.root_node.board)
+            self._expand_node(self.root_node, policy, value)
 
-            root_priors = self._root_search_priors(self.root_node)
+        if not self.root_node.children:
+            return None
 
-            # Complete each simulation before selecting the next path.
-            for simulations_completed in range(1, self.config.n_simulations + 1):
-                self._simulate(self.root_node, root_priors)
+        root_priors = self._root_search_priors(self.root_node)
 
-                # Check if a move clearly dominates
-                if simulations_completed >= 70 and self.should_stop(self.root_node):
-                    if self.debug:
-                        print(
-                            f"Stopping simulations early at simulation {simulations_completed} of {self.config.n_simulations}"
-                        )
-                    break
+        # Complete each simulation before selecting the next path.
+        for simulations_completed in range(1, self.config.n_simulations + 1):
+            self._simulate(self.root_node, root_priors)
 
-            # Select move based on temperature
-            move = self._select_move_with_temperature(self.root_node, temperature)
-            return move
-        finally:
-            self.model.train(was_training)
+            # Check if a move clearly dominates
+            if simulations_completed >= 70 and self.should_stop(self.root_node):
+                if self.debug:
+                    print(
+                        f"Stopping simulations early at simulation {simulations_completed} of {self.config.n_simulations}"
+                    )
+                break
+
+        # Select move based on temperature
+        move = self._select_move_with_temperature(self.root_node, temperature)
+        return move
 
     def _select_move_with_temperature(
         self, node: Node, temperature: float

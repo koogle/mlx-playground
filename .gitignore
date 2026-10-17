@@ -182,3 +182,7 @@ data/speech_commands_v2
 data/speech-commands-v2.zip
 
 cifar-10/*
+
+# PR29 research is preserved on archive/pr29-training-research-20261017.
+# Keep local Modal monitors available without adding their artifacts to this PR.
+/experiments/pr29-*/

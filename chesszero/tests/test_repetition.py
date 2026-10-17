@@ -1,4 +1,8 @@
 import unittest
+import json
+from pathlib import Path
+import chess
+from unittest.mock import patch
 
 import numpy as np
 
@@ -38,6 +42,45 @@ class TestRepetition(unittest.TestCase):
             changed = board.copy()
             changed.state[plane].fill(0)
             self.assertNotEqual(original, changed.get_repetition_hash())
+
+    def test_hash_collisions_do_not_merge_different_positions(self):
+        # Integer digests previously made the third distinct position a draw.
+        # Dictionary keys must retain equality even when a digest collides.
+        with patch("chess_engine.bitboard.hash", return_value=7, create=True):
+            board = BitBoard()
+            for source, target in (
+                ((1, 4), (3, 4)),
+                ((6, 4), (4, 4)),
+                ((0, 6), (2, 5)),
+            ):
+                self.assertTrue(board.make_move(source, target))
+                self.assertFalse(board.is_repetition())
+                self.assertIsNone(board.get_game_result())
+            self.assertEqual(len(board.position_history), 4)
+
+    def test_recorded_modal_game_is_not_a_repetition_draw(self):
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures/repetition_collision.json").read_text()
+        )
+        board, oracle = BitBoard(), chess.Board()
+        for uci in fixture["moves"].split():
+            move = chess.Move.from_uci(uci)
+            source = (
+                chess.square_rank(move.from_square),
+                chess.square_file(move.from_square),
+            )
+            target = (
+                chess.square_rank(move.to_square),
+                chess.square_file(move.to_square),
+            )
+            if move.promotion:
+                target += (move.promotion - 1,)
+            self.assertTrue(board.make_move(source, target))
+            oracle.push(move)
+        self.assertEqual(oracle.fen(), fixture["final_fen"])
+        self.assertIsNone(oracle.outcome(claim_draw=True))
+        self.assertFalse(board.is_repetition())
+        self.assertIsNone(board.get_game_result())
 
     def test_rejected_move_does_not_change_repetition_history(self):
         board = BitBoard()

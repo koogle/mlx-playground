@@ -1,0 +1,346 @@
+{
+  "cases": [
+    {
+      "fen": "3Q4/8/8/8/8/6K1/8/6k1 w - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "d8f8",
+        "d8d7",
+        "d8f6",
+        "d8d6",
+        "d8b6",
+        "d8d5",
+        "d8d4",
+        "d8d3",
+        "d8d2",
+        "d8d1"
+      ],
+      "chosen": "d8d1",
+      "solved": true,
+      "root_visits": 64
+    },
+    {
+      "fen": "3Q4/8/8/8/8/6K1/8/6k1 w - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "d8f8",
+        "d8d7",
+        "d8f6",
+        "d8d6",
+        "d8b6",
+        "d8d5",
+        "d8d4",
+        "d8d3",
+        "d8d2",
+        "d8d1"
+      ],
+      "chosen": "d8d1",
+      "solved": true,
+      "root_visits": 70
+    },
+    {
+      "fen": "6K1/8/6k1/8/8/8/8/3q4 b - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "d1d8",
+        "d1d7",
+        "d1d6",
+        "d1d5",
+        "d1d4",
+        "d1f3",
+        "d1d3",
+        "d1b3",
+        "d1d2",
+        "d1f1"
+      ],
+      "chosen": "d1d8",
+      "solved": true,
+      "root_visits": 64
+    },
+    {
+      "fen": "6K1/8/6k1/8/8/8/8/3q4 b - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "d1d8",
+        "d1d7",
+        "d1d6",
+        "d1d5",
+        "d1d4",
+        "d1f3",
+        "d1d3",
+        "d1b3",
+        "d1d2",
+        "d1f1"
+      ],
+      "chosen": "d1d8",
+      "solved": true,
+      "root_visits": 70
+    },
+    {
+      "fen": "7k/8/8/5K2/8/8/8/6Q1 w - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "f5f6"
+      ],
+      "chosen": "g1b1",
+      "solved": false,
+      "root_visits": 64
+    },
+    {
+      "fen": "7k/8/8/5K2/8/8/8/6Q1 w - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "f5f6"
+      ],
+      "chosen": "g1b1",
+      "solved": false,
+      "root_visits": 256
+    },
+    {
+      "fen": "6q1/8/8/8/5k2/8/8/7K b - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "f4f3"
+      ],
+      "chosen": "g8b3",
+      "solved": false,
+      "root_visits": 64
+    },
+    {
+      "fen": "6q1/8/8/8/5k2/8/8/7K b - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "f4f3"
+      ],
+      "chosen": "g8b3",
+      "solved": false,
+      "root_visits": 256
+    },
+    {
+      "fen": "8/Q7/8/8/8/5K1k/8/8 w - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "a7h7",
+        "a7g7",
+        "a7g1"
+      ],
+      "chosen": "a7h7",
+      "solved": true,
+      "root_visits": 64
+    },
+    {
+      "fen": "8/Q7/8/8/8/5K1k/8/8 w - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "a7h7",
+        "a7g7",
+        "a7g1"
+      ],
+      "chosen": "a7h7",
+      "solved": true,
+      "root_visits": 70
+    },
+    {
+      "fen": "8/8/5k1K/8/8/8/q7/8 b - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "a2g8",
+        "a2h2",
+        "a2g2"
+      ],
+      "chosen": "a2h2",
+      "solved": true,
+      "root_visits": 64
+    },
+    {
+      "fen": "8/8/5k1K/8/8/8/q7/8 b - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "a2g8",
+        "a2h2",
+        "a2g2"
+      ],
+      "chosen": "a2h2",
+      "solved": true,
+      "root_visits": 70
+    },
+    {
+      "fen": "1k6/8/2K5/6Q1/8/8/8/8 w - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "g5g7",
+        "g5e7",
+        "g5a5"
+      ],
+      "chosen": "g5e3",
+      "solved": false,
+      "root_visits": 64
+    },
+    {
+      "fen": "1k6/8/2K5/6Q1/8/8/8/8 w - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "g5g7",
+        "g5e7",
+        "g5a5"
+      ],
+      "chosen": "g5g7",
+      "solved": true,
+      "root_visits": 141
+    },
+    {
+      "fen": "8/8/8/8/6q1/2k5/8/1K6 b - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "g4a4",
+        "g4g2",
+        "g4e2"
+      ],
+      "chosen": "g4e4",
+      "solved": false,
+      "root_visits": 64
+    },
+    {
+      "fen": "8/8/8/8/6q1/2k5/8/1K6 b - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "g4a4",
+        "g4g2",
+        "g4e2"
+      ],
+      "chosen": "g4g2",
+      "solved": true,
+      "root_visits": 126
+    },
+    {
+      "fen": "8/4K3/7k/3Q4/8/8/8/8 w - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "e7f7"
+      ],
+      "chosen": "d5h1",
+      "solved": false,
+      "root_visits": 64
+    },
+    {
+      "fen": "8/4K3/7k/3Q4/8/8/8/8 w - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "e7f7"
+      ],
+      "chosen": "e7f7",
+      "solved": true,
+      "root_visits": 132
+    },
+    {
+      "fen": "8/8/8/8/3q4/7K/4k3/8 b - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "e2f2"
+      ],
+      "chosen": "d4e3",
+      "solved": false,
+      "root_visits": 64
+    },
+    {
+      "fen": "8/8/8/8/3q4/7K/4k3/8 b - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "e2f2"
+      ],
+      "chosen": "e2f2",
+      "solved": true,
+      "root_visits": 256
+    },
+    {
+      "fen": "8/8/8/8/8/2Q3K1/8/6k1 w - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "c3f6",
+        "c3c5",
+        "c3d4",
+        "c3c4",
+        "c3e3",
+        "c3d3",
+        "c3b3",
+        "c3d2",
+        "c3c2",
+        "c3b2",
+        "c3e1",
+        "c3c1",
+        "c3a1"
+      ],
+      "chosen": "c3e1",
+      "solved": true,
+      "root_visits": 64
+    },
+    {
+      "fen": "8/8/8/8/8/2Q3K1/8/6k1 w - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "c3f6",
+        "c3c5",
+        "c3d4",
+        "c3c4",
+        "c3e3",
+        "c3d3",
+        "c3b3",
+        "c3d2",
+        "c3c2",
+        "c3b2",
+        "c3e1",
+        "c3c1",
+        "c3a1"
+      ],
+      "chosen": "c3e1",
+      "solved": true,
+      "root_visits": 70
+    },
+    {
+      "fen": "6K1/8/2q3k1/8/8/8/8/8 b - - 0 1",
+      "budget": 64,
+      "winning_moves": [
+        "c6e8",
+        "c6c8",
+        "c6a8",
+        "c6d7",
+        "c6c7",
+        "c6b7",
+        "c6e6",
+        "c6d6",
+        "c6b6",
+        "c6d5",
+        "c6c5",
+        "c6c4",
+        "c6f3"
+      ],
+      "chosen": "c6a8",
+      "solved": true,
+      "root_visits": 64
+    },
+    {
+      "fen": "6K1/8/2q3k1/8/8/8/8/8 b - - 0 1",
+      "budget": 256,
+      "winning_moves": [
+        "c6e8",
+        "c6c8",
+        "c6a8",
+        "c6d7",
+        "c6c7",
+        "c6b7",
+        "c6e6",
+        "c6d6",
+        "c6b6",
+        "c6d5",
+        "c6c5",
+        "c6c4",
+        "c6f3"
+      ],
+      "chosen": "c6a8",
+      "solved": true,
+      "root_visits": 70
+    }
+  ],
+  "source": "python-chess exhaustive three-ply mate oracle",
+  "training_updates": 0
+}

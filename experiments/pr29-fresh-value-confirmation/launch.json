@@ -1,0 +1,20 @@
+{
+  "run_id": "pr29-fresh-value-confirmation-20261017-154901",
+  "function_call_id": "fc-01M558TR2P13VPJVZZGFDNJZZZ",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-fresh-value-confirmation-20261017-154901",
+  "source_revision": "2c46e7a475eea95a6dc514e61e015d804d8f49f2",
+  "source_run": "pr29-random-restart-20261015-085706",
+  "training_games": 0,
+  "source_study": "pr29-data-refresh-20261017-080116",
+  "source_epochs": [
+    78
+  ],
+  "confirmation_match_games": 256,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

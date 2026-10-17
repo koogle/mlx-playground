@@ -1,0 +1,45 @@
+{
+  "phase": "completed",
+  "results": {
+    "zero_vs_neural": {
+      "match": {
+        "games": 128,
+        "wins": 46,
+        "draws": 37,
+        "losses": 45,
+        "censored": 0,
+        "score": 0.50390625,
+        "one_sided_p": 0.5,
+        "bootstrap_interval": [
+          0.42578125,
+          0.578125
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 23,
+            "draws": 17,
+            "losses": 24
+          },
+          "1": {
+            "wins": 23,
+            "draws": 20,
+            "losses": 21
+          }
+        },
+        "inference": {
+          "cache_hits": 428,
+          "forwards": 137136,
+          "positions": 685363,
+          "largest_batch": 14
+        }
+      },
+      "checkpoint_verified": true,
+      "initial_fingerprint": "73ff231021d0d6aa354250bdd90684639e3e7735878dec361e5f3ca08bb35700",
+      "candidate_simulations": 341184,
+      "baseline_simulations": 340992
+    }
+  },
+  "active_arm": "zero_vs_neural"
+}

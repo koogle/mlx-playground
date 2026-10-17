@@ -1,0 +1,7 @@
+{
+  "policy_exact": true,
+  "candidate_value_zero": true,
+  "initial_step": 0,
+  "weights_identical": true,
+  "baseline_neural": true
+}

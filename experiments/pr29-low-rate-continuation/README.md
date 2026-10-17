@@ -1,0 +1,7 @@
+# Full-model low-rate continuation
+
+Fresh-bank confirmation: rate1e-5 scored45W14D69L40.625%; rate1e-6 scored56W10D62L47.65625% againstinitial. All256gamescomplete and effectiveLR/fingerprintsverified. Neither shows superiority. Lower rate has avoided severe earlycollapse; sustainedlearning remains unproven.
+
+Resume lr_1e6 step78 includingAdam. Explicitly set effectiveLR1e-6 after state restore and assert everybatch. Use full learnedpolicy+value, no initialpolicy substitution or mirror inference. Initial accepted teacher is epoch0 because the startingcandidate has not beaten it. Three generations32freshgames=96. Each uses lastacceptedteacher, trains one orderedpass, saves fullcandidate+optimizer, assesses candidate32discoverygames, then40newpairedgate games vsaccepted. Promote onlyscore>55% withzero censor. Retain learner+optimizer acrossrejection; teacher changes onlyafterpromotion. Preserve rejectedcandidates and allfresharrays/moves.
+
+At end play startinglowratecandidate and finalacceptedmodel each128games vsinitial on same newseed182016 bank. If accepted remainsinitial, its match is an identicalmodelcontrol. Attemptedupdates counts newupdates after78; accepted_updates records absolute optimizerstep of acceptedcheckpoint (0 ifinitial). No evaluationrecycling in this controlled study; no productiondefaultchange. Final strength requires heldoutresult, not a gatewin. StandardtrainingBN; independent spatial searchBN/fixedshape16,64simulations throughout.

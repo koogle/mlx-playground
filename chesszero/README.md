@@ -47,16 +47,25 @@ Model Configuration:
    - Process isolation for memory safety and parallel execution
 
 2. Evaluation through self-play
-   - Regular evaluation against best model checkpoint
+   - Regular evaluation against the best model (default 100 games)
    - Parallel evaluation games for faster assessment
-   - Winning evaluation games recycled into training data
-   - Automatic model selection based on win rate
+   - Score counts draws as half a point; a candidate above the
+     acceptance threshold (default 55%) becomes the new best model
+   - Once a best model exists it generates the self-play games while the
+     current model keeps training, so a rejected candidate never discards
+     training progress (AlphaGo Zero style)
 
 3. Training optimization
-   - Efficient batch creation from both self-play and evaluation games
-   - Regular checkpointing with best model tracking
-   - Memory-optimized training process
-   - Using Adam optimizer
+   - Hundreds of self-play games per generation (default 400) feeding a
+     replay buffer of the most recent positions (default 500k)
+   - Minibatch Adam steps per generation sized by the fresh data (default
+     two samples per new position, capped at 500 steps) instead of one
+     averaged update; the held-out loss on each fresh generation is logged
+     before it enters the buffer as the generalization signal
+   - BatchNorm running statistics are recalibrated after each training
+     phase so the eval-mode network used by search matches the trained one
+   - Regular checkpointing with best model tracking (the replay buffer is
+     not checkpointed and refills from fresh generations after a resume)
 
 ## Performance Features
 - Multi-process game generation for both training and evaluation

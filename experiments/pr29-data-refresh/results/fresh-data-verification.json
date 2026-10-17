@@ -1,0 +1,14 @@
+{
+  "training_games": 32,
+  "validation_games": 8,
+  "training_positions": 6946,
+  "validation_positions": 1766,
+  "all_states_labels_legal_support_verified": true,
+  "teacher_fingerprint_unchanged": true,
+  "inference": {
+    "cache_hits": 3314,
+    "forwards": 77583,
+    "positions": 547493,
+    "largest_batch": 16
+  }
+}

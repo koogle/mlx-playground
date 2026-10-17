@@ -106,6 +106,19 @@ class TestGradientAccumulation(unittest.TestCase):
             self.split.train(n_epochs=1)
         self.assertEqual(int(self.split.optimizer.state["step"]), 0)
 
+    def test_target_signal_summary(self):
+        history = [
+            (mx.zeros((19, 8, 8)), mx.array([0.5, 0.5, 0.0]), None),  # uniform
+            (mx.ones((19, 8, 8)), mx.array([1.0, 0.0, 0.0]), None),  # one-hot
+        ]
+        self.split.config.policy_output_dim = 3
+        with patch.object(TinyNet, "forward_logits", self.flat_forward):
+            signal = self.split.describe_targets([(history, 1.0), (history, -1.0)])
+        # Two-move uniform rows have relative entropy 1; one-hot rows are skipped.
+        self.assertAlmostEqual(signal["policy_relative_entropy"], 1.0)
+        # Targets are +-1 with variance 1; an untrained head cannot beat constant.
+        self.assertLessEqual(signal["value_explained_variance"], 0.05)
+
     @staticmethod
     def flat_forward(model, states, original=TinyNet.forward_logits):
         # TinyNet takes two features; the loop feeds full board tensors.

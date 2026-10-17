@@ -107,6 +107,15 @@ class Trainer:
                     "Held-out loss on fresh positions before training: "
                     f"policy {held_out[1]:.4f}, value {held_out[2]:.4f}"
                 )
+                signal = self.describe_targets(games)
+                self.logger.info(
+                    "Fresh targets: value explained variance %.3f (<=0 means the "
+                    "value head predicts no better than a constant); policy target "
+                    "entropy %.2f of uniform over legal moves (1.0 means search "
+                    "added nothing beyond the prior and root noise)",
+                    signal["value_explained_variance"],
+                    signal["policy_relative_entropy"],
+                )
                 added = self.replay.add(games)
                 del games
                 gc.collect()
@@ -232,6 +241,43 @@ class Trainer:
         wanted = self.config.replay_sample_ratio * n_new_positions
         steps = int(np.ceil(wanted / self.config.batch_size))
         return max(1, min(steps, self.config.max_training_steps))
+
+    def describe_targets(self, games):
+        """Summarize how much learnable signal a generation's targets carry.
+
+        Value explained variance compares the eval-mode value head with the
+        constant predictor on these positions' outcomes. Policy relative entropy
+        is the mean entropy of the visit-count target divided by the entropy of
+        the uniform distribution over the same legal moves.
+        """
+        self.model.eval()
+        errors, targets, relative_entropies = [], [], []
+        for states, policies, values in create_batches(games, self.config.batch_size):
+            if not len(states):
+                continue
+            _, predicted = self.model.forward_logits(states)
+            mx.eval(predicted)
+            predicted = np.array(predicted).reshape(-1)
+            values = np.array(values)
+            errors.append((predicted - values) ** 2)
+            targets.append(values)
+            policy = np.array(policies)
+            for row in policy:
+                support = row[row > 0]
+                if len(support) > 1:
+                    entropy = -float(np.sum(support * np.log(support)))
+                    relative_entropies.append(entropy / np.log(len(support)))
+        if not targets:
+            return {"value_explained_variance": 0.0, "policy_relative_entropy": 0.0}
+        targets = np.concatenate(targets)
+        mse = float(np.mean(np.concatenate(errors)))
+        variance = float(np.var(targets))
+        return {
+            "value_explained_variance": 1.0 - mse / variance if variance > 0 else 0.0,
+            "policy_relative_entropy": (
+                float(np.mean(relative_entropies)) if relative_entropies else 0.0
+            ),
+        }
 
     def evaluate_fresh_positions(self, games):
         """Average eval-mode losses over positions the model has not trained on."""

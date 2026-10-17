@@ -1,0 +1,33 @@
+{
+  "games": 128,
+  "wins": 59,
+  "draws": 20,
+  "losses": 49,
+  "censored": 0,
+  "score": 0.5390625,
+  "one_sided_p": 0.19328630449413042,
+  "bootstrap_interval": [
+    0.46484375,
+    0.60546875
+  ],
+  "alpha": 0.025,
+  "baseline_beaten": false,
+  "by_color": {
+    "0": {
+      "wins": 19,
+      "draws": 12,
+      "losses": 33
+    },
+    "1": {
+      "wins": 40,
+      "draws": 8,
+      "losses": 16
+    }
+  },
+  "inference": {
+    "cache_hits": 704,
+    "forwards": 165009,
+    "positions": 785916,
+    "largest_batch": 13
+  }
+}

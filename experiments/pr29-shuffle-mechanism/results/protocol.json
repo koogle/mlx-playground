@@ -1,0 +1,36 @@
+{
+  "source_revision": "e428550e2a2d6b5a9f2e4ff724c8f0f3d32c4ba3",
+  "source_study": "pr29-legal-shuffle-20261017-044626",
+  "config": {
+    "n_residual_blocks": 19,
+    "n_filters": 256,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 64,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "learning_rate": 0.0001,
+    "accumulate_gradients": false,
+    "n_games_per_iteration": 32,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "n_eval_games": 40,
+    "eval_interval_epochs": 5,
+    "inference_batch_size": 16,
+    "search_batch_norm": true,
+    "search_batch_norm_per_position": true,
+    "inference_pad_batches": true,
+    "prediction_cache_size": 10000
+  },
+  "optimizer_updates": 0,
+  "purpose": "Frozen shuffled legal_policy checkpoint78. Substitute initial policy or initial value, one output at a time, on same32game seed162016 discovery bank. No updates. Compare saved unmodified9.375% reference. Same normalization/search. Mechanism study, not strength confirmation."
+}

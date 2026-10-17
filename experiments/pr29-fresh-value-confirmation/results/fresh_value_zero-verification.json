@@ -1,0 +1,8 @@
+{
+  "policy_exact": true,
+  "candidate_value_zero": true,
+  "candidate_step": 78,
+  "effective_learning_rate": 0.0001,
+  "source_fingerprint_verified": true,
+  "baseline_neural": true
+}

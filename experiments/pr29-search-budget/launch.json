@@ -1,0 +1,20 @@
+{
+  "run_id": "pr29-search-budget-20261017-102401",
+  "function_call_id": "fc-01M54P7N7WPXSFJF9K63B792VK",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-search-budget-20261017-102401",
+  "source_revision": "b9b4c5b0dad61e48b96b6191788a8f4184435d7a",
+  "source_run": "pr29-random-restart-20261015-085706",
+  "training_games": 0,
+  "source_study": "pr29-random-restart-20261015-085706",
+  "source_epochs": [
+    0
+  ],
+  "discovery_match_games": 32,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

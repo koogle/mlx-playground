@@ -1,0 +1,12 @@
+{
+  "legal_minus_global": 0.29296875,
+  "paired_family_interval95": [
+    0.19140625,
+    0.3984375
+  ],
+  "censored": {
+    "legal_policy": 0,
+    "batch_training": 0
+  },
+  "note": "Censored scores conservatively counted zero; strength claims require zero censoring."
+}

@@ -1,0 +1,77 @@
+{
+  "source_revision": "db679602d5f836b3bb3c4bb40d73102fa7a1aef6",
+  "source": "/results/pr29-legal-policy-20261017-032425",
+  "optimizer_updates": 0,
+  "arms": [
+    "legal_policy",
+    "batch_training"
+  ],
+  "seed": 192016,
+  "games_per_checkpoint": 128,
+  "config": {
+    "n_residual_blocks": 19,
+    "n_filters": 256,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 64,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "learning_rate": 0.0001,
+    "accumulate_gradients": false,
+    "n_games_per_iteration": 32,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "n_eval_games": 40,
+    "eval_interval_epochs": 5,
+    "inference_batch_size": 16,
+    "search_batch_norm": true,
+    "search_batch_norm_per_position": true,
+    "inference_pad_batches": true,
+    "prediction_cache_size": 10000
+  },
+  "discovery_reference": {
+    "legal_policy": {
+      "games": 32,
+      "wins": 11,
+      "draws": 6,
+      "losses": 15,
+      "censored": 0,
+      "score": 0.4375,
+      "one_sided_p": 0.8365302085876465,
+      "bootstrap_interval": [
+        0.296875,
+        0.578125
+      ],
+      "alpha": 0.05,
+      "baseline_beaten": false,
+      "by_color": {
+        "0": {
+          "wins": 3,
+          "draws": 3,
+          "losses": 10
+        },
+        "1": {
+          "wins": 8,
+          "draws": 3,
+          "losses": 5
+        }
+      },
+      "inference": {
+        "cache_hits": 119,
+        "forwards": 48100,
+        "positions": 183517,
+        "largest_batch": 15
+      }
+    }
+  },
+  "purpose": "Fresh-bank confirmation of legal-action loss versus original global loss: frozen step78 checkpoints, identical128games each vs initial. Only source loss differs. Primary contrast paired16-family bootstrap of score difference; baseline tests alpha.025 each. No updates or selection on this bank."
+}

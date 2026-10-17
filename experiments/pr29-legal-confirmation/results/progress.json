@@ -1,0 +1,94 @@
+{
+  "phase": "completed",
+  "results": {
+    "legal_policy": {
+      "match": {
+        "games": 128,
+        "wins": 34,
+        "draws": 24,
+        "losses": 70,
+        "censored": 0,
+        "score": 0.359375,
+        "one_sided_p": 0.9998764420794677,
+        "bootstrap_interval": [
+          0.2578125,
+          0.46875
+        ],
+        "alpha": 0.025,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 10,
+            "draws": 10,
+            "losses": 44
+          },
+          "1": {
+            "wins": 24,
+            "draws": 14,
+            "losses": 26
+          }
+        },
+        "inference": {
+          "cache_hits": 453,
+          "forwards": 161918,
+          "positions": 777500,
+          "largest_batch": 13
+        }
+      },
+      "checkpoint_verified": true,
+      "fingerprint": "0c1dc08d6cfe74a1f1c98b87418814ac184f4bf103043902064e9a501000548c",
+      "effective_learning_rate": 9.999999747378752e-05
+    },
+    "batch_training": {
+      "match": {
+        "games": 128,
+        "wins": 0,
+        "draws": 17,
+        "losses": 111,
+        "censored": 0,
+        "score": 0.06640625,
+        "one_sided_p": 1.0,
+        "bootstrap_interval": [
+          0.03515625,
+          0.10546875
+        ],
+        "alpha": 0.025,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 0,
+            "draws": 7,
+            "losses": 57
+          },
+          "1": {
+            "wins": 0,
+            "draws": 10,
+            "losses": 54
+          }
+        },
+        "inference": {
+          "cache_hits": 404,
+          "forwards": 136258,
+          "positions": 685762,
+          "largest_batch": 13
+        }
+      },
+      "checkpoint_verified": true,
+      "fingerprint": "f540e8945da4666530603dbf8617436a373427472f571578f6ae4f79ba82c2c6",
+      "effective_learning_rate": 9.999999747378752e-05
+    }
+  },
+  "active_arm": "batch_training",
+  "paired_comparison": {
+    "legal_minus_global": 0.29296875,
+    "paired_family_interval95": [
+      0.19140625,
+      0.3984375
+    ],
+    "censored": {
+      "legal_policy": 0,
+      "batch_training": 0
+    },
+    "note": "Censored scores conservatively counted zero; strength claims require zero censoring."
+  }
+}

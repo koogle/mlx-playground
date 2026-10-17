@@ -1,0 +1,48 @@
+{
+  "source_revision": "830762cccf5f2c6c83177fb2b0d4fdd9484df79d",
+  "source": "/results/pr29-random-restart-20261015-085706/checkpoints",
+  "config": {
+    "n_residual_blocks": 19,
+    "n_filters": 256,
+    "input_shape": [
+      8,
+      8,
+      19
+    ],
+    "policy_output_dim": 4672,
+    "n_simulations": 64,
+    "c_puct": 1,
+    "dirichlet_alpha": 0.55,
+    "dirichlet_epsilon": 0.3,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "learning_rate": 0.0001,
+    "accumulate_gradients": false,
+    "n_games_per_iteration": 32,
+    "temperature": 1.0,
+    "temp_decay_steps": 30,
+    "temp_final": 0.5,
+    "debug": false,
+    "n_eval_games": 40,
+    "eval_interval_epochs": 5,
+    "inference_batch_size": 16,
+    "search_batch_norm": true,
+    "search_batch_norm_per_position": true,
+    "inference_pad_batches": true,
+    "prediction_cache_size": 10000
+  },
+  "arms": [
+    "legal_policy"
+  ],
+  "arm_learning_rates": {
+    "legal_policy": 0.0001
+  },
+  "training_games": 32,
+  "validation_games": 8,
+  "match_games": 32,
+  "data_seed_generation": 62016,
+  "discovery_opening_seed": 162016,
+  "confirmation_opening_seed": 92016,
+  "baseline_fingerprint": "73ff231021d0d6aa354250bdd90684639e3e7735878dec361e5f3ca08bb35700",
+  "note": "Mirror-paired training vs matched-normalization unaugmented control. Same original4935positions/shuffle62016/78Adamupdates1e-4/legalCE+valueMSE+L2. Each64position batch paired with exact color/rank mirrors, value labels unchanged; mean loss over128. Independent spatial training/search normalization. Same seed162016 discoverybank. All reflected planes/masks/labels oracle-verified. No production change."
+}

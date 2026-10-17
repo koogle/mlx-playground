@@ -1,0 +1,182 @@
+{
+  "status": "completed",
+  "phase": "completed",
+  "results": {
+    "legal_policy": {
+      "updates": 78,
+      "learning_rate": 0.0001,
+      "trace": [
+        {
+          "step": 1,
+          "losses": [
+            3.71117901802063,
+            3.012632131576538,
+            0.6768026351928711,
+            0.021744197234511375
+          ],
+          "validation": {
+            "policy_ce": 8.453548671260025,
+            "value_mse": 1.0220557899418024,
+            "by_color": {
+              "0": {
+                "count": 661,
+                "mean_value": 0.14686005252572665,
+                "mean_target": -0.5975794251134644,
+                "mse": 1.1959049174612764
+              },
+              "1": {
+                "count": 659,
+                "mean_value": 0.14344264416530028,
+                "mean_target": 0.6024279210925645,
+                "mse": 0.8476790474677927
+              }
+            }
+          }
+        },
+        {
+          "step": 8,
+          "losses": [
+            3.705233335494995,
+            3.115985870361328,
+            0.5675299763679504,
+            0.021717553958296776
+          ],
+          "validation": {
+            "policy_ce": 8.47343514326847,
+            "value_mse": 1.0012234589731246,
+            "by_color": {
+              "0": {
+                "count": 661,
+                "mean_value": 0.024984127623501055,
+                "mean_target": -0.5975794251134644,
+                "mse": 1.0292585587516117
+              },
+              "1": {
+                "count": 659,
+                "mean_value": 0.024472386190421844,
+                "mean_target": 0.6024279210925645,
+                "mse": 0.9731032754320325
+              }
+            }
+          }
+        },
+        {
+          "step": 32,
+          "losses": [
+            3.9279143810272217,
+            3.1938579082489014,
+            0.7126141786575317,
+            0.02144228108227253
+          ],
+          "validation": {
+            "policy_ce": 8.47604949691079,
+            "value_mse": 1.0024739734692496,
+            "by_color": {
+              "0": {
+                "count": 661,
+                "mean_value": 0.05039806755008838,
+                "mean_target": -0.5975794251134644,
+                "mse": 1.0562457906342724
+              },
+              "1": {
+                "count": 659,
+                "mean_value": 0.05107170221578098,
+                "mean_target": 0.6024279210925645,
+                "mse": 0.9485389641428764
+              }
+            }
+          }
+        },
+        {
+          "step": 78,
+          "losses": [
+            3.240309238433838,
+            2.8404526710510254,
+            0.37870463728904724,
+            0.021152054890990257
+          ],
+          "validation": {
+            "policy_ce": 8.466828123728435,
+            "value_mse": 1.5271028596925589,
+            "by_color": {
+              "0": {
+                "count": 661,
+                "mean_value": 0.1764351037484502,
+                "mean_target": -0.5975794251134644,
+                "mse": 1.4213667084391652
+              },
+              "1": {
+                "count": 659,
+                "mean_value": -0.19595931546510145,
+                "mean_target": 0.6024279210925645,
+                "mse": 1.6331599097357958
+              }
+            }
+          }
+        }
+      ],
+      "fingerprint": "309f6eef8c740206551964332b55fcfca21be51b48fb1e8ac1039a4f3637faa7",
+      "match": {
+        "games": 32,
+        "wins": 1,
+        "draws": 7,
+        "losses": 24,
+        "censored": 0,
+        "score": 0.140625,
+        "one_sided_p": 0.9999999701976776,
+        "bootstrap_interval": [
+          0.0625,
+          0.234375
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 1,
+            "draws": 5,
+            "losses": 10
+          },
+          "1": {
+            "wins": 0,
+            "draws": 2,
+            "losses": 14
+          }
+        },
+        "inference": {
+          "cache_hits": 132,
+          "forwards": 52879,
+          "positions": 222283,
+          "largest_batch": 15
+        }
+      }
+    }
+  },
+  "data": {
+    "train_positions": 4935,
+    "validation_positions": 1320,
+    "inference": {
+      "source": "/results/pr29-controlled-learning-20261016-113623",
+      "reused_data": true
+    }
+  },
+  "initial_probe": {
+    "policy_ce": 8.449084000153976,
+    "value_mse": 0.9975129174517783,
+    "by_color": {
+      "0": {
+        "count": 661,
+        "mean_value": -0.011499559999601746,
+        "mean_target": -0.5975794251134644,
+        "mse": 0.9848132006824645
+      },
+      "1": {
+        "count": 659,
+        "mean_value": -0.009733447229771625,
+        "mean_target": 0.6024279210925645,
+        "mse": 1.0102511766088593
+      }
+    }
+  },
+  "active_arm": "legal_policy",
+  "active_step": 78
+}

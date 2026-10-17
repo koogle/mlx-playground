@@ -1,0 +1,18 @@
+{
+  "run_id": "pr29-legal-confirmation-20261017-034516",
+  "function_call_id": "fc-01M53ZDH5SMD5QS7NS990JHJH1",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-legal-confirmation-20261017-034516",
+  "source_revision": "db679602d5f836b3bb3c4bb40d73102fa7a1aef6",
+  "source_run": "pr29-legal-policy-20261017-032425",
+  "training_games": 0,
+  "source_study": "pr29-legal-policy-20261017-032425",
+  "source_epoch": 78,
+  "confirmation_match_games": 256,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

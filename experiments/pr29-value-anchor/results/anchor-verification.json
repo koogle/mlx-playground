@@ -1,0 +1,9 @@
+{
+  "initial_fingerprint": "73ff231021d0d6aa354250bdd90684639e3e7735878dec361e5f3ca08bb35700",
+  "initial_anchor_mse": 1.2447814303210769e-09,
+  "training_positions": 4935,
+  "validation_positions": 1766,
+  "initial_value_mean": -0.011841058731079102,
+  "initial_value_std": 0.010866057127714157,
+  "outcome_targets_preserved": true
+}

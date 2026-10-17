@@ -1,0 +1,85 @@
+{
+  "status": "completed",
+  "phase": "completed",
+  "results": {
+    "8": {
+      "match": {
+        "games": 32,
+        "wins": 8,
+        "draws": 8,
+        "losses": 16,
+        "censored": 0,
+        "score": 0.375,
+        "one_sided_p": 0.9680426716804504,
+        "bootstrap_interval": [
+          0.234375,
+          0.515625
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 7,
+            "draws": 3,
+            "losses": 6
+          },
+          "1": {
+            "wins": 1,
+            "draws": 5,
+            "losses": 10
+          }
+        },
+        "inference": {
+          "cache_hits": 115,
+          "forwards": 59693,
+          "positions": 185805,
+          "largest_batch": 13
+        }
+      },
+      "checkpoint_verified": true,
+      "fingerprint": "3e909506023e177784d90eece3db8f741c3258bad7f9080adf3ca310c262de9d",
+      "effective_learning_rate": 9.999999747378752e-05,
+      "optimizer_step": 8
+    },
+    "32": {
+      "match": {
+        "games": 32,
+        "wins": 3,
+        "draws": 8,
+        "losses": 21,
+        "censored": 0,
+        "score": 0.21875,
+        "one_sided_p": 0.9999820590019226,
+        "bootstrap_interval": [
+          0.109375,
+          0.34375
+        ],
+        "alpha": 0.05,
+        "baseline_beaten": false,
+        "by_color": {
+          "0": {
+            "wins": 3,
+            "draws": 4,
+            "losses": 9
+          },
+          "1": {
+            "wins": 0,
+            "draws": 4,
+            "losses": 12
+          }
+        },
+        "inference": {
+          "cache_hits": 40,
+          "forwards": 53040,
+          "positions": 206455,
+          "largest_batch": 14
+        }
+      },
+      "checkpoint_verified": true,
+      "fingerprint": "c94091d384e54a5a932a4118cc3c5a6b88cfe3cf1781e51acd992beace007a12",
+      "effective_learning_rate": 9.999999747378752e-05,
+      "optimizer_step": 32
+    }
+  },
+  "active_step": 32
+}

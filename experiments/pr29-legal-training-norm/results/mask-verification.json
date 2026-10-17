@@ -1,0 +1,6 @@
+{
+  "train_positions": 4935,
+  "validation_positions": 1320,
+  "all_states_labels_targets_verified": true,
+  "mask_sha256": "e395cdbde71991215ac62a75c16a4593d5265f03f213224537c250f74f02a0db"
+}

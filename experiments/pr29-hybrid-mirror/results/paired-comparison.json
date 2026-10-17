@@ -1,9 +1,0 @@
-{
-  "paired_score_difference": 0.04296875,
-  "family_cluster_bootstrap_95_interval": [
-    -0.046875,
-    0.13671875
-  ],
-  "families": 16,
-  "complete_paired_games": 128
-}

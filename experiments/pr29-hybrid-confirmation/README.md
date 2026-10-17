@@ -1,5 +1,0 @@
-# Frozen accepted-hybrid confirmation
-
-Continuation completed96freshgames and259additionalupdates, with two rejections and one promotion atstep337. The initial-policy/trained-value hybrid scored30W9D25L53.90625% againstinitial on64held-outgames versus startinghybrid21W17D26L46.09375%. Neither establishes superiority; all128complete and checkpointsverified.
-
-Freeze acceptedstep337. Newopeningseed132016 generates64pairedpositions, explicitly disjoint from prior discovery, promotion and heldout sequences. Play128games againstinitial and64games againststartinghybrid (step78), no optimizerupdates or newtraining. Preserve all exact moves. Use identical64simulation search, independent spatialBN and fixedshape16. Both contrasts prespecified, alpha.025 each; bootstrap clusters the16baseopeningfamilies. Report censored separately; censoring blocks success. Assert frozen fingerprints before/after. This tests whether the prior promotion generalizes before extending training. No production behavior changed.

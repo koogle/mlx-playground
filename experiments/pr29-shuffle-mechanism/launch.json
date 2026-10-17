@@ -1,0 +1,18 @@
+{
+  "run_id": "pr29-shuffle-mechanism-20261017-051111",
+  "function_call_id": "fc-01M544ATHBTYQTNNNYJ8JBTCZ7",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-shuffle-mechanism-20261017-051111",
+  "source_revision": "e428550e2a2d6b5a9f2e4ff724c8f0f3d32c4ba3",
+  "source_run": "pr29-random-restart-20261015-085706",
+  "training_games": 0,
+  "source_study": "pr29-legal-shuffle-20261017-044626",
+  "source_epoch": 78,
+  "discovery_match_games": 64,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

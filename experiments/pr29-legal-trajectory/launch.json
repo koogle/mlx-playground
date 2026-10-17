@@ -1,0 +1,21 @@
+{
+  "run_id": "pr29-legal-trajectory-20261017-070541",
+  "function_call_id": "fc-01M54AWFGHFATRSVVHMA5AXSEA",
+  "volume": "chesszero-convergence",
+  "remote_path": "/pr29-legal-trajectory-20261017-070541",
+  "source_revision": "43bcbd1eb9c8888800ffe86b2e364cf6c8c96626",
+  "source_run": "pr29-legal-training-norm-20261017-060455",
+  "training_games": 0,
+  "source_study": "pr29-legal-training-norm-20261017-060455",
+  "source_epochs": [
+    8,
+    32
+  ],
+  "discovery_match_games": 64,
+  "search_batch_norm": true,
+  "search_batch_norm_per_position": true,
+  "inference_pad_batches": true,
+  "inference_batch_size": 16,
+  "recycle_promotion_games": false,
+  "policy_target": "visit_distribution"
+}

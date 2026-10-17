@@ -58,7 +58,7 @@ class TestGradientAccumulation(unittest.TestCase):
                     )
             self.assertEqual(int(self.split.optimizer.state["step"]), step)
 
-    def test_training_loop_takes_configured_passes_over_the_buffer(self):
+    def test_training_steps_scale_with_fresh_positions(self):
         history = [
             (mx.zeros((19, 8, 8)), mx.array([1.0, 0.0, 0.0]), None),
             (mx.zeros((19, 8, 8)), mx.array([0.0, 1.0, 0.0]), None),
@@ -67,7 +67,7 @@ class TestGradientAccumulation(unittest.TestCase):
         config = self.split.config
         config.policy_output_dim = 3
         config.batch_size = 2
-        config.training_passes_per_generation = 2.0  # ceil(2 * 3 / 2) = 3 steps
+        config.replay_sample_ratio = 2.0  # ceil(2 * 3 fresh / 2) = 3 steps
         config.batchnorm_recalibration_batches = 0
         self.split.replay.policy_output_dim = 3
         with (
@@ -77,6 +77,29 @@ class TestGradientAccumulation(unittest.TestCase):
             self.split.train(n_epochs=1)
         self.assertEqual(len(self.split.replay), 3)
         self.assertEqual(int(self.split.optimizer.state["step"]), 3)
+        # A second generation of the same size takes the same number of steps
+        # even though the buffer has doubled.
+        with (
+            patch("model.training.generate_games", return_value=[(history, 1.0)]),
+            patch.object(TinyNet, "forward_logits", self.flat_forward),
+        ):
+            self.split.train(n_epochs=1)
+        self.assertEqual(len(self.split.replay), 6)
+        self.assertEqual(int(self.split.optimizer.state["step"]), 6)
+
+    def test_fresh_position_loss_is_measured_in_eval_mode_without_updating(self):
+        history = [
+            (mx.zeros((19, 8, 8)), mx.array([1.0, 0.0, 0.0]), None),
+            (mx.ones((19, 8, 8)), mx.array([0.0, 1.0, 0.0]), None),
+        ]
+        self.split.config.policy_output_dim = 3
+        before = dict(tree_flatten(self.split.model.parameters()))
+        with patch.object(TinyNet, "forward_logits", self.flat_forward):
+            losses = self.split.evaluate_fresh_positions([(history, -1.0)])
+        self.assertEqual(len(losses), 4)
+        self.assertGreater(losses[1], 0.0)
+        for key, value in tree_flatten(self.split.model.parameters()):
+            np.testing.assert_array_equal(value, before[key])
 
     def test_empty_generation_skips_training_without_failing(self):
         with patch("model.training.generate_games", return_value=[]):

@@ -7,7 +7,7 @@ from typing import Tuple, Optional
 from chess_engine.game import ChessGame
 from model.network import ChessNet
 from model.mcts import MCTS
-from model.self_play import generate_games
+from model.self_play import create_batches, generate_games
 from model.replay_buffer import ReplayBuffer
 from config.model_config import ModelConfig
 from pathlib import Path
@@ -100,6 +100,13 @@ class Trainer:
                 generator = self.best_model if self.best_model is not None else self.model
                 generator.eval()
                 games = generate_games(generator, self.config, n_workers)
+                # Fresh positions are unseen by the current model: their loss is
+                # the generalization signal that training loss cannot provide.
+                held_out = self.evaluate_fresh_positions(games)
+                self.logger.info(
+                    "Held-out loss on fresh positions before training: "
+                    f"policy {held_out[1]:.4f}, value {held_out[2]:.4f}"
+                )
                 added = self.replay.add(games)
                 del games
                 gc.collect()
@@ -110,7 +117,7 @@ class Trainer:
                     self.replay.n_generations,
                 )
 
-                n_steps = self._training_steps_for_generation()
+                n_steps = self._training_steps_for_generation(added)
                 self.logger.info(
                     f"Training {n_steps} minibatch steps in epoch {epoch + 1}..."
                 )
@@ -218,13 +225,30 @@ class Trainer:
             raise ValueError("Evaluation requires completed games")
         return (wins + 0.5 * draws) / total
 
-    def _training_steps_for_generation(self) -> int:
-        """Steps covering the configured number of passes over the buffer."""
-        if not len(self.replay):
+    def _training_steps_for_generation(self, n_new_positions: int) -> int:
+        """Steps that draw replay_sample_ratio samples per fresh position."""
+        if n_new_positions <= 0 or not len(self.replay):
             return 0
-        wanted = self.config.training_passes_per_generation * len(self.replay)
+        wanted = self.config.replay_sample_ratio * n_new_positions
         steps = int(np.ceil(wanted / self.config.batch_size))
         return max(1, min(steps, self.config.max_training_steps))
+
+    def evaluate_fresh_positions(self, games):
+        """Average eval-mode losses over positions the model has not trained on."""
+        self.model.eval()
+        totals = np.zeros(4)
+        n_positions = 0
+        for batch in create_batches(games, self.config.batch_size):
+            batch_size = len(batch[0])
+            if not batch_size:
+                continue
+            loss, components = self._loss_fn(*batch)
+            mx.eval(loss, *components)
+            totals += np.array([float(loss), *(float(c) for c in components)]) * batch_size
+            n_positions += batch_size
+        if not n_positions:
+            return 0.0, 0.0, 0.0, 0.0
+        return tuple((totals / n_positions).tolist())
 
     def train_from_replay(self, n_steps: int):
         """Apply n_steps Adam updates on minibatches sampled from the buffer."""

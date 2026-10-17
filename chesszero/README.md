@@ -57,8 +57,10 @@ Model Configuration:
 
 3. Training optimization
    - Replay buffer of the most recent self-play positions (default 50k)
-   - Many minibatch Adam steps per generation (default two passes over
-     the buffer, capped at 500 steps) instead of one averaged update
+   - Minibatch Adam steps per generation sized by the fresh data (default
+     two samples per new position, capped at 500 steps) instead of one
+     averaged update; the held-out loss on each fresh generation is logged
+     before it enters the buffer as the generalization signal
    - BatchNorm running statistics are recalibrated after each training
      phase so the eval-mode network used by search matches the trained one
    - Regular checkpointing with best model tracking (the replay buffer is

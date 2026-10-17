@@ -30,7 +30,10 @@ class ModelConfig:
     # Positions are kept across generations and replayed with many minibatch
     # steps per generation instead of one averaged update.
     replay_buffer_size: int = 50_000  # Most recent self-play positions retained
-    training_passes_per_generation: float = 2.0  # Buffer passes per generation
+    # Optimizer samples drawn per fresh position (AlphaZero used ~1, small
+    # runs tolerate 1-4). Scaling steps by the whole buffer instead reused
+    # each position ~40 times and overfit the value head.
+    replay_sample_ratio: float = 2.0
     max_training_steps: int = 500  # Upper bound on optimizer steps per generation
     batchnorm_recalibration_batches: int = 16  # Refresh BN stats after training
 
